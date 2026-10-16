@@ -358,6 +358,11 @@ namespace DshPet
         <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
         <TextBlock Style='{StaticResource Sect}' Text='外观'/>
         <WrapPanel x:Name='RolePanel'/>
+        <DockPanel Margin='0,2,0,0'>
+          <Button x:Name='AnimMakeBtn' Content='图片转动图…' Width='110' Style='{StaticResource Btn}'/>
+          <TextBlock x:Name='AnimMakeStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='6,0,0,0'
+                     TextTrimming='CharacterEllipsis' ToolTip='选一张 PNG，自动生成含全部动作的逐帧角色（存在 roles 目录，可再逐帧精修）'/>
+        </DockPanel>
         <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
         <TextBlock Style='{StaticResource Sect}' Text='行为'/>
         <WrapPanel>
@@ -507,7 +512,7 @@ namespace DshPet
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
-                "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
+                "RandomRoleChk","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "ContentRoot","Main","Nav",
                 "ThemeDropBtn","EffectDropBtn","FontDropBtn","NumberFontDropBtn","BubbleTrendChk","BubbleTailChk","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
@@ -658,6 +663,7 @@ namespace DshPet
             ((Button)ui["MixAddBtn"]).ToolTip = "从调色盘取色；超过上限会自动顶掉最早设置的颜色";
             ((Button)ui["QuipImportBtn"]).Click += delegate { ImportQuipsDialog(); };
             ((Button)ui["QuipExportBtn"]).Click += delegate { ExportQuipsDialog(); };
+            ((Button)ui["AnimMakeBtn"]).Click += delegate { MakeAnimDialog(); };
             BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
             previewTimer.Interval = TimeSpan.FromMilliseconds(110);
             previewTimer.Tick += delegate
@@ -710,6 +716,41 @@ namespace DshPet
         private void SetQuipStatus(string text)
         {
             TextBlock status = ui.ContainsKey("QuipStatus") ? ui["QuipStatus"] as TextBlock : null;
+            if (status == null) return;
+            status.Text = text;
+            status.ToolTip = text;
+        }
+
+        /// <summary>
+        /// 「图片转动图…」：选一张静态图 → 生成含全部动作的逐帧角色（roles\名字-动图\），
+        /// 生成完直接给桌宠换上。生成的是普通 PNG 帧，之后可以自己逐帧精修或替换。
+        /// </summary>
+        private void MakeAnimDialog()
+        {
+            System.Windows.Forms.OpenFileDialog dialog = new System.Windows.Forms.OpenFileDialog();
+            dialog.Title = "选择要转成动图的角色图片";
+            dialog.Filter = "图片 (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|所有文件 (*.*)|*.*";
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            string name = System.IO.Path.GetFileNameWithoutExtension(dialog.FileName) + "-动图";
+            SetAnimStatus("正在生成…");
+            int written = AnimMaker.Build(dialog.FileName, name, 256, null);
+            if (written < 0)
+            {
+                SetAnimStatus("生成失败：读不出这张图片");
+                return;
+            }
+            cfg.Set("", "role", name);
+            cfg.SetAt("roles.random", false);
+            cfg.Save();
+            foreach (PetWindow pet in engine.Pets) pet.ApplyRole(name);
+            BuildRoleButtons();
+            Update();
+            SetAnimStatus("已生成 " + written + " 帧并换上");
+        }
+
+        private void SetAnimStatus(string text)
+        {
+            TextBlock status = ui.ContainsKey("AnimMakeStatus") ? ui["AnimMakeStatus"] as TextBlock : null;
             if (status == null) return;
             status.Text = text;
             status.ToolTip = text;
@@ -834,9 +875,12 @@ namespace DshPet
                 }
                 else
                 {
+                    // 文件夹角色（逐帧动画）没有单张图，取第一帧当缩略图。
+                    string file = AppPaths.RoleThumbFile(thumbFile);
+                    if (string.IsNullOrEmpty(file)) throw new System.IO.FileNotFoundException(thumbFile);
                     BitmapImage bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(System.IO.Path.Combine(AppPaths.RolesDir, thumbFile));
+                    bitmap.UriSource = new Uri(file);
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.DecodePixelWidth = 68;
                     bitmap.EndInit();

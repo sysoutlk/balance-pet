@@ -6,6 +6,7 @@
 //   balance-pet.exe --smoke [seconds]   start, run for N seconds, write smoke-report.txt
 //   balance-pet.exe --self-test         headless data check, writes self-test-report.txt
 //   balance-pet.exe --make-icon <file>  export the built-in mascot as a .ico
+//   balance-pet.exe --make-anim <file>  turn a static picture into a frame-by-frame role
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -31,6 +32,7 @@ namespace DshPet
             "  balance-pet.exe --smoke [秒数]      启动后自动退出并写 smoke-report.txt\n" +
             "  balance-pet.exe --self-test         不弹窗口，检查数据源并写 self-test-report.txt\n" +
             "  balance-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
+            "  balance-pet.exe --make-anim <图片>  把一张静态图生成逐帧动画角色（--name 角色名 --width 像素）\n" +
             "  balance-pet.exe --version           显示版本\n";
 
         [STAThread]
@@ -54,6 +56,11 @@ namespace DshPet
             if (!string.IsNullOrEmpty(iconPath))
             {
                 return IconWriter.Write(iconPath);
+            }
+            string animSource = ValueOf(flags, "--make-anim");
+            if (!string.IsNullOrEmpty(animSource))
+            {
+                return MakeAnim(flags, animSource);
             }
 
             Config cfg = Config.Load(AppPaths.ConfigPath);
@@ -230,6 +237,25 @@ namespace DshPet
             double value;
             if (!string.IsNullOrEmpty(text) && double.TryParse(text, out value) && value > 0) return value;
             return fallback;
+        }
+
+        /// <summary>把一张静态图生成"逐帧动画角色"：--make-anim 图片 [--name 角色名] [--width 像素]</summary>
+        private static int MakeAnim(List<string> flags, string source)
+        {
+            string name = ValueOf(flags, "--name");
+            if (string.IsNullOrEmpty(name)) name = Path.GetFileNameWithoutExtension(source) + "-动图";
+            double width = ValueOfDouble(flags, "--width", 256);
+            int written = AnimMaker.Build(source, name, width, delegate(string line)
+            {
+                if (line.StartsWith("error:", StringComparison.Ordinal)) Console.WriteLine(line);
+            });
+            if (written < 0)
+            {
+                Console.WriteLine("生成失败：读不出图片 " + source);
+                return 1;
+            }
+            Console.WriteLine("已生成 " + written + " 帧：" + Path.Combine(AppPaths.RolesDir, name));
+            return 0;
         }
     }
 
