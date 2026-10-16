@@ -1,6 +1,6 @@
-# DSH Pet
+# Balance Pet
 
-A desktop pet for Windows that keeps an eye on your DeepSeek balance.
+A desktop pet for Windows that keeps an eye on your API balances.
 
 It shows the balance, today's spend, the **peak / off-peak window with a live countdown**
 and a 7-day spend chart in a speech bubble. It walks around, snaps to screen edges, can be
@@ -28,8 +28,8 @@ application's folders; uninstalling means deleting the folder.
 
 ## Quick start
 
-1. Build with `build.cmd` (or grab `dsh-pet.exe` from Releases).
-2. Run `dsh-pet.exe`. `pet-config.json` is created on first launch.
+1. Build with `build.cmd` (or grab `balance-pet.exe` from Releases).
+2. Run `balance-pet.exe`. `pet-config.json` is created on first launch.
 3. Right-click the pet, open the settings card and add your API keys under "数据源".
 4. Optional: `scripts\install-desktop-shortcut.ps1`, `scripts\install-autostart.ps1`.
 

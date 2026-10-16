@@ -1,4 +1,4 @@
-# Builds dist\dsh-pet.exe with the in-box C# compiler: no SDK, no NuGet, no network.
+# Builds balance-pet.exe with the in-box C# compiler: no SDK, no NuGet, no network.
 #
 #   .\build.ps1            normal build
 #   .\build.ps1 -SkipIcon  skip embedding assets\app.ico
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $srcDir = Join-Path $root 'src'
 $icon = Join-Path $root 'assets\app.ico'
-$exe = Join-Path $root 'dsh-pet.exe'
+$exe = Join-Path $root 'balance-pet.exe'
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { throw "csc.exe not found: $csc" }
 $framework = Split-Path $csc
@@ -67,7 +67,7 @@ function Write-ResponseFile([string]$path, [bool]$withIcon) {
     Set-Content -Path $path -Value $lines -Encoding ASCII
 }
 
-$response = Join-Path $env:TEMP 'dsh-pet-csc.rsp'
+$response = Join-Path $env:TEMP 'balance-pet-csc.rsp'
 $hasIcon = (Test-Path $icon) -and (-not $SkipIcon)
 Write-ResponseFile $response $hasIcon
 & $csc "@$response"

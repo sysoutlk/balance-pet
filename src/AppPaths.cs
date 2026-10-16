@@ -1,5 +1,5 @@
 // Folder layout. Everything is resolved next to the executable so the app stays a
-// portable folder: dsh-pet.exe + pet-config.json + roles\.
+// portable folder: balance-pet.exe + pet-config.json + roles\.
 using System;
 using System.Collections.Generic;
 using System.IO;

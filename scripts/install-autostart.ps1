@@ -7,15 +7,15 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$exe = Join-Path $root 'dsh-pet.exe'
+$exe = Join-Path $root 'balance-pet.exe'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 if ($Uninstall) {
-    Remove-ItemProperty -Path $runKey -Name 'DshPet' -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $runKey -Name 'BalancePet' -ErrorAction SilentlyContinue
     Write-Host '已取消开机自启。'
     return
 }
 if (-not (Test-Path -LiteralPath $exe)) {
     throw "找不到 $exe，请先在仓库根目录运行 build.cmd"
 }
-Set-ItemProperty -Path $runKey -Name 'DshPet' -Value ('"' + $exe + '"')
+Set-ItemProperty -Path $runKey -Name 'BalancePet' -Value ('"' + $exe + '"')
 Write-Host "已加入开机自启: $exe"

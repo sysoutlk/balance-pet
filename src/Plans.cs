@@ -268,7 +268,7 @@ namespace DshPet
             else
             {
                 request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
-                request.Headers.TryAddWithoutValidation("User-Agent", "dsh-pet/1.1");
+                request.Headers.TryAddWithoutValidation("User-Agent", "balance-pet/1.1");
             }
             HttpResponseMessage response = client.SendAsync(request).Result;
             string body = response.Content.ReadAsStringAsync().Result;

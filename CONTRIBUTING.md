@@ -13,8 +13,8 @@
 
   ```powershell
   .\build.ps1
-  .\dsh-pet.exe --self-test
-  .\dsh-pet.exe --smoke 4
+  .\balance-pet.exe --self-test
+  .\balance-pet.exe --smoke 4
   ```
 
   并确认控制台输出与 `self-test-report.txt` / `smoke-report.txt` 正常。

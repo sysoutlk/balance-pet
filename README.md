@@ -1,6 +1,6 @@
-# DSH Pet
+# 余额桌宠（Balance Pet）
 
-把 DeepSeek 余额做成一只真正的 Windows 桌面宠物。
+把各家 API 的余额做成一只真正的 Windows 桌面宠物。
 
 它会在气泡里显示余额、今日消耗、**计价时段与切换倒计时**（主接口是 DeepSeek 时）、近 7 天花费柱状图；平时会自己散步、
 贴边、做小动作，可以整只拎起来扔出去，还能分身。余额数据不限于 DeepSeek：Kimi（月之暗面）、
@@ -21,8 +21,8 @@
 
 ## 快速开始
 
-1. 构建：双击 `build.cmd`（或下载 Release 中的 `dsh-pet.exe`）。
-2. 双击 `dsh-pet.exe` 启动桌宠。首次运行会在同目录生成 `pet-config.json`。
+1. 构建：双击 `build.cmd`（或下载 Release 中的 `balance-pet.exe`）。
+2. 双击 `balance-pet.exe` 启动桌宠。首次运行会在同目录生成 `pet-config.json`。
 3. 右键桌宠打开设置卡片，在「余额接口」里填各平台 API Key 并点「应用」。
 4. 可选：运行 `scripts\install-desktop-shortcut.ps1` 创建桌面快捷方式；
    运行 `scripts\install-autostart.ps1` 加入开机自启。
@@ -163,7 +163,7 @@
 - 每个动作都有一池台词（`pet-config.json` 的 `quips.*`），触发时随机抽一句。
 - 设置卡片「行为」页有「导入台词…」「导出台词…」：导出一份 JSON 就是模板（中文动作名 → 台词数组），
   改完再导入即可；导入是**合并去重**，不会动你已有的台词，重复导入同一份也不会翻倍。
-- 把一份 `quips.json` 直接放在 `dsh-pet.exe` 旁边，启动时会自动合并进来（删掉文件就不再合并）。
+- 把一份 `quips.json` 直接放在 `balance-pet.exe` 旁边，启动时会自动合并进来（删掉文件就不再合并）。
 - 键可以写中文动作名，也可以写英文动作键；顶层直接写一个字符串数组 = 「点击时说的话」。例如：
 
   ```json
@@ -180,7 +180,7 @@
 ## 构建
 
 ```powershell
-.\build.ps1              # 用系统自带 csc 构建 dsh-pet.exe（无需 SDK / 联网）
+.\build.ps1              # 用系统自带 csc 构建 balance-pet.exe（无需 SDK / 联网）
 .\build.ps1 -SkipIcon    # 跳过图标嵌入
 ```
 

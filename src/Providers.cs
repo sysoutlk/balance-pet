@@ -380,7 +380,7 @@ namespace DshPet
         private static string Get(Config cfg, string url, string auth, string key)
         {
             HttpClient client = Http.For(cfg, 12);
-            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "dsh-pet/" + Version);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "balance-pet/" + Version);
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
             if (auth == "bearer" && !string.IsNullOrEmpty(key))
             {

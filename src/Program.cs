@@ -1,11 +1,11 @@
 // Entry point and command-line modes.
 //
-//   dsh-pet.exe                     start the pet
-//   dsh-pet.exe --settings          start and open the settings card
-//   dsh-pet.exe --demo              demo mode (constant bubble + auto actions)
-//   dsh-pet.exe --smoke [seconds]   start, run for N seconds, write smoke-report.txt
-//   dsh-pet.exe --self-test         headless data check, writes self-test-report.txt
-//   dsh-pet.exe --make-icon <file>  export the built-in mascot as a .ico
+//   balance-pet.exe                     start the pet
+//   balance-pet.exe --settings          start and open the settings card
+//   balance-pet.exe --demo              demo mode (constant bubble + auto actions)
+//   balance-pet.exe --smoke [seconds]   start, run for N seconds, write smoke-report.txt
+//   balance-pet.exe --self-test         headless data check, writes self-test-report.txt
+//   balance-pet.exe --make-icon <file>  export the built-in mascot as a .ico
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,15 +23,15 @@ namespace DshPet
         public static Config CurrentConfig;
 
         private const string HelpText =
-            "dsh-pet " + Version + "\n" +
+            "balance-pet " + Version + "\n" +
             "用法:\n" +
-            "  dsh-pet.exe                     启动桌宠\n" +
-            "  dsh-pet.exe --settings          启动并打开设置面板\n" +
-            "  dsh-pet.exe --demo              演示模式（常显气泡 + 自动动作）\n" +
-            "  dsh-pet.exe --smoke [秒数]      启动后自动退出并写 smoke-report.txt\n" +
-            "  dsh-pet.exe --self-test         不弹窗口，检查数据源并写 self-test-report.txt\n" +
-            "  dsh-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
-            "  dsh-pet.exe --version           显示版本\n";
+            "  balance-pet.exe                     启动桌宠\n" +
+            "  balance-pet.exe --settings          启动并打开设置面板\n" +
+            "  balance-pet.exe --demo              演示模式（常显气泡 + 自动动作）\n" +
+            "  balance-pet.exe --smoke [秒数]      启动后自动退出并写 smoke-report.txt\n" +
+            "  balance-pet.exe --self-test         不弹窗口，检查数据源并写 self-test-report.txt\n" +
+            "  balance-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
+            "  balance-pet.exe --version           显示版本\n";
 
         [STAThread]
         public static int Main(string[] args)
@@ -47,7 +47,7 @@ namespace DshPet
             }
             if (Has(flags, "--version"))
             {
-                Console.WriteLine("dsh-pet " + Version);
+                Console.WriteLine("balance-pet " + Version);
                 return 0;
             }
             string iconPath = ValueOf(flags, "--make-icon");
@@ -67,12 +67,12 @@ namespace DshPet
             if (Has(flags, "--self-test")) return SelfTest(cfg);
 
             bool createdNew;
-            Mutex instanceMutex = new Mutex(true, "DshPet.SingleInstance", out createdNew);
+            Mutex instanceMutex = new Mutex(true, "BalancePet.SingleInstance", out createdNew);
             if (!createdNew)
             {
                 try
                 {
-                    EventWaitHandle signal = EventWaitHandle.OpenExisting("DshPet.ShowSignal");
+                    EventWaitHandle signal = EventWaitHandle.OpenExisting("BalancePet.ShowSignal");
                     signal.Set();
                 }
                 catch
@@ -87,7 +87,7 @@ namespace DshPet
             engine.Start();
             if (Has(flags, "--settings")) engine.ShowPanel();
 
-            EventWaitHandle showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, "DshPet.ShowSignal");
+            EventWaitHandle showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, "BalancePet.ShowSignal");
             ThreadPool.RegisterWaitForSingleObject(showSignal, delegate
             {
                 app.Dispatcher.BeginInvoke(new Action(delegate { engine.ShowBubble(null, ""); }));
@@ -118,7 +118,7 @@ namespace DshPet
         private static int SelfTest(Config cfg)
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("dsh-pet " + Version + " self-test");
+            sb.AppendLine("balance-pet " + Version + " self-test");
             sb.AppendLine("config: " + cfg.FilePath);
             Snapshot s;
             try
