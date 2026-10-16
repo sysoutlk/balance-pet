@@ -105,7 +105,9 @@ namespace DshPet
         private DropShadowEffect shadow;
         private Border shadowShape;          // 阴影本体：和卡片同形状，放在卡片下面
         private Grid shadowLayer;            // 裁剪层：把卡片形状挖掉，只让阴影露在卡片外面
-        private const double ShadowPad = 60; // 阴影层四周留的余量（够 blur + 偏移用）
+        private const double ShadowPad = 56; // 阴影层四周留的余量（够 blur + 偏移用）
+        // 窗口也要留同样一圈：否则阴影一超出窗口就被边界切掉，四角会留下硬边。
+        private const double BubbleShadowPad = 56;
         private bool tracking = true;
         private string dynamicMode = "";
         private double phase;
@@ -287,6 +289,8 @@ namespace DshPet
             root.Children.Add(shadowLayer);
             root.Children.Add(card);
             root.Children.Add(tailBottom);
+            // 四周留出阴影余量：窗口紧贴卡片的话，阴影会被窗口边界裁成硬边。
+            root.Margin = new Thickness(BubbleShadowPad);
             Content = root;
             MouseLeftButtonDown += delegate { HideNow(); };
             rainbowTimer.Interval = TimeSpan.FromMilliseconds(110);
@@ -853,11 +857,13 @@ namespace DshPet
             double height = ActualHeight;
             double x = Anchor.X + Anchor.Width / 2 - width / 2;
             x = Math.Max(area.Left + 4, Math.Min(x, area.Right - width - 4));
-            double y = Anchor.Y - height - 6;
+            // 窗口带了一圈阴影余量，贴到宠物身边时要把它减掉，不然气泡会离宠物远一截。
+            double pad = BubbleShadowPad;
+            double y = Anchor.Y - height - 6 + pad;
             bool above = true;
             if (y < area.Top + 4)
             {
-                y = Anchor.Y + Anchor.Height + 6;
+                y = Anchor.Y + Anchor.Height + 6 - pad;
                 above = false;
             }
             if (y + height > area.Bottom - 4) y = Math.Max(area.Top + 4, area.Bottom - height - 4);
