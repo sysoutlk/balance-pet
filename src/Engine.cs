@@ -26,6 +26,7 @@ namespace DshPet
         private DateTime lastTick = DateTime.UtcNow;
         private DateTime lastPositionSave = DateTime.UtcNow;
         private DateTime nextSplitAt = DateTime.MinValue;
+        private DateTime nextShrinkAt = DateTime.MinValue;
         private DateTime demoActionAt = DateTime.MinValue;
         private bool? lastPeak;
         private bool balanceLatched;
@@ -657,7 +658,13 @@ namespace DshPet
         public int CloneCap()
         {
             double max = cfg.GetNumberAt("clones.max", cfg.GetNumber("", "maxClones", 6));
-            return (int)max;   // 0 或负数 = 不限
+            return (int)max;   // 宠物总数上限；0 或负数 = 不限
+        }
+
+        public int CloneFloor()
+        {
+            int floor = (int)cfg.GetNumberAt("clones.min", 1);
+            return floor < 1 ? 1 : floor;
         }
 
         /// <summary>Picks the look for a new pet: random when roles.random is on (clones prefer
@@ -684,6 +691,24 @@ namespace DshPet
         {
             if (!cfg.GetFlagAt("clones.auto", true)) return false;
             if (Pets.Count == 0) return false;
+            int cap = CloneCap();
+            int floor = CloneFloor();
+            bool cycle = cfg.GetFlagAt("clones.cycle", true);
+            bool atCap = cap > 0 && Pets.Count >= cap;
+
+            if (atCap || (cap > 0 && Pets.Count >= cap))   // 到顶了：循环模式下慢慢收回
+            {
+                if (!cycle || Pets.Count <= floor) return false;
+                if (nextShrinkAt == DateTime.MinValue)
+                {
+                    nextShrinkAt = now.AddSeconds(SplitInterval());
+                    return false;
+                }
+                if (now < nextShrinkAt) return false;
+                nextShrinkAt = DateTime.MinValue;
+                RemoveClone();
+                return true;
+            }
             if (nextSplitAt == DateTime.MinValue)
             {
                 nextSplitAt = now.AddSeconds(SplitInterval());
@@ -691,8 +716,6 @@ namespace DshPet
             }
             if (now < nextSplitAt) return false;
             nextSplitAt = now.AddSeconds(SplitInterval());
-            int cap = CloneCap();
-            if (cap > 0 && Pets.Count >= 1 + cap) return false;
             AddClone();
             return true;
         }
@@ -708,7 +731,7 @@ namespace DshPet
         public void AddClone()
         {
             int cap = CloneCap();
-            if (cap > 0 && Pets.Count >= 1 + cap) return;
+            if (cap > 0 && Pets.Count >= cap) return;
             if (Pets.Count == 0) return;
             PetWindow source = Pets[Program.Rng.Next(Pets.Count)];
             PetWindow pet = new PetWindow(cfg);

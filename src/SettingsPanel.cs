@@ -406,6 +406,12 @@ namespace DshPet
           <TextBlock Style='{StaticResource Lbl}' Text='只（0 = 不限）' Margin='5,0,0,0'/>
         </DockPanel>
         <DockPanel Margin='0,0,0,6'>
+          <CheckBox x:Name='CloneCycleChk' Style='{StaticResource Switch}' Content='循环涨落' Margin='0,0,10,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='下限'/>
+          <TextBox x:Name='CloneMinBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='只（涨到上限后慢慢收回，再涨回去）' Margin='5,0,0,0' FontSize='10'/>
+        </DockPanel>
+        <DockPanel Margin='0,0,0,6'>
           <TextBlock Style='{StaticResource Lbl}' Text='分裂间隔'/>
           <TextBox x:Name='ClonePauseBox' Style='{StaticResource TxtBox}' Width='56' Margin='8,0,0,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='秒起（实际为 1~2.5 倍之间的随机）' Margin='5,0,0,0' FontSize='10'/>
@@ -476,6 +482,7 @@ namespace DshPet
                 "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
                 ,"ClonePauseBox"
+                ,"CloneCycleChk","CloneMinBox"
             })
             {
                 ui[name] = (FrameworkElement)root.FindName(name);
@@ -614,6 +621,8 @@ namespace DshPet
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
             BindNumberBox("CloneMaxBox", "clones.max");
             BindNumberBox("ClonePauseBox", "clones.pauseMinSec");
+            BindSwitch("CloneCycleChk", "clones", "cycle");
+            BindNumberBox("CloneMinBox", "clones.min");
             BindField("ProxyBox", "network.proxy");
             ((Button)ui["RefreshBtn"]).Click += delegate { engine.Data.Refresh(); };
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
@@ -1294,6 +1303,8 @@ namespace DshPet
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ClonePauseBox"]).Text = ((int)cfg.GetNumberAt("clones.pauseMinSec", 60)).ToString(CultureInfo.InvariantCulture);
+                ((CheckBox)ui["CloneCycleChk"]).IsChecked = cfg.GetFlagAt("clones.cycle", true);
+                ((TextBox)ui["CloneMinBox"]).Text = ((int)engine.CloneFloor()).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ProxyBox"]).Text = cfg.GetStringAt("network.proxy", "");
                 ((TextBlock)ui["CloneCount"]).Text = engine.Pets.Count.ToString(CultureInfo.InvariantCulture) + " 只";
                 string role = cfg.GetString("", "role", "");

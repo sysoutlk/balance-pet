@@ -576,6 +576,8 @@ namespace DshPet
             SetDefault("edgeHide", "peekPx", 14.0);
             SetDefault("clones", "auto", true);
             SetDefault("clones", "max", 6.0);
+            SetDefault("clones", "min", 1.0);
+            SetDefault("clones", "cycle", true);   // 到上限后慢慢收回，再慢慢涨回
             SetDefault("clones", "pauseMinSec", 60.0);
             SetDefault("clones", "pauseMaxSec", 180.0);
             SetDefault("alert", "balanceWarn", true);
