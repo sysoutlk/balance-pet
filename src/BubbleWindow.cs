@@ -98,6 +98,8 @@ namespace DshPet
         private double effectDepth = 1.0;
         private bool effectReverse;
         private double fontScale = 1.0;
+        // 逐元素文字色覆盖：bubble.textColors.<元素>，留空则跟随主题。
+        private readonly Dictionary<string, string> textOverrides = new Dictionary<string, string>();
         private readonly List<KeyValuePair<TextBlock, double>> scalable = new List<KeyValuePair<TextBlock, double>>();
         private StackPanel body;
         private DropShadowEffect shadow;
@@ -339,6 +341,23 @@ namespace DshPet
         private static Color WithAlpha(Color color, byte alpha)
         {
             return Color.FromArgb(alpha, color.R, color.G, color.B);
+        }
+
+        /// <summary>取用户覆盖色，没有就跟随主题。</summary>
+        private SolidColorBrush Override(string key, Color fallback)
+        {
+            string value;
+            if (textOverrides.TryGetValue(key, out value))
+            {
+                try
+                {
+                    return new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
+                }
+                catch
+                {
+                }
+            }
+            return new SolidColorBrush(fallback);
         }
 
         // 动效是独立维度：颜色怎么混（bubble.colors）与动效怎么动互不绑定，可任意组合。
@@ -635,6 +654,21 @@ namespace DshPet
             FontFamily = family;
             string numberFont = cfg.GetString("bubble", "numberFont", "");
             amount.FontFamily = string.IsNullOrEmpty(numberFont) ? family : SafeFont(numberFont);
+            // 一切皆可自定义：逐元素文字色覆盖（留空 = 跟随主题）。
+            textOverrides.Clear();
+            foreach (KeyValuePair<string, object> pair in cfg.GetObject("bubble", "textColors"))
+            {
+                string value = Convert.ToString(pair.Value, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrEmpty(value) && value.StartsWith("#", StringComparison.Ordinal))
+                {
+                    textOverrides[pair.Key] = value;
+                }
+            }
+            title.Foreground = Override("title", palette.Title);
+            amount.Foreground = Override("big", palette.Big);
+            sub.Foreground = Override("sub", palette.Muted);
+            quip.Foreground = Override("quip", palette.QuipText);
+            source.Foreground = Override("source", palette.Source);
             titleDot.Fill = CurrentBrush();
             tailTopShape.Background = card.Background;
             tailTopShape.BorderBrush = card.BorderBrush;
@@ -684,12 +718,12 @@ namespace DshPet
                 line.ColumnDefinitions.Add(new ColumnDefinition());
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 TextBlock name = MakeText(10.5, "#000000", row.Key);
-                name.Foreground = new SolidColorBrush(palette.Muted);
+                name.Foreground = Override("rowName", palette.Muted);
                 name.VerticalAlignment = VerticalAlignment.Center;
                 name.TextTrimming = TextTrimming.CharacterEllipsis;
                 Grid.SetColumn(name, 0);
                 TextBlock value = MakeText(11.5, "#000000", row.Value);
-                value.Foreground = new SolidColorBrush(palette.RowValue);
+                value.Foreground = Override("rowValue", palette.RowValue);
                 value.FontWeight = FontWeights.SemiBold;
                 value.TextAlignment = TextAlignment.Right;
                 value.Margin = new Thickness(10, 0, 0, 0);
@@ -717,7 +751,7 @@ namespace DshPet
             {
                 note.Text = view.Note;
                 note.Visibility = Visibility.Visible;
-                note.Foreground = new SolidColorBrush(view.NoteError
+                note.Foreground = Override("note", view.NoteError
                     ? (palette.Dark ? (Color)ColorConverter.ConvertFromString("#FF9C93") : (Color)ColorConverter.ConvertFromString("#E0433F"))
                     : palette.Source);
             }

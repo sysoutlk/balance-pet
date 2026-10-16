@@ -1403,6 +1403,12 @@ namespace DshPet
             cChip = Parse(chip);
             cOk = Parse(dark ? "#7ADFA0" : "#1F8A4C");
             cErr = Parse(dark ? "#FF9C93" : "#C93A34");
+            // 设置面板的文字色也可以逐项覆盖：ui.colors.fg / fg2 / muted / ok / err
+            cFg = ParseOr("ui.colors.fg", cFg);
+            cFg2 = ParseOr("ui.colors.fg2", cFg2);
+            cMuted = ParseOr("ui.colors.muted", cMuted);
+            cOk = ParseOr("ui.colors.ok", cOk);
+            cErr = ParseOr("ui.colors.err", cErr);
             return Xaml
                 .Replace("__NAV__", nav)
                 .Replace("__CARD__", card)
@@ -1435,6 +1441,13 @@ namespace DshPet
             {
                 return Colors.Gray;
             }
+        }
+
+        private Color ParseOr(string path, Color fallback)
+        {
+            string value = cfg.GetStringAt(path, "");
+            if (string.IsNullOrEmpty(value) || !value.StartsWith("#", StringComparison.Ordinal)) return fallback;
+            return Parse(value);
         }
 
         private void RebuildForAccent(bool rebuild)
