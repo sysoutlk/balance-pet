@@ -566,6 +566,7 @@ namespace DshPet
             SetDefault("throw", "frictionPerSec", 0.35);
             SetDefault("throw", "bounce", 0.55);
             SetDefault("throw", "stopSpeedPxPerSec", 40.0);
+            SetDefault("throw", "minSpeedPxPerSec", 900.0);   // 低于这个速度松手 = 放下，不抛出
             SetDefault("sleep", "enabled", true);
             SetDefault("sleep", "fromHour", 23);
             SetDefault("sleep", "toHour", 7);

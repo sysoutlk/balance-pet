@@ -555,7 +555,11 @@ namespace DshPet
             double speed = Math.Sqrt(state.VX * state.VX + state.VY * state.VY);
             Dropped = true;
             if (Tuck > 0.01 || EdgeHidden) Untuck();
-            if (speed > 320)
+            // 抛出要"又快又远"才算：慢速松手只是放下，避免拖出来时误触发抛出。
+            double throwSpeed = cfg.GetNumber("throw", "minSpeedPxPerSec", 900);
+            if (throwSpeed <= 0) throwSpeed = double.MaxValue;   // 配 0 = 关闭抛出
+            double travel = Math.Abs(X - state.OriginX) + Math.Abs(Y - state.OriginY);
+            if (travel > 90 && speed > throwSpeed)
             {
                 VelocityX = Math.Max(-2400, Math.Min(2400, state.VX));
                 VelocityY = Math.Max(-2400, Math.Min(2400, state.VY));
