@@ -268,4 +268,4 @@ dotnet build src\DshPet.csproj -c Release
 
 ## 许可
 
-[MIT](LICENSE)
+[MIT](LICENSE)。变更记录见 [CHANGELOG.md](CHANGELOG.md)。
