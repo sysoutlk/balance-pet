@@ -492,7 +492,8 @@ namespace DshPet
             Point point = e.GetPosition(this);
             double dx = point.X - drag.Start.X;
             double dy = point.Y - drag.Start.Y;
-            if (Math.Abs(dx) > 4 || Math.Abs(dy) > 4) drag.Moved = true;
+            // 9px 起步才算拖动：双击时手的轻微抖动不会把点击吞掉。
+            if (Math.Abs(dx) > 9 || Math.Abs(dy) > 9) drag.Moved = true;
             if (!drag.Moved || drag.NativeLoop) return;
 
             // Hand the move over to the OS once the mouse is clearly dragging. The native
@@ -539,7 +540,7 @@ namespace DshPet
         {
             drag = null;
             double moved = Math.Abs(X - state.OriginX) + Math.Abs(Y - state.OriginY);
-            if (moved <= 4)
+            if (moved <= 9)
             {
                 Mode = "idle";
                 if (suppressNextClick)

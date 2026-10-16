@@ -596,7 +596,8 @@ namespace DshPet
 
         private void OnPetDoubleClicked(object sender, EventArgs e)
         {
-            PerformAction(sender as PetWindow, "random", true);
+            // 双击 = 打开/收起设置卡片（随机动作交给设置里的按钮与自动动作）。
+            TogglePanel(sender as PetWindow);
         }
 
         private void OnPetContextRequested(object sender, EventArgs e)
