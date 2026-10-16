@@ -10,7 +10,7 @@ jobs:
     name: In-box csc (build.ps1)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build
         shell: pwsh
         run: ./build.ps1
@@ -21,7 +21,7 @@ jobs:
           Get-Content ./self-test-report.txt
           if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: balance-pet-csc
           path: balance-pet.exe
@@ -30,8 +30,8 @@ jobs:
     name: .NET SDK (BalancePet.csproj)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
       - name: Build
