@@ -127,6 +127,13 @@ namespace DshPet
                     state.Error = "未配置 API Key";
                     return state;
                 }
+                if (def.Id == "aliyun")
+                {
+                    // Dedicated flow: list the plan's models first, then probe per-model usage.
+                    QueryAliyun(cfg, def, key, state);
+                    Log.Write("plan " + def.Id + " ok=" + state.Ok + " ms=" + (long)(DateTime.UtcNow - started).TotalMilliseconds);
+                    return state;
+                }
                 string body = Get(cfg, def, url, key);
                 switch (def.Parser)
                 {
