@@ -169,6 +169,9 @@ namespace DshPet
             sub.TextWrapping = TextWrapping.Wrap;
             sub.MaxWidth = 226;
             sub.Visibility = Visibility.Collapsed;
+            title.TextTrimming = TextTrimming.CharacterEllipsis;
+            title.MaxWidth = 226;
+            sub.TextTrimming = TextTrimming.CharacterEllipsis;
 
             rows = new StackPanel();
             rows.Margin = new Thickness(0, 6, 0, 0);
@@ -220,7 +223,15 @@ namespace DshPet
             panel.MinWidth = 196;
             panel.Children.Add(head);
             panel.Children.Add(badge);
-            panel.Children.Add(amount);
+            // 大数字放进 Viewbox：位数多时自动缩小字号，不再溢出/压到别的行。
+            Viewbox amountBox = new Viewbox();
+            amountBox.Stretch = Stretch.Uniform;
+            amountBox.StretchDirection = StretchDirection.DownOnly;
+            amountBox.HorizontalAlignment = HorizontalAlignment.Left;
+            amountBox.MaxWidth = 228;
+            amountBox.Child = amount;
+            amount.Margin = new Thickness(0, 6, 0, 0);
+            panel.Children.Add(amountBox);
             panel.Children.Add(sub);
             panel.Children.Add(rows);
             panel.Children.Add(trend);

@@ -12,6 +12,8 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Rectangle = System.Windows.Shapes.Rectangle;
+using Ellipse = System.Windows.Shapes.Ellipse;
 
 namespace DshPet
 {
@@ -503,32 +505,32 @@ namespace DshPet
             BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
             ((Button)ui["PickThemeBtn"]).Click += delegate
             {
-                // 系统调色盘：全光谱 + 自定义色，不限制在固定色卡里。
-                using (System.Windows.Forms.ColorDialog dialog = new System.Windows.Forms.ColorDialog())
+                string initial = cfg.GetStringAt("bubble.color1", "#4B6BFB");
+                ShowColorPicker(ui["PickThemeBtn"], initial, delegate(string hex)
                 {
-                    dialog.FullOpen = true;
-                    dialog.AnyColor = true;
-                    dialog.Color = ToDrawing(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
-                    if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-                    string hex = ToHexString(dialog.Color);
+                    Pinned = true;   // 选色期间/之后都不要自动隐藏面板
                     cfg.SetAt("bubble.color1", hex);
                     cfg.SetAt("bubble.color2", ShiftHue(hex, 85));
                     cfg.Set("bubble", "accent", "");
                     cfg.Save();
                     engine.Data.Refresh();
                     RebuildForAccent(true);
-                }
+                });
             };
             ((Button)ui["MixAddBtn"]).Click += delegate
             {
-                using (System.Windows.Forms.ColorDialog dialog = new System.Windows.Forms.ColorDialog())
+                Pinned = true;
+                string initial = cfg.GetStringAt("bubble.color1", "#4B6BFB");
+                ShowColorPicker(ui["MixAddBtn"], initial, delegate(string hex)
                 {
-                    dialog.FullOpen = true;
-                    dialog.AnyColor = true;
-                    dialog.Color = ToDrawing(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
-                    if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-                    ToggleMixColor(ToHexString(dialog.Color));   // 不在列表里 = 加入
-                }
+                    Pinned = true;
+                    List<string> colors = new List<string>(cfg.GetStrings("bubble", "colors"));
+                    if (!colors.Contains(hex)) colors.Add(hex);
+                    cfg.SetAt("bubble.colors", colors.ToArray());
+                    cfg.Save();
+                    engine.Data.Refresh();
+                    Update();
+                });
             };
             BuildMixPalette();
             ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1286,6 +1288,7 @@ namespace DshPet
         private void WireDropdown(string buttonName, string[] values, string[] labels, string path, bool refresh)
         {
             Button button = (Button)ui[buttonName];
+            button.ToolTip = button.Content;   // 文案被裁剪时悬停可看全称
             button.Click += delegate
             {
                 Popup popup = new Popup();
@@ -1491,6 +1494,8 @@ namespace DshPet
             }
             bool visible = IsVisible;
             PetWindow active = ActivePet;
+            // 重建后必须保持显示：否则选色/换主题时面板会因失焦而自己消失。
+            Pinned = true;
             double keptLeft = double.NaN;
             double keptTop = double.NaN;
             if (root != null)
@@ -1633,6 +1638,220 @@ namespace DshPet
             return System.Drawing.Color.FromArgb(color.R, color.G, color.B);
         }
 
+        // ------------------------------------------------------------ 内嵌调色盘（色相条 + SV 方块 + hex）
+        private void ShowColorPicker(FrameworkElement anchor, string initialHex, Action<string> apply)
+        {
+            Color initial = Parse(string.IsNullOrEmpty(initialHex) ? "#4B6BFB" : initialHex);
+            double hue, sat, val;
+            ToHsv(initial, out hue, out sat, out val);
+
+            Popup popup = new Popup();
+            popup.AllowsTransparency = true;
+            popup.StaysOpen = false;
+            Canvas square = new Canvas();
+            square.Width = 200;
+            square.Height = 132;
+            Rectangle sv = new Rectangle();
+            sv.Width = 200;
+            sv.Height = 132;
+            sv.Fill = BuildSvBrush(hue);
+            square.Children.Add(sv);
+            Ellipse cursor = new Ellipse();
+            cursor.Width = 12;
+            cursor.Height = 12;
+            cursor.Stroke = Brushes.White;
+            cursor.StrokeThickness = 2;
+            cursor.IsHitTestVisible = false;
+            square.Children.Add(cursor);
+
+            Canvas strip = new Canvas();
+            strip.Width = 18;
+            strip.Height = 132;
+            Rectangle hues = new Rectangle();
+            hues.Width = 18;
+            hues.Height = 132;
+            LinearGradientBrush hueBrush = new LinearGradientBrush();
+            hueBrush.StartPoint = new Point(0, 0);
+            hueBrush.EndPoint = new Point(0, 1);
+            for (int i = 0; i <= 6; i++)
+            {
+                hueBrush.GradientStops.Add(new GradientStop(HueColor(i * 60), i / 6.0));
+            }
+            hues.Fill = hueBrush;
+            strip.Children.Add(hues);
+            Ellipse hueMark = new Ellipse();
+            hueMark.Width = 12;
+            hueMark.Height = 12;
+            hueMark.Stroke = Brushes.White;
+            hueMark.StrokeThickness = 2;
+            hueMark.IsHitTestVisible = false;
+            strip.Children.Add(hueMark);
+
+            Border preview = new Border();
+            preview.Width = 34;
+            preview.Height = 26;
+            preview.CornerRadius = new CornerRadius(7);
+            TextBox hexBox = new TextBox();
+            hexBox.Style = (Style)root.Resources["TxtBox"];
+            hexBox.Width = 92;
+            TextBlock caption = new TextBlock();
+            caption.Text = "按住拖动选色，或直接改 hex";
+            caption.FontSize = 10;
+            caption.Foreground = new SolidColorBrush(cMuted);
+            caption.Margin = new Thickness(0, 6, 0, 0);
+
+            StackPanel right = new StackPanel();
+            right.Margin = new Thickness(12, 0, 0, 0);
+            right.Children.Add(preview);
+            right.Children.Add(hexBox);
+            StackPanel body = new StackPanel();
+            body.Orientation = Orientation.Horizontal;
+            body.Children.Add(square);
+            body.Children.Add(strip);
+            body.Children.Add(right);
+            StackPanel card = new StackPanel();
+            card.Children.Add(body);
+            card.Children.Add(caption);
+            Border frame = new Border();
+            frame.Background = new SolidColorBrush(cRow);
+            frame.BorderBrush = new SolidColorBrush(cBorder);
+            frame.BorderThickness = new Thickness(1);
+            frame.CornerRadius = new CornerRadius(12);
+            frame.Padding = new Thickness(12);
+            frame.Child = card;
+            popup.Child = frame;
+            popup.PlacementTarget = anchor;
+            popup.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+
+            Action refresh = null;
+            refresh = delegate
+            {
+                Color current = FromHsv(hue, sat, val);
+                sv.Fill = BuildSvBrush(hue);
+                Canvas.SetLeft(cursor, sat * 194 + 3);
+                Canvas.SetTop(cursor, (1 - val) * 126 + 3);
+                Canvas.SetTop(hueMark, hue / 360.0 * 120 + 6);
+                preview.Background = new SolidColorBrush(current);
+                if (!hexBox.IsFocused)
+                {
+                    hexBox.Text = string.Format("#{0:X2}{1:X2}{2:X2}", current.R, current.G, current.B);
+                }
+            };
+            bool draggingSquare = false;
+            bool draggingHue = false;
+            System.Windows.Input.MouseButtonEventHandler down = delegate(object sender, System.Windows.Input.MouseButtonEventArgs e)
+            {
+                Point point = e.GetPosition(sender as IInputElement);
+                if (ReferenceEquals(sender, square)) { draggingSquare = true; ApplySquare(point, ref hue, ref sat, ref val); }
+                else { draggingHue = true; hue = Math.Max(0, Math.Min(359.9, point.Y / 132.0 * 360)); }
+                refresh();
+            };
+            System.Windows.Input.MouseEventHandler move = delegate(object sender, System.Windows.Input.MouseEventArgs e)
+            {
+                if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) { draggingSquare = false; draggingHue = false; return; }
+                Point point = e.GetPosition(sender as IInputElement);
+                if (draggingSquare) ApplySquare(point, ref hue, ref sat, ref val);
+                else if (draggingHue) hue = Math.Max(0, Math.Min(359.9, point.Y / 132.0 * 360));
+                else return;
+                refresh();
+            };
+            square.MouseLeftButtonDown += down;
+            square.MouseMove += move;
+            strip.MouseLeftButtonDown += down;
+            strip.MouseMove += move;
+            hexBox.KeyDown += delegate(object sender, System.Windows.Input.KeyEventArgs e)
+            {
+                if (e.Key != System.Windows.Input.Key.Enter) return;
+                string text = hexBox.Text.Trim();
+                if (!text.StartsWith("#", StringComparison.Ordinal)) text = "#" + text;
+                ToHsv(Parse(text), out hue, out sat, out val);
+                refresh();
+            };
+            System.Windows.Input.MouseButtonEventHandler up = delegate
+            {
+                draggingSquare = false;
+                draggingHue = false;
+                Color picked = FromHsv(hue, sat, val);
+                apply(string.Format("#{0:X2}{1:X2}{2:X2}", picked.R, picked.G, picked.B));
+            };
+            square.MouseLeftButtonUp += up;
+            strip.MouseLeftButtonUp += up;
+            refresh();
+            popup.IsOpen = true;
+        }
+
+        private static void ApplySquare(Point point, ref double hue, ref double sat, ref double val)
+        {
+            sat = Math.Max(0, Math.Min(1, point.X / 200.0));
+            val = Math.Max(0, Math.Min(1, 1 - point.Y / 132.0));
+        }
+
+        private static Brush BuildSvBrush(double hue)
+        {
+            LinearGradientBrush white = new LinearGradientBrush(Colors.White, HueColor(hue), new Point(0, 0.5), new Point(1, 0.5));
+            LinearGradientBrush black = new LinearGradientBrush(Color.FromArgb(0, 0, 0, 0), Colors.Black, new Point(0.5, 0), new Point(0.5, 1));
+            Grid overlay = new Grid();
+            overlay.Width = 200;
+            overlay.Height = 132;
+            Rectangle baseRect = new Rectangle();
+            baseRect.Width = 200;
+            baseRect.Height = 132;
+            baseRect.Fill = white;
+            overlay.Children.Add(baseRect);
+            Rectangle dark = new Rectangle();
+            dark.Width = 200;
+            dark.Height = 132;
+            dark.Fill = black;
+            overlay.Children.Add(dark);
+            VisualBrush brush = new VisualBrush(overlay);
+            return brush;
+        }
+
+        private static Color HueColor(double degrees)
+        {
+            double h = (degrees % 360 + 360) % 360 / 60.0;
+            double x = 1 - Math.Abs(h % 2 - 1);
+            double r = 0, g = 0, b = 0;
+            if (h < 1) { r = 1; g = x; }
+            else if (h < 2) { r = x; g = 1; }
+            else if (h < 3) { g = 1; b = x; }
+            else if (h < 4) { g = x; b = 1; }
+            else if (h < 5) { r = x; b = 1; }
+            else { r = 1; b = x; }
+            return Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+        }
+
+        private static void ToHsv(Color color, out double hue, out double sat, out double val)
+        {
+            double r = color.R / 255.0, g = color.G / 255.0, b = color.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b));
+            double min = Math.Min(r, Math.Min(g, b));
+            double d = max - min;
+            val = max;
+            sat = max <= 0 ? 0 : d / max;
+            if (d < 0.0001) { hue = 0; return; }
+            if (max == r) hue = 60 * (((g - b) / d) % 6);
+            else if (max == g) hue = 60 * ((b - r) / d + 2);
+            else hue = 60 * ((r - g) / d + 4);
+            if (hue < 0) hue += 360;
+        }
+
+        private static Color FromHsv(double hue, double sat, double val)
+        {
+            double c = val * sat;
+            double h = (hue % 360 + 360) % 360 / 60.0;
+            double x = c * (1 - Math.Abs(h % 2 - 1));
+            double m = val - c;
+            double r = 0, g = 0, b = 0;
+            if (h < 1) { r = c; g = x; }
+            else if (h < 2) { r = x; g = c; }
+            else if (h < 3) { g = c; b = x; }
+            else if (h < 4) { g = x; b = c; }
+            else if (h < 5) { r = x; b = c; }
+            else { r = c; b = x; }
+            return Color.FromRgb((byte)Math.Round((r + m) * 255), (byte)Math.Round((g + m) * 255), (byte)Math.Round((b + m) * 255));
+        }
+
         private static string ToHexString(System.Drawing.Color color)
         {
             return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
@@ -1677,6 +1896,7 @@ namespace DshPet
                     item.FontSize = 11;
                     item.HorizontalContentAlignment = HorizontalAlignment.Left;
                     item.Content = title;
+                    item.ToolTip = title;   // 名字太长时悬停看全称
                     item.Tag = page;
                     item.BorderThickness = new Thickness(0);
                     item.BorderBrush = Brushes.Transparent;
