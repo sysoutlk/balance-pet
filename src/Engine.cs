@@ -904,7 +904,8 @@ namespace DshPet
             {
                 if (!plan.Ok)
                 {
-                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name, "查询失败"));
+                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name,
+                        plan.Unsupported ? "不可查询" : "查询失败"));
                     continue;
                 }
                 foreach (PlanWindow window in plan.Windows)

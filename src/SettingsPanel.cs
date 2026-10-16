@@ -1067,6 +1067,11 @@ namespace DshPet
                     if (!string.IsNullOrEmpty(state.KeySource)) text += " · " + state.KeySource;
                     colour = "#6FD08C";
                 }
+                else if (state.Unsupported)
+                {
+                    text = state.Error;
+                    colour = "#8FA0C8";
+                }
                 else
                 {
                     text = state.Error;

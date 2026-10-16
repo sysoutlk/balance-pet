@@ -25,6 +25,7 @@ namespace DshPet
         public string Name = "";
         public bool Enabled;
         public bool Ok;
+        public bool Unsupported;   // provider answers, but exposes no usage window for this key
         public string Note = "";
         public string Error = "";
         public string ErrorDetail = "";
@@ -419,6 +420,13 @@ namespace DshPet
                 }
             }
             state.Error = string.IsNullOrEmpty(lastError) ? "没有查到可用模型的用量" : lastError;
+            if (models.Count > 0)
+            {
+                // The plan answers and lists its models, it just does not expose a usage window
+                // for this key. Say so plainly instead of showing a raw HTTP error.
+                state.Unsupported = true;
+                state.Error = "阿里未对该 Key 开放用量查询（可选模型 " + models.Count + " 个，用量请在百炼控制台查看）";
+            }
         }
 
         private static List<string> ModelIds(string body)
