@@ -212,7 +212,7 @@ namespace DshPet
           </Setter>
         </Style>
       </ScrollViewer.Resources>
-      <StackPanel Width='394'>
+      <StackPanel x:Name='Main' Width='394'>
         <DockPanel x:Name='Header' Background='Transparent'>
           <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='✕' Width='26' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}'/>
           <StackPanel Margin='0,2,0,0'>
@@ -265,11 +265,11 @@ namespace DshPet
           <Slider x:Name='BubbleShadowSlider' Width='86' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
         </DockPanel>
         <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='主色' Margin='0,0,6,0'/>
+          <TextBlock Text='主色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
         </StackPanel>
         <StackPanel Orientation='Horizontal' Margin='1,4,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='副色' Margin='0,0,6,0'/>
+          <TextBlock Text='副色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color2Panel'/>
         </StackPanel>
         <Grid Margin='0,9,0,0'>
@@ -393,6 +393,7 @@ namespace DshPet
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "Main",
                 "BubbleStyleBtn","BubbleTrendChk","BubbleTailChk","BubbleEffectBtn","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
@@ -424,6 +425,7 @@ namespace DshPet
             BuildRoleButtons();
             BuildProviderRows();
             BuildPlanRows();
+            BuildCollapsibleSections();
 
             ((Slider)ui["ScaleSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -1271,6 +1273,81 @@ namespace DshPet
                 swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
                 swatch.BorderThickness = new Thickness(selected ? 2 : 0);
             }
+        }
+
+        // ------------------------------------------------------------ 分组折叠
+        /// <summary>
+        /// Turns every [Sect] heading into a collapsible group header so the card stays tidy;
+        /// the open/closed state is remembered in pet-config.json (ui.sections).
+        /// </summary>
+        private void BuildCollapsibleSections()
+        {
+            StackPanel main = (StackPanel)ui["Main"];
+            List<UIElement> original = new List<UIElement>();
+            foreach (UIElement child in main.Children) original.Add(child);
+            main.Children.Clear();
+
+            Style sectionStyle = (Style)root.Resources["Sect"];
+            Button header = null;
+            StackPanel group = null;
+            foreach (UIElement child in original)
+            {
+                TextBlock text = child as TextBlock;
+                bool isHeader = text != null && ReferenceEquals(text.Style, sectionStyle);
+                if (!isHeader)
+                {
+                    if (group == null) main.Children.Add(child);
+                    else group.Children.Add(child);
+                    continue;
+                }
+
+                string title = text.Text;
+                header = new Button();
+                header.Height = 28;
+                header.Margin = new Thickness(0, 10, 0, 4);
+                header.Padding = new Thickness(10, 0, 10, 0);
+                header.FontSize = 12;
+                header.Foreground = Brush("#E6ECFF");
+                header.HorizontalContentAlignment = HorizontalAlignment.Left;
+                header.Cursor = System.Windows.Input.Cursors.Hand;
+                header.Template = SectionHeaderTemplate();
+                group = new StackPanel();
+                string id = "section:" + title;
+                bool open = cfg.GetFlagAt("ui." + id, DefaultSectionOpen(title));
+                header.Content = (open ? "▾  " : "▸  ") + title;
+                group.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                header.Click += delegate
+                {
+                    bool nowOpen = group.Visibility != Visibility.Visible;
+                    group.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
+                    header.Content = (nowOpen ? "▾  " : "▸  ") + title;
+                    cfg.SetAt("ui." + id, nowOpen);
+                    cfg.Save();
+                };
+                main.Children.Add(header);
+                main.Children.Add(group);
+            }
+        }
+
+        private static bool DefaultSectionOpen(string title)
+        {
+            // Everyday sections start open, the long configuration blocks start collapsed.
+            return title == "外观" || title == "动作点播" || title == "行为" || title == "数据源（余额 API）";
+        }
+
+        private static ControlTemplate SectionHeaderTemplate()
+        {
+            string xaml =
+                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' "
+                + "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>"
+                + "<Border x:Name='b' Background='#1B2236' CornerRadius='9'>"
+                + "<ContentPresenter HorizontalAlignment='Left' VerticalAlignment='Center'/>"
+                + "</Border>"
+                + "<ControlTemplate.Triggers>"
+                + "<Trigger Property='IsMouseOver' Value='True'><Setter TargetName='b' Property='Background' Value='#232C45'/></Trigger>"
+                + "</ControlTemplate.Triggers>"
+                + "</ControlTemplate>";
+            return (ControlTemplate)XamlReader.Parse(xaml);
         }
     }
 }
