@@ -510,6 +510,7 @@ namespace DshPet
             SetDefault("bubble", "effect", "off");
             SetDefault("bubble", "color1", "#4B6BFB");
             SetDefault("bubble", "color2", "#A855F7");
+            SetDefault("bubble", "colors", new string[0]);   // 可选：["#4B6BFB","#22D3EE",...] 自定义混色
             SetDefault("bubble", "speed", 1.0);
             SetDefault("bubble", "effectDepth", 1.0);
             SetDefault("bubble", "effectReverse", false);

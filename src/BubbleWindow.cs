@@ -93,6 +93,7 @@ namespace DshPet
         private Color accent = (Color)ColorConverter.ConvertFromString("#4B6BFB");
         private Color baseAccent = (Color)ColorConverter.ConvertFromString("#4B6BFB");
         private Color secondColor = (Color)ColorConverter.ConvertFromString("#A855F7");
+        private readonly List<Color> blendColors = new List<Color>();
         private double speedFactor = 1.0;
         private double effectDepth = 1.0;
         private bool effectReverse;
@@ -342,7 +343,7 @@ namespace DshPet
 
         private static readonly string[] DynamicModes = new string[]
         {
-            "rainbow", "aurora", "breathe", "duo", "flow", "orbit", "shimmer"
+            "rainbow", "aurora", "breathe", "duo", "flow", "orbit", "shimmer", "mix"
         };
 
         private Color DynamicColor()
@@ -400,6 +401,10 @@ namespace DshPet
         private Brush CurrentBrush()
         {
             if (dynamicMode.Length == 0) return FromColor(accent);
+            if (dynamicMode == "mix" || dynamicMode == "flow")
+            {
+                return BlendBrush(dynamicMode == "mix" ? 0.32 : 0.16);
+            }
             if (dynamicMode != "flow") return FromColor(DynamicColor());
             Color a = DynamicColor();
             Color b = secondColor;
@@ -410,6 +415,32 @@ namespace DshPet
             brush.GradientStops.Add(new GradientStop(a, 0));
             brush.GradientStops.Add(new GradientStop(b, 0.5));
             brush.GradientStops.Add(new GradientStop(a, 1));
+            return brush;
+        }
+
+        /// <summary>
+        /// 多色混搭：把 3~4 个颜色做成一个持续流动的渐变（颜色互相"流动融合"），
+        /// 角度还会缓慢旋转，就是 Codex++ 气泡那种动态色的感觉。
+        /// </summary>
+        private Brush BlendBrush(double speed)
+        {
+            List<Color> colors = blendColors.Count > 1
+                ? blendColors
+                : new List<Color> { baseAccent, secondColor };
+            LinearGradientBrush brush = new LinearGradientBrush();
+            double angle = phase * 0.35 * speed;
+            double cx = 0.5 + 0.5 * Math.Cos(angle);
+            double cy = 0.5 + 0.5 * Math.Sin(angle);
+            brush.StartPoint = new Point(cx - 0.6, cy - 0.6);
+            brush.EndPoint = new Point(cx + 0.6, cy + 0.6);
+            int count = colors.Count;
+            for (int i = 0; i < count; i++)
+            {
+                double offset = (i / (double)count + phase * speed) % 1.0;
+                brush.GradientStops.Add(new GradientStop(colors[i], offset));
+            }
+            // 首尾再补一次，过渡不断层。
+            brush.GradientStops.Add(new GradientStop(colors[0], 1.0));
             return brush;
         }
 
@@ -502,6 +533,19 @@ namespace DshPet
             dynamicMode = effect;
             baseAccent = ParseColor(cfg.GetString("bubble", "color1", ""), accentText);
             secondColor = ParseColor(cfg.GetString("bubble", "color2", "#A855F7"), "#A855F7");
+            blendColors.Clear();
+            foreach (string hex in cfg.GetStrings("bubble", "colors"))
+            {
+                if (!string.IsNullOrEmpty(hex) && hex.StartsWith("#", StringComparison.Ordinal)) blendColors.Add(ParseColor(hex, "#4B6BFB"));
+            }
+            if (blendColors.Count == 0)
+            {
+                // 没配 colors 时，用主/副色再派生两色，形成 4 色混搭。
+                blendColors.Add(baseAccent);
+                blendColors.Add(secondColor);
+                blendColors.Add(HueColor(Hue(baseAccent) + 45));
+                blendColors.Add(HueColor(Hue(secondColor) - 40));
+            }
             accent = baseAccent;
             // Monet (and any theme that brings its own accent) tints the widget unless the user
             // picked colours explicitly.
