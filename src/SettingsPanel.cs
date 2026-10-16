@@ -1400,6 +1400,13 @@ namespace DshPet
             }
             bool visible = IsVisible;
             PetWindow active = ActivePet;
+            double keptLeft = double.NaN;
+            double keptTop = double.NaN;
+            if (root != null)
+            {
+                keptLeft = root.Left;
+                keptTop = root.Top;
+            }
             try
             {
                 if (root != null) root.Close();
@@ -1413,7 +1420,19 @@ namespace DshPet
             planStatus.Clear();
             planBoxes.Clear();
             Build();
-            if (visible) ShowFor(active);
+            if (!visible) return;
+            // Stay where the user put the card: re-showing through ShowFor() would snap it back
+            // to the default spot next to the pet.
+            root.Visibility = Visibility.Visible;
+            if (!double.IsNaN(keptLeft) && !double.IsNaN(keptTop))
+            {
+                root.Left = keptLeft;
+                root.Top = keptTop;
+            }
+            root.Show();
+            root.UpdateLayout();
+            root.Activate();
+            Update();
         }
 
         private static string ShiftHue(string hex, double degrees)
