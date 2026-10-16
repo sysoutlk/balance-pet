@@ -470,6 +470,15 @@ namespace DshPet
             SetDefault("providers.openrouter", "apiKey", "");
             SetDefault("providers.custom", "on", false);
             SetDefault("providers.custom", "apiKey", "");
+            // Coding-plan usage sources (5-hour / weekly windows). All ship off; each row in
+            // the settings card takes its own key (Codex reuses the local CLI login).
+            foreach (string planId in new string[] { "kimiCode", "codex", "zhipu", "zai", "minimax", "opencode", "custom" })
+            {
+                SetDefault("plans." + planId, "on", false);
+                SetDefault("plans." + planId, "apiKey", "");
+            }
+            SetDefault("plans.custom", "url", "");
+            SetDefault("plans.custom", "path", "");
             SetDefault("custom", "name", "自定义接口");
             SetDefault("custom", "url", "");
             SetDefault("custom", "auth", "bearer");

@@ -278,6 +278,8 @@ namespace DshPet
           <Button x:Name='RefreshBtn' DockPanel.Dock='Right' Content='刷新余额' Width='88' Style='{StaticResource Btn}' Margin='0'/>
           <TextBlock x:Name='DataText' Style='{StaticResource Lbl}' Text='…' TextTrimming='CharacterEllipsis'/>
         </DockPanel>
+        <TextBlock Style='{StaticResource Sect}' Text='套餐用量（5 小时 / 7 天窗口）'/>
+        <StackPanel x:Name='PlanList'/>
         <TextBlock Style='{StaticResource Sect}' Text='提醒'/>
         <WrapPanel>
           <CheckBox x:Name='AlertChk' Style='{StaticResource Switch}' Content='余额预警'/>
@@ -336,6 +338,7 @@ namespace DshPet
                 "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
+                "PlanList",
                 "EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
@@ -363,6 +366,7 @@ namespace DshPet
             }
             BuildRoleButtons();
             BuildProviderRows();
+            BuildPlanRows();
 
             ((Slider)ui["ScaleSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -781,6 +785,164 @@ namespace DshPet
             }
         }
 
+        // ------------------------------------------------------------ 套餐用量
+        private readonly Dictionary<string, TextBlock> planStatus = new Dictionary<string, TextBlock>();
+        private readonly Dictionary<string, PasswordBox> planBoxes = new Dictionary<string, PasswordBox>();
+
+        private void BuildPlanRows()
+        {
+            StackPanel list = (StackPanel)ui["PlanList"];
+            list.Children.Clear();
+            foreach (PlanDef def in Plans.Catalog())
+            {
+                Border row = new Border();
+                row.CornerRadius = new CornerRadius(9);
+                row.Background = Brush("#1B2236");
+                row.Padding = new Thickness(10, 7, 10, 9);
+                row.Margin = new Thickness(0, 0, 0, 7);
+                StackPanel stack = new StackPanel();
+
+                DockPanel head = new DockPanel();
+                TextBlock status = new TextBlock();
+                status.FontSize = 10.5;
+                status.Foreground = Brush("#8FA0C8");
+                status.VerticalAlignment = VerticalAlignment.Center;
+                status.Margin = new Thickness(8, 0, 0, 0);
+                status.TextTrimming = TextTrimming.CharacterEllipsis;
+                status.MaxWidth = 210;
+                DockPanel.SetDock(status, Dock.Right);
+                head.Children.Add(status);
+                CheckBox toggle = new CheckBox();
+                toggle.Style = (Style)root.Resources["Switch"];
+                toggle.Content = def.Name;
+                toggle.Margin = new Thickness(0);
+                toggle.IsChecked = cfg.GetFlagAt("plans." + def.Id + ".on", false);
+                string id = def.Id;
+                toggle.Click += delegate
+                {
+                    cfg.SetAt("plans." + id + ".on", toggle.IsChecked == true);
+                    cfg.Save();
+                    engine.Data.Refresh();
+                    Update();
+                };
+                head.Children.Add(toggle);
+                stack.Children.Add(head);
+                planStatus[def.Id] = status;
+
+                TextBlock note = new TextBlock();
+                note.Text = def.Note;
+                note.FontSize = 10;
+                note.Foreground = Brush("#7d8bb0");
+                note.TextWrapping = TextWrapping.Wrap;
+                note.Margin = new Thickness(0, 4, 0, 0);
+                stack.Children.Add(note);
+
+                if (def.IsCustom)
+                {
+                    stack.Children.Add(FieldRow("URL", "plans.custom.url", 0, 44));
+                    stack.Children.Add(FieldRow("路径", "plans.custom.path", 0, 44));
+                }
+
+                DockPanel keyRow = new DockPanel();
+                keyRow.Margin = new Thickness(0, 7, 0, 0);
+                Button apply = new Button();
+                apply.Style = (Style)root.Resources["Mini"];
+                apply.Content = "应用";
+                apply.Width = 46;
+                apply.Padding = new Thickness(0);
+                DockPanel.SetDock(apply, Dock.Right);
+                apply.Click += delegate { ApplyPlanKey(id); };
+                Button clear = new Button();
+                clear.Style = (Style)root.Resources["Mini"];
+                clear.Content = "清除";
+                clear.Width = 46;
+                clear.Padding = new Thickness(0);
+                clear.Margin = new Thickness(0, 0, 6, 0);
+                DockPanel.SetDock(clear, Dock.Right);
+                clear.Click += delegate { ClearPlanKey(id); };
+                keyRow.Children.Add(apply);
+                keyRow.Children.Add(clear);
+                PasswordBox box = new PasswordBox();
+                box.Style = (Style)root.Resources["KeyBox"];
+                box.KeyDown += delegate(object sender, KeyEventArgs e)
+                {
+                    if (e.Key == Key.Enter) ApplyPlanKey(id);
+                };
+                planBoxes[def.Id] = box;
+                keyRow.Children.Add(box);
+                stack.Children.Add(keyRow);
+
+                row.Child = stack;
+                list.Children.Add(row);
+            }
+        }
+
+        private void ApplyPlanKey(string id)
+        {
+            PasswordBox box = planBoxes[id];
+            string text = box.Password.Trim();
+            if (text.Length == 0) return;
+            cfg.SetAt("plans." + id + ".apiKey", Secret.Protect(text));
+            box.Password = "";
+            cfg.Save();
+            engine.Data.Refresh();
+            Update();
+        }
+
+        private void ClearPlanKey(string id)
+        {
+            cfg.SetAt("plans." + id + ".apiKey", "");
+            cfg.Save();
+            engine.Data.Refresh();
+            Update();
+        }
+
+        private void UpdatePlanStatus()
+        {
+            Snapshot data = engine.Data.Current;
+            foreach (KeyValuePair<string, TextBlock> pair in planStatus)
+            {
+                string id = pair.Key;
+                PlanState state = null;
+                foreach (PlanState item in data.Plans)
+                {
+                    if (item.Id == id)
+                    {
+                        state = item;
+                        break;
+                    }
+                }
+                bool on = cfg.GetFlagAt("plans." + id + ".on", false);
+                string text;
+                string colour;
+                if (!on)
+                {
+                    text = "已关闭";
+                    colour = "#8FA0C8";
+                }
+                else if (state == null)
+                {
+                    text = "等待查询";
+                    colour = "#8FA0C8";
+                }
+                else if (state.Ok)
+                {
+                    text = state.Summary();
+                    if (!string.IsNullOrEmpty(state.KeySource)) text += " · " + state.KeySource;
+                    colour = "#6FD08C";
+                }
+                else
+                {
+                    text = state.Error;
+                    colour = "#FF8B7A";
+                }
+                if (text != null && text.Length > 30) text = text.Substring(0, 30) + "…";
+                pair.Value.Text = text;
+                pair.Value.Foreground = Brush(colour);
+                pair.Value.ToolTip = state != null && !string.IsNullOrEmpty(state.ErrorDetail) ? state.ErrorDetail : null;
+            }
+        }
+
         private static SolidColorBrush Brush(string hex)
         {
             return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
@@ -880,6 +1042,7 @@ namespace DshPet
                 : primary.Name + " · " + Fmt.Money(primary.Balance, primary.Currency) + " · " + engine.PeakText();
             ((TextBlock)ui["SubText"]).Text = engine.PeakLine() + "　" + data.OkCount + " 个数据源在线";
             UpdateProviderStatus();
+            UpdatePlanStatus();
         }
     }
 }

@@ -144,6 +144,22 @@ namespace DshPet
                 sb.AppendLine("  - " + p.Id + "  " + p.Name + "  " + line);
             }
             if (s.History.Count > 0) sb.AppendLine("trend: " + TrendLine(s.History));
+            if (s.Plans.Count > 0)
+            {
+                sb.AppendLine("plans:");
+                foreach (PlanState plan in s.Plans)
+                {
+                    if (plan.Ok)
+                    {
+                        sb.AppendLine("  - " + plan.Id + "  " + plan.Name + "  " + plan.Summary()
+                            + (string.IsNullOrEmpty(plan.KeySource) ? "" : "  key:" + plan.KeySource));
+                    }
+                    else
+                    {
+                        sb.AppendLine("  - " + plan.Id + "  " + plan.Name + "  失败：" + plan.Error);
+                    }
+                }
+            }
             string report = sb.ToString();
             Console.WriteLine(report);
             WriteReport("self-test-report.txt", report);

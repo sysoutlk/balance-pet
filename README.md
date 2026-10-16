@@ -62,6 +62,24 @@
 | OpenRouter | `GET /api/v1/credits` | 美元额度，可覆盖 GPT / Claude / Gemini / Grok |
 | 自定义接口 | 任意 | 填 URL、认证方式（Bearer / x-api-key / 无）、JSON 路径 |
 
+### 套餐用量（5 小时 / 7 天窗口）
+
+对订阅制编程套餐来说，「余额」没有意义，重要的是窗口用量。桌宠为此内置了一组**套餐用量**来源，
+按 5 小时 / 每周窗口显示百分比（点击气泡到「套餐用量」页，或看设置卡片里的状态行）：
+
+| 平台 | 接口 | 说明 |
+| --- | --- | --- |
+| Kimi Code | `GET api.kimi.com/coding/v1/usages` | kimi.com 编程套餐，用套餐 Key（`sk-kim…`）；请求头对齐官方 KimiCLI |
+| Codex（ChatGPT 套餐） | `GET chatgpt.com/backend-api/wham/usage` | 自动复用本机 `~/.codex/auth.json` 登录；也可手动粘贴 access token |
+| 智谱 GLM 编程套餐 | `GET open.bigmodel.cn/api/monitor/usage/quota/limit` | 5 小时 / 每周额度（Key 不加 Bearer 前缀） |
+| Z.AI（GLM 国际站） | `GET api.z.ai/api/monitor/usage/quota/limit` | 同上，国际站域名 |
+| MiniMax 编程套餐 | `GET api.minimaxi.com/v1/api/openplatform/coding_plan/remains` | Coding Plan 额度 |
+| OpenCode Go | `GET opencode.ai/zen/go/v1/usage` | $10/月订阅，美元额度三窗口 |
+| 自定义用量接口 | 任意 | 给 URL（可选 JSON 路径），会自动识别 `limit / used / percentage / 重置时间` 等字段 |
+
+火山方舟（豆包）的 Agent / Coding Plan 走的是需要 AK/SK 签名的控制面 OpenAPI，暂未内置；
+如果有网关把它包装成普通 JSON，用「自定义用量接口」即可接入。
+
 以下平台**没有公开的 API Key 余额接口**，设置卡片里会注明，需要用官方控制台查看；
 有网关或中转的可以走「自定义接口」：
 通义千问 DashScope、豆包（火山方舟）、智谱 GLM、OpenAI、Anthropic Claude、Google Gemini、xAI Grok。

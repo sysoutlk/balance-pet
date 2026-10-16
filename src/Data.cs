@@ -31,6 +31,7 @@ namespace DshPet
     internal sealed class Snapshot
     {
         public List<ProviderState> Providers = new List<ProviderState>();
+        public List<PlanState> Plans = new List<PlanState>();
         public string PrimaryId = "deepseek";
         public long AtMs;
         public bool IsPeak;
@@ -261,6 +262,44 @@ namespace DshPet
                 p.TodayUsage = ProviderUsage(stateRoot, p.Id, p.Balance);
             }
             WriteState(stateRoot);
+
+            // Coding-plan usage windows (Kimi Code / Codex / GLM / ... ) in parallel.
+            List<PlanDef> planDefs = Plans.Catalog();
+            List<PlanDef> enabledPlans = new List<PlanDef>();
+            foreach (PlanDef def in planDefs)
+            {
+                if (cfg.GetFlagAt("plans." + def.Id + ".on", false)) enabledPlans.Add(def);
+            }
+            List<Task<PlanState>> planTasks = new List<Task<PlanState>>();
+            foreach (PlanDef def in enabledPlans)
+            {
+                PlanDef captured = def;
+                planTasks.Add(Task.Factory.StartNew(delegate { return Plans.Query(cfg, captured); }));
+            }
+            if (planTasks.Count > 0)
+            {
+                Task.WaitAll(planTasks.ToArray(), 48000);
+            }
+            for (int i = 0; i < enabledPlans.Count; i++)
+            {
+                PlanState planState;
+                Task<PlanState> task = planTasks[i];
+                if (task.IsCompleted)
+                {
+                    planState = task.Result;
+                }
+                else
+                {
+                    planState = new PlanState();
+                    planState.Id = enabledPlans[i].Id;
+                    planState.Name = enabledPlans[i].Name;
+                    planState.Enabled = true;
+                    planState.Error = "查询超时";
+                    planState.AtMs = NowMs();
+                }
+                planState.Enabled = true;
+                snapshot.Plans.Add(planState);
+            }
 
             snapshot.Limits = ReadLimits();
             ProviderState primary = snapshot.Primary;

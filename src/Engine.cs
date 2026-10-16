@@ -17,8 +17,6 @@ namespace DshPet
 {
     internal sealed class Engine
     {
-        private const int PageCount = 4;
-
         private readonly Config cfg;
         private readonly DispatcherTimer timer = new DispatcherTimer();
         public readonly DataService Data;
@@ -562,8 +560,8 @@ namespace DshPet
             }
             ScheduleEdgeHide(pet, DateTime.UtcNow);
             string quip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
-            int page = pet.PageIndex % PageCount;
-            pet.PageIndex = (page + 1) % PageCount;
+            int page = pet.PageIndex % PageCount();
+            pet.PageIndex = (page + 1) % PageCount();
             bubbleIsMessage = false;
             bubbleIsAlert = false;
             bubblePage = page;
@@ -787,7 +785,7 @@ namespace DshPet
             ProviderState primary = data.Primary;
             BubbleView view = new BubbleView();
             view.PageIndex = index;
-            view.PageCount = PageCount;
+            view.PageCount = PageCount();
             view.Quip = bubbleQuip;
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
@@ -857,22 +855,54 @@ namespace DshPet
                 return view;
             }
 
-            view.Title = "数据源";
-            view.Big = data.OkCount + " / " + EnabledCount(data);
-            view.BigSize = 22;
-            foreach (ProviderState provider in data.Providers)
+            if (index == 3)
             {
-                if (!provider.Enabled) continue;
-                if (!provider.Supported)
+                view.Title = "数据源";
+                view.Big = data.OkCount + " / " + EnabledCount(data);
+                view.BigSize = 22;
+                foreach (ProviderState provider in data.Providers)
                 {
-                    view.Rows.Add(new KeyValuePair<string, string>(provider.Name, "无公开接口"));
+                    if (!provider.Enabled) continue;
+                    if (!provider.Supported)
+                    {
+                        view.Rows.Add(new KeyValuePair<string, string>(provider.Name, "无公开接口"));
+                        continue;
+                    }
+                    view.Rows.Add(new KeyValuePair<string, string>(provider.Name,
+                        provider.Ok ? Fmt.Money(provider.Balance, provider.Currency) : "查询失败"));
+                }
+                view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
+                return view;
+            }
+
+            // Page 4: coding-plan usage windows (5-hour / weekly).
+            view.Title = "套餐用量（5 小时 / 7 天）";
+            view.BigSize = 20;
+            int okPlans = 0;
+            foreach (PlanState plan in data.Plans)
+            {
+                if (plan.Ok) okPlans++;
+            }
+            view.Big = okPlans + " / " + data.Plans.Count + " 套餐在线";
+            foreach (PlanState plan in data.Plans)
+            {
+                if (!plan.Ok)
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name, "查询失败"));
                     continue;
                 }
-                view.Rows.Add(new KeyValuePair<string, string>(provider.Name,
-                    provider.Ok ? Fmt.Money(provider.Balance, provider.Currency) : "查询失败"));
+                foreach (PlanWindow window in plan.Windows)
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name + " · " + window.Label,
+                        window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%"));
+                }
             }
-            view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
             return view;
+        }
+
+        private int PageCount()
+        {
+            return Data.Current.Plans.Count > 0 ? 5 : 4;
         }
 
         private static int EnabledCount(Snapshot data)
