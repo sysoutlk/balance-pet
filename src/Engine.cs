@@ -259,6 +259,7 @@ namespace DshPet
             }
             pet.Dropped = false;
             if (pet.Tuck > 0.01) return;   // mid-tuck: no walking, no random actions
+            RefreshEdgeAttachment(pet);
             if (EdgeHideEnabled(pet))
             {
                 if (pet.EdgeHideAt == DateTime.MaxValue)
@@ -545,6 +546,27 @@ namespace DshPet
             pet.EdgeHideAt = DateTime.MaxValue;
         }
 
+        /// <summary>
+        /// Drops a stale edge attachment once the pet is no longer sitting against that edge
+        /// (e.g. it walked away or was clicked in the middle of the screen). Without this the
+        /// pet would later slide back to the remembered edge and tuck itself in.
+        /// </summary>
+        private static void RefreshEdgeAttachment(PetWindow pet)
+        {
+            if (string.IsNullOrEmpty(pet.EdgeSide)) return;
+            ScreenArea area = ScreenArea.ForPoint(pet.X + pet.Width / 2, pet.Y + pet.Height / 2);
+            bool attached =
+                (pet.EdgeSide == "left" && pet.X <= area.Left + 10) ||
+                (pet.EdgeSide == "right" && pet.X + pet.Width >= area.Right - 10) ||
+                (pet.EdgeSide == "top" && pet.Y <= area.Top + 10) ||
+                (pet.EdgeSide == "bottom" && pet.Y + pet.Height >= area.Bottom - 10);
+            if (!attached)
+            {
+                pet.EdgeSide = "";
+                pet.EdgeHideAt = DateTime.MaxValue;
+            }
+        }
+
         // ------------------------------------------------------------ 交互
         private void OnPetClicked(object sender, EventArgs e)
         {
@@ -555,6 +577,7 @@ namespace DshPet
                 RevealPet(pet);
                 return;
             }
+            RefreshEdgeAttachment(pet);   // a click stops it in place instead of re-attaching
             ScheduleEdgeHide(pet, DateTime.UtcNow);
             string quip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
             int page = pet.PageIndex % PageCount();

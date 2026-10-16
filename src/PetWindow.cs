@@ -336,7 +336,14 @@ namespace DshPet
             else if (best == "right") { X = area.Right - Width - margin; SetFacing(-1); }
             else if (best == "top") { Y = area.Top + margin; }
             else if (best == "bottom") { Y = area.Bottom - Height - margin; }
-            else return;
+            else
+            {
+                // Not near any edge: forget the previous attachment, otherwise the pet would
+                // later stroll back to that edge and tuck itself in.
+                EdgeSide = "";
+                EdgeHideAt = DateTime.MaxValue;
+                return;
+            }
             ApplyPosition();
             EdgeSide = best;
             EdgeShownX = X;
