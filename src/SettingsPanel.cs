@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using Ellipse = System.Windows.Shapes.Ellipse;
 
@@ -229,45 +230,83 @@ namespace DshPet
           <StackPanel x:Name='Main'/>
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='主题与气泡'/>
-        <WrapPanel>
-          <Button x:Name='ThemeDropBtn' Content='主题：浅色  ▾' Width='126' Style='{StaticResource Btn}'/>
-          <Button x:Name='EffectDropBtn' Content='特效：关  ▾' Width='146' Style='{StaticResource Btn}'/>
-          <Button x:Name='FontDropBtn' Content='字体：系统  ▾' Width='146' Style='{StaticResource Btn}'/>
-          <Button x:Name='NumberFontDropBtn' Content='数字：跟随  ▾' Width='168' Style='{StaticResource Btn}'/>
+        <WrapPanel Margin='0,2,0,0'>
+          <Button x:Name='ThemeDropBtn' Content='主题 · 浅色 ▾' Width='126' Style='{StaticResource Btn}'/>
+          <Button x:Name='EffectDropBtn' Content='动效 · 关闭 ▾' Width='126' Style='{StaticResource Btn}'/>
+          <Button x:Name='FontDropBtn' Content='字体 · 系统 ▾' Width='132' Style='{StaticResource Btn}'/>
+          <Button x:Name='NumberFontDropBtn' Content='数字 · 跟随 ▾' Width='146' Style='{StaticResource Btn}'/>
           <CheckBox x:Name='BubbleTrendChk' Style='{StaticResource Switch}' Content='图表'/>
           <CheckBox x:Name='BubbleTailChk' Style='{StaticResource Switch}' Content='小尾巴'/>
+          <CheckBox x:Name='BubbleReverseChk' Style='{StaticResource Switch}' Content='反向'/>
         </WrapPanel>
-        <DockPanel Margin='0,6,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='速率'/>
-          <Slider x:Name='BubbleSpeedSlider' Width='96' Minimum='0.2' Maximum='3' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleSpeedVal' Style='{StaticResource Val}' Text='1.0x'/>
-          <CheckBox x:Name='BubbleReverseChk' Style='{StaticResource Switch}' Content='反向' Margin='10,0,0,0'/>
-        </DockPanel>
-        <DockPanel Margin='0,4,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='深度' Width='34'/>
-          <Slider x:Name='BubbleDepthSlider' Width='96' Minimum='0' Maximum='1' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleDepthVal' Style='{StaticResource Val}' Text='1.0'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='字号' Margin='10,0,0,0'/>
-          <Slider x:Name='BubbleFontSlider' Width='96' Minimum='0.7' Maximum='1.8' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleFontVal' Style='{StaticResource Val}' Text='1.0x'/>
-        </DockPanel>
-        <DockPanel Margin='0,4,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='宽度' Width='34'/>
-          <Slider x:Name='BubbleWidthSlider' Width='76' Minimum='150' Maximum='320' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleWidthVal' Style='{StaticResource Val}' Text='196'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='圆角' Margin='8,0,0,0'/>
-          <Slider x:Name='BubbleRadiusSlider' Width='70' Minimum='0' Maximum='28' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleRadiusVal' Style='{StaticResource Val}' Text='16'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='尾巴' Margin='8,0,0,0'/>
-          <Slider x:Name='BubbleTailSlider' Width='70' Minimum='8' Maximum='24' Style='{StaticResource Flat}'/>
-        </DockPanel>
-        <DockPanel Margin='0,4,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='不透明度' Width='54'/>
-          <Slider x:Name='BubbleOpacitySlider' Width='110' Minimum='0.5' Maximum='1' Style='{StaticResource Flat}'/>
-          <TextBlock x:Name='BubbleOpacityVal' Style='{StaticResource Val}' Text='100%'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='阴影' Margin='8,0,0,0'/>
-          <Slider x:Name='BubbleShadowSlider' Width='86' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
-        </DockPanel>
+        <Border x:Name='FxHost' CornerRadius='12' Padding='12' Margin='0,8,0,0' Background='__ROW__' BorderBrush='__BORDER__' BorderThickness='1'>
+          <StackPanel>
+            <DockPanel>
+              <TextBlock Text='实时预览' FontSize='10' Foreground='__MUTED__' DockPanel.Dock='Left'/>
+              <TextBlock x:Name='FxHint' FontSize='10' Foreground='__MUTED__' HorizontalAlignment='Right'/>
+            </DockPanel>
+            <Grid Margin='0,8,0,0' Height='92'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/>
+              </Grid.ColumnDefinitions>
+              <Canvas x:Name='FxCanvas' Grid.Column='0' Height='92' ClipToBounds='False'>
+                <Border x:Name='FxCard' CornerRadius='12' Background='__CARD__' BorderBrush='__BORDER__' BorderThickness='1' Padding='10,8'>
+                  <StackPanel>
+                    <StackPanel Orientation='Horizontal'>
+                      <Ellipse x:Name='FxDot' Width='7' Height='7' VerticalAlignment='Center' Margin='0,0,6,0'/>
+                      <TextBlock x:Name='FxTitle' FontSize='11' FontWeight='SemiBold' Text='余额'/>
+                    </StackPanel>
+                    <TextBlock x:Name='FxAmount' FontSize='19' FontWeight='Bold' Text='¥ 000.00' Margin='0,3,0,0'/>
+                    <TextBlock x:Name='FxRow' FontSize='10' Text='今日已用 ¥ 00.00' Margin='0,2,0,0'/>
+                  </StackPanel>
+                </Border>
+                <Border x:Name='FxTail' Width='11' Height='11' RenderTransformOrigin='0.5,0.5'>
+                  <Border.RenderTransform>
+                    <RotateTransform Angle='45'/>
+                  </Border.RenderTransform>
+                </Border>
+              </Canvas>
+              <StackPanel Grid.Column='1' Margin='12,0,0,0' VerticalAlignment='Top'>
+                <TextBlock x:Name='FxSwatchLabel' Text='主题色 / 混合配色' FontSize='10' Foreground='__MUTED__'/>
+                <WrapPanel x:Name='FxColors' Margin='0,4,0,0'/>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Border>
+        <WrapPanel Margin='0,8,0,0'>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='速率' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleSpeedVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleSpeedSlider' Width='156' Minimum='0.2' Maximum='3' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='深度' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleDepthVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleDepthSlider' Width='156' Minimum='0' Maximum='1' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='字号' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleFontVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleFontSlider' Width='156' Minimum='0.7' Maximum='1.8' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='宽度' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleWidthVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleWidthSlider' Width='156' Minimum='150' Maximum='320' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='圆角' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleRadiusVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleRadiusSlider' Width='156' Minimum='0' Maximum='28' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='尾巴' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleTailVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleTailSlider' Width='156' Minimum='8' Maximum='24' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='不透明度' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleOpacityVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleOpacitySlider' Width='156' Minimum='0.5' Maximum='1' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='阴影' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='BubbleShadowVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='BubbleShadowSlider' Width='156' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
+          </StackPanel>
+        </WrapPanel>
         <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
           <TextBlock Text='主题色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
@@ -383,6 +422,8 @@ namespace DshPet
         private readonly Dictionary<string, FrameworkElement> ui = new Dictionary<string, FrameworkElement>();
         private readonly Dictionary<string, TextBlock> statusById = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, PasswordBox> keyBoxes = new Dictionary<string, PasswordBox>();
+        private readonly DispatcherTimer previewTimer = new DispatcherTimer();
+        private double previewPhase;
         private bool updating;
         // 代码里生成的行（数据源、套餐用量、输入框等）也跟随主题配色。
         private Color cRow;
@@ -424,6 +465,7 @@ namespace DshPet
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
                 "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel",
                 "MixPanel",
+                "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","FxColors","FxSwatchLabel","BubbleShadowVal",
                 "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
@@ -549,6 +591,16 @@ namespace DshPet
             BindBubbleSlider("BubbleOpacitySlider", "bubble.opacity", "BubbleOpacityVal", "0%");
             BindBubbleSlider("BubbleShadowSlider", "bubble.shadow", "BubbleShadowSliderVal", "0.00");
             BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
+            previewTimer.Interval = TimeSpan.FromMilliseconds(110);
+            previewTimer.Tick += delegate
+            {
+                if (!IsVisible) return;
+                double speed = cfg.GetNumber("bubble", "speed", 1.0);
+                if (speed < 0.1) speed = 0.1;
+                previewPhase += 0.045 * speed;
+                ApplyPreviewBrush();
+            };
+            previewTimer.Start();
             BindNumberBox("AlertBelowBox", "alert.below");
             BindNumberBox("BudgetBox", "alert.budget");
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
@@ -1220,6 +1272,7 @@ namespace DshPet
                 SyncBubbleSlider("BubbleShadowSlider", null, cfg.GetNumberAt("bubble.shadow", 0.28), "0.00");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
+                UpdatePreview();
                 double below = cfg.GetNumberAt("alert.below", 0);
                 ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 double budgetValue = cfg.GetNumberAt("alert.budget", 0);
@@ -1850,6 +1903,111 @@ namespace DshPet
             else if (h < 5) { r = x; b = c; }
             else { r = c; b = x; }
             return Color.FromRgb((byte)Math.Round((r + m) * 255), (byte)Math.Round((g + m) * 255), (byte)Math.Round((b + m) * 255));
+        }
+
+        // ------------------------------------------------------------ 实时预览（迷你气泡）
+        private void UpdatePreview()
+        {
+            string theme = cfg.GetString("bubble", "theme", "");
+            if (string.IsNullOrEmpty(theme)) theme = cfg.GetString("bubble", "style", "light");
+            ThemePalette palette = BubbleTheme.Resolve(theme);
+            Border card = (Border)ui["FxCard"];
+            Border tail = (Border)ui["FxTail"];
+            card.Background = new SolidColorBrush(palette.Card);
+            card.BorderBrush = new SolidColorBrush(palette.Border);
+            ((TextBlock)ui["FxTitle"]).Foreground = new SolidColorBrush(palette.Title);
+            ((TextBlock)ui["FxRow"]).Foreground = new SolidColorBrush(palette.Muted);
+            ((TextBlock)ui["FxAmount"]).FontSize = 19 * cfg.GetNumber("bubble", "fontScale", 1.0);
+            double radius = cfg.GetNumber("bubble", "radius", 16);
+            card.CornerRadius = new CornerRadius(Math.Max(2, radius * 0.7));
+            double width = cfg.GetNumber("bubble", "width", 196);
+            card.Width = 120 + (Math.Max(150, Math.Min(320, width)) - 150) / 170.0 * 130;
+            card.Opacity = cfg.GetNumber("bubble", "opacity", 1.0);
+            double tailSize = Math.Max(8, Math.Min(24, cfg.GetNumber("bubble", "tailSize", 13))) * 0.7;
+            tail.Width = tailSize;
+            tail.Height = tailSize;
+            tail.Background = card.Background;
+            tail.BorderBrush = card.BorderBrush;
+            ((TextBlock)ui["FxHint"]).Text = DropLabel(EffectValues, EffectLabels, "bubble.effect", "关闭")
+                + " · " + DropLabel(ThemeValues, ThemeLabels, "bubble.theme", "浅色");
+            // 混合配方做成色块展示（点一下移除）。
+            WrapPanel colors = (WrapPanel)ui["FxColors"];
+            colors.Children.Clear();
+            foreach (string hex in cfg.GetStrings("bubble", "colors"))
+            {
+                Border swatch = new Border();
+                swatch.Width = 18;
+                swatch.Height = 18;
+                swatch.CornerRadius = new CornerRadius(5);
+                swatch.Margin = new Thickness(0, 0, 5, 4);
+                swatch.Cursor = System.Windows.Input.Cursors.Hand;
+                swatch.Background = Brush(hex);
+                swatch.ToolTip = hex + "（点击移除）";
+                string chosen = hex;
+                swatch.MouseLeftButtonUp += delegate { ToggleMixColor(chosen); };
+                colors.Children.Add(swatch);
+            }
+            ApplyPreviewBrush();
+        }
+
+        private void ApplyPreviewBrush()
+        {
+            List<Color> list = new List<Color>();
+            foreach (string hex in cfg.GetStrings("bubble", "colors"))
+            {
+                if (!string.IsNullOrEmpty(hex) && hex.StartsWith("#", StringComparison.Ordinal)) list.Add(Parse(hex));
+            }
+            if (list.Count == 0) list.Add(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
+            string motion = cfg.GetString("bubble", "effect", "off");
+            double depth = cfg.GetNumber("bubble", "effectDepth", 1.0);
+            bool reverse = cfg.GetFlag("bubble", "effectReverse", false);
+            double direction = reverse ? -1 : 1;
+            Brush brush;
+            if (motion == "rainbow")
+            {
+                LinearGradientBrush rainbow = new LinearGradientBrush();
+                rainbow.StartPoint = new Point(0, 0);
+                rainbow.EndPoint = new Point(1, 1);
+                for (int i = 0; i <= 4; i++) rainbow.GradientStops.Add(new GradientStop(HueColor(previewPhase * 260 + i * 90), i / 4.0));
+                brush = rainbow;
+            }
+            else if (list.Count > 1)
+            {
+                LinearGradientBrush gradient = new LinearGradientBrush();
+                double angle = previewPhase * 0.35 * (motion == "swirl" ? 0.4 : 1.0);
+                gradient.StartPoint = new Point(0.5 - 0.6 * Math.Cos(angle), 0.5 - 0.6 * Math.Sin(angle));
+                gradient.EndPoint = new Point(0.5 + 0.6 * Math.Cos(angle), 0.5 + 0.6 * Math.Sin(angle));
+                bool move = motion == "flow";
+                for (int i = 0; i < list.Count; i++)
+                {
+                    double offset = move ? (i / (double)list.Count + previewPhase * 0.3 * direction) % 1.0 : i / (double)list.Count;
+                    gradient.GradientStops.Add(new GradientStop(list[i], (offset % 1 + 1) % 1));
+                }
+                if (move) gradient.GradientStops.Add(new GradientStop(list[0], 1.0));
+                brush = gradient;
+            }
+            else
+            {
+                Color baseColor = list[0];
+                if (motion == "breathe" || motion == "shimmer")
+                {
+                    double k = 1 - depth * (0.5 + 0.5 * Math.Sin(direction * previewPhase * (motion == "shimmer" ? 3.2 : 1.4)));
+                    baseColor = Color.FromRgb((byte)(baseColor.R * k), (byte)(baseColor.G * k), (byte)(baseColor.B * k));
+                }
+                brush = new SolidColorBrush(baseColor);
+            }
+            ((Ellipse)ui["FxDot"]).Fill = brush;
+            ((TextBlock)ui["FxTitle"]).Foreground = brush;
+            ((TextBlock)ui["FxAmount"]).Foreground = brush;
+            ((Border)ui["FxCard"]).BorderBrush = new SolidColorBrush(Color.FromArgb(150, list[0].R, list[0].G, list[0].B));
+            // 尾巴贴在卡片底部中间。
+            Border card = (Border)ui["FxCard"];
+            Border tail = (Border)ui["FxTail"];
+            Canvas.SetLeft(card, 4);
+            Canvas.SetTop(card, 2);
+            double cardWidth = card.Width;
+            Canvas.SetLeft(tail, 4 + cardWidth / 2 - tail.Width / 2);
+            Canvas.SetTop(tail, 60);
         }
 
         private static string ToHexString(System.Drawing.Color color)
