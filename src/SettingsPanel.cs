@@ -203,10 +203,12 @@ namespace DshPet
                         <Thumb.Template>
                           <ControlTemplate TargetType='Thumb'>
                             <Border x:Name='t' Background='__BORDER__' CornerRadius='4' MinHeight='36' Margin='2,0' Opacity='0.85'/>
+                            <ControlTemplate.Triggers>
+                              <Trigger Property='IsMouseOver' Value='True'>
+                                <Setter TargetName='t' Property='Opacity' Value='1'/>
+                              </Trigger>
+                            </ControlTemplate.Triggers>
                           </ControlTemplate>
-                        <ControlTemplate.Triggers>
-                          <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='t' Property='Opacity' Value='1'/></Trigger>
-                        </ControlTemplate.Triggers>
                         </Thumb.Template>
                       </Thumb>
                     </Track.Thumb>
