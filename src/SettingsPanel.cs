@@ -269,10 +269,12 @@ namespace DshPet
         <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
           <TextBlock Text='主题色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
+          <Button x:Name='PickThemeBtn' Content='调色盘…' Width='76' Style='{StaticResource Btn}'/>
         </StackPanel>
         <StackPanel Orientation='Horizontal' Margin='1,4,0,0'>
           <TextBlock Text='混合配色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='MixPanel'/>
+          <Button x:Name='MixAddBtn' Content='添加颜色…' Width='88' Style='{StaticResource Btn}'/>
         </StackPanel>
         <Grid Margin='0,9,0,0'>
           <Grid.ColumnDefinitions>
@@ -420,6 +422,7 @@ namespace DshPet
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
                 "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel",
                 "MixPanel",
+                "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
@@ -498,6 +501,35 @@ namespace DshPet
             WireDropdown("FontDropBtn", FontValues, FontLabels, "bubble.font", false);
             WireDropdown("NumberFontDropBtn", NumberFontValues, NumberFontLabels, "bubble.numberFont", false);
             BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
+            ((Button)ui["PickThemeBtn"]).Click += delegate
+            {
+                // 系统调色盘：全光谱 + 自定义色，不限制在固定色卡里。
+                using (System.Windows.Forms.ColorDialog dialog = new System.Windows.Forms.ColorDialog())
+                {
+                    dialog.FullOpen = true;
+                    dialog.AnyColor = true;
+                    dialog.Color = ToDrawing(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
+                    if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                    string hex = ToHexString(dialog.Color);
+                    cfg.SetAt("bubble.color1", hex);
+                    cfg.SetAt("bubble.color2", ShiftHue(hex, 85));
+                    cfg.Set("bubble", "accent", "");
+                    cfg.Save();
+                    engine.Data.Refresh();
+                    RebuildForAccent(true);
+                }
+            };
+            ((Button)ui["MixAddBtn"]).Click += delegate
+            {
+                using (System.Windows.Forms.ColorDialog dialog = new System.Windows.Forms.ColorDialog())
+                {
+                    dialog.FullOpen = true;
+                    dialog.AnyColor = true;
+                    dialog.Color = ToDrawing(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
+                    if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                    ToggleMixColor(ToHexString(dialog.Color));   // 不在列表里 = 加入
+                }
+            };
             BuildMixPalette();
             ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -1594,6 +1626,16 @@ namespace DshPet
                 swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
                 swatch.BorderThickness = new Thickness(selected ? 2 : 0);
             }
+        }
+
+        private static System.Drawing.Color ToDrawing(Color color)
+        {
+            return System.Drawing.Color.FromArgb(color.R, color.G, color.B);
+        }
+
+        private static string ToHexString(System.Drawing.Color color)
+        {
+            return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
         }
 
         // ------------------------------------------------------------ 分组折叠
