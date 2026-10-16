@@ -574,9 +574,10 @@ namespace DshPet
             if (pet == null) return;
             if (pet.EdgeHidden)
             {
-                RevealPet(pet);
+                // 收起的桌宠不再响应点击（防误触）：拖它才会出来。
                 return;
             }
+            if (pet.Tuck > 0.5) return;   // 正在收起时点击也不打断
             RefreshEdgeAttachment(pet);   // a click stops it in place instead of re-attaching
             ScheduleEdgeHide(pet, DateTime.UtcNow);
             string quip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
@@ -601,9 +602,7 @@ namespace DshPet
 
         private void OnPetHovered(object sender, EventArgs e)
         {
-            PetWindow pet = sender as PetWindow;
-            if (pet == null) return;
-            RevealPet(pet);
+            // 悬停不再自动弹出：收起的桌宠只有被拖拽才会出来。
         }
 
         private void OnPetMoved(object sender, EventArgs e)

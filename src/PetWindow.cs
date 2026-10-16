@@ -300,11 +300,14 @@ namespace DshPet
         public void SetIdle()
         {
             Mode = "idle";
-            // Never pop out of a tuck just because an idle/action transition happened.
-            if (Tuck != 0 && !EdgeHidden && TargetTuck < 0.999)
+            // 拖离边缘后彻底解除贴边并恢复姿态；仍贴在边缘时保持收起状态。
+            if (Tuck != 0 && !IsAgainstOwnEdge())
             {
                 TargetTuck = 0;
                 ApplyTuck(0);
+                EdgeSide = "";
+                EdgeHideAt = DateTime.MaxValue;
+                EdgeHidden = false;
             }
             Bob.Y = 0;
             int min = (int)cfg.GetNumber("walk", "pauseMinSec", 8);
@@ -315,6 +318,18 @@ namespace DshPet
             int actionMax = Math.Max(actionMin + 1, (int)cfg.GetNumber("actions", "pauseMaxSec", 45));
             NextActionAt = DateTime.UtcNow.AddSeconds(Program.Rng.Next(actionMin, actionMax));
             if (cfg.GetFlag("snap", "enabled", true)) Snap();
+        }
+
+        /// <summary>是否仍然紧贴着自己记录的那条边。</summary>
+        public bool IsAgainstOwnEdge()
+        {
+            if (string.IsNullOrEmpty(EdgeSide)) return false;
+            ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
+            if (EdgeSide == "left") return X <= area.Left + 10;
+            if (EdgeSide == "right") return X + Width >= area.Right - 10;
+            if (EdgeSide == "top") return Y <= area.Top + 10;
+            if (EdgeSide == "bottom") return Y + Height >= area.Bottom - 10;
+            return false;
         }
 
         public void Snap()
