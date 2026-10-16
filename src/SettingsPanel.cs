@@ -1504,6 +1504,7 @@ namespace DshPet
                 .Replace("__FG2__", ToHex(palette.Dark ? palette.RowValue : palette.Title))
                 .Replace("__FG__", ToHex(palette.Title))
                 .Replace("__MUTED__", ToHex(palette.Muted))
+                .Replace("__FGLABEL__", ToHex(palette.Dark ? palette.RowValue : palette.Title))
                 .Replace("__ROW__", row)
                 .Replace("__BTN__", button)
                 .Replace("__BTN_HOVER__", buttonHover)
