@@ -228,10 +228,10 @@ namespace DshPet
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='主题与气泡'/>
         <WrapPanel>
-          <Button x:Name='ThemeDropBtn' Content='主题：浅色  ▾' Width='112' Style='{StaticResource Btn}'/>
-          <Button x:Name='EffectDropBtn' Content='特效：关  ▾' Width='104' Style='{StaticResource Btn}'/>
-          <Button x:Name='FontDropBtn' Content='字体：系统  ▾' Width='104' Style='{StaticResource Btn}'/>
-          <Button x:Name='NumberFontDropBtn' Content='数字：跟随  ▾' Width='104' Style='{StaticResource Btn}'/>
+          <Button x:Name='ThemeDropBtn' Content='主题：浅色  ▾' Width='126' Style='{StaticResource Btn}'/>
+          <Button x:Name='EffectDropBtn' Content='特效：关  ▾' Width='146' Style='{StaticResource Btn}'/>
+          <Button x:Name='FontDropBtn' Content='字体：系统  ▾' Width='146' Style='{StaticResource Btn}'/>
+          <Button x:Name='NumberFontDropBtn' Content='数字：跟随  ▾' Width='168' Style='{StaticResource Btn}'/>
           <CheckBox x:Name='BubbleTrendChk' Style='{StaticResource Switch}' Content='图表'/>
           <CheckBox x:Name='BubbleTailChk' Style='{StaticResource Switch}' Content='小尾巴'/>
         </WrapPanel>

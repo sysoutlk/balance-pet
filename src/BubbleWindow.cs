@@ -320,7 +320,12 @@ namespace DshPet
 
         private void ApplyAccentBrushes()
         {
-            titleDot.Fill = CurrentBrush();
+            Brush brush = CurrentBrush();
+            titleDot.Fill = brush;
+            // 特效要"看得见"：标题、大数字（未指定专属色时）和卡片描边一起跟着走。
+            title.Foreground = brush;
+            if (lastView == null || string.IsNullOrEmpty(lastView.BigColor)) amount.Foreground = brush;
+            card.BorderBrush = new SolidColorBrush(WithAlpha(accent, 150));
             foreach (object child in dockDots.Children)
             {
                 Border dot = child as Border;
@@ -328,6 +333,11 @@ namespace DshPet
                 if (dot.Width > 4.5 && Equals(dot.Tag, "active")) dot.Background = FromColor(accent);
             }
             if (lastView != null && showTrend && lastView.ShowTrend) UpdateTrend(lastView.Trend);
+        }
+
+        private static Color WithAlpha(Color color, byte alpha)
+        {
+            return Color.FromArgb(alpha, color.R, color.G, color.B);
         }
 
         private static readonly string[] DynamicModes = new string[]
