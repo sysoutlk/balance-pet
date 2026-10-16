@@ -248,6 +248,12 @@ namespace DshPet
           <CheckBox x:Name='SleepChk' Style='{StaticResource Switch}' Content='作息'/>
           <CheckBox x:Name='QuipsChk' Style='{StaticResource Switch}' Content='台词'/>
         </WrapPanel>
+        <DockPanel Margin='0,4,0,0'>
+          <CheckBox x:Name='EdgeHideChk' Style='{StaticResource Switch}' Content='边缘隐藏' Margin='0,0,10,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='收起前等待'/>
+          <TextBox x:Name='EdgeDelayBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='秒' Margin='5,0,0,0'/>
+        </DockPanel>
         <Grid Margin='0,6,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -285,6 +291,12 @@ namespace DshPet
           <TextBlock Style='{StaticResource Lbl}' Text='0 或留空 = 关闭' Margin='10,0,0,0' FontSize='10' Foreground='#7D8BB0'/>
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='分身'/>
+        <DockPanel Margin='0,0,0,6'>
+          <CheckBox x:Name='CloneAutoChk' Style='{StaticResource Switch}' Content='自动分裂' Margin='0,0,10,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='上限'/>
+          <TextBox x:Name='CloneMaxBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='只（0 = 不限）' Margin='5,0,0,0'/>
+        </DockPanel>
         <DockPanel>
           <StackPanel DockPanel.Dock='Right' Orientation='Horizontal'>
             <Button x:Name='CloneAddBtn' Content='来一个' Width='72' Style='{StaticResource Btn}'/>
@@ -324,7 +336,8 @@ namespace DshPet
                 "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
-                "AlertBelowBox","BudgetBox","AlertChk","BudgetChk","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
+                "EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
                 ui[name] = (FrameworkElement)root.FindName(name);
@@ -334,13 +347,18 @@ namespace DshPet
             ((FrameworkElement)ui["Header"]).MouseLeftButtonDown += delegate { try { root.DragMove(); } catch { } };
             ((Button)ui["CloseBtn"]).Click += delegate { HidePanel(); };
 
+            Button randomButton = new Button();
+            randomButton.Content = "随机";
+            randomButton.Style = (Style)root.Resources["Accent"];
+            randomButton.Click += delegate { engine.PerformAction(ActivePet, "random", true); };
+            ((UniformGrid)ui["ActionGrid"]).Children.Add(randomButton);
             foreach (string key in PetWindow.ActionKeys)
             {
                 Button button = new Button();
                 button.Content = Engine.ActionName(key);
                 button.Style = (Style)root.Resources["Btn"];
                 string action = key;
-                button.Click += delegate { engine.PerformAction(ActivePet, action); };
+                button.Click += delegate { engine.PerformAction(ActivePet, action, true); };
                 ((UniformGrid)ui["ActionGrid"]).Children.Add(button);
             }
             BuildRoleButtons();
@@ -385,8 +403,12 @@ namespace DshPet
             BindSwitch("QuipsChk", "alert", "quipsOn");
             BindSwitch("AlertChk", "alert", "balanceWarn");
             BindSwitch("BudgetChk", "alert", "budgetWarn");
+            BindSwitch("EdgeHideChk", "edgeHide", "enabled");
+            BindSwitch("CloneAutoChk", "clones", "auto");
             BindNumberBox("AlertBelowBox", "alert.below");
             BindNumberBox("BudgetBox", "alert.budget");
+            BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
+            BindNumberBox("CloneMaxBox", "clones.max");
             ((Button)ui["RefreshBtn"]).Click += delegate { engine.Data.Refresh(); };
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
             ((Button)ui["CloneRemoveBtn"]).Click += delegate { engine.RemoveClone(); Update(); };
@@ -822,10 +844,14 @@ namespace DshPet
                 ((CheckBox)ui["QuipsChk"]).IsChecked = cfg.GetFlag("alert", "quipsOn", true);
                 ((CheckBox)ui["AlertChk"]).IsChecked = cfg.GetFlag("alert", "balanceWarn", true);
                 ((CheckBox)ui["BudgetChk"]).IsChecked = cfg.GetFlag("alert", "budgetWarn", true);
+                ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
+                ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
                 double below = cfg.GetNumberAt("alert.below", 0);
                 ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 double budgetValue = cfg.GetNumberAt("alert.budget", 0);
                 ((TextBox)ui["BudgetBox"]).Text = budgetValue > 0 ? budgetValue.ToString("0.##", CultureInfo.InvariantCulture) : "";
+                ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
+                ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
                 ((TextBlock)ui["CloneCount"]).Text = engine.Pets.Count.ToString(CultureInfo.InvariantCulture) + " 只";
                 string role = cfg.GetString("", "role", "");
                 foreach (object child in ((WrapPanel)ui["RolePanel"]).Children)

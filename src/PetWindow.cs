@@ -20,12 +20,19 @@ namespace DshPet
     {
         public static readonly string[] ActionKeys = new string[]
         {
-            "hop", "spin", "wobble", "stretch", "dash", "nap", "follow", "greet"
+            "hop", "bounce", "spin", "roll", "wobble", "nod", "shake", "wave",
+            "clap", "stretch", "yawn", "shy", "startle", "look", "greet",
+            "lie", "sleep", "pace", "peek", "stroll", "dash", "follow"
         };
 
         private readonly Config cfg;
         private readonly TransformGroup group = new TransformGroup();
         private FrameworkElement visual;
+        private RoleAnim animation;
+        private WhaleAnimator whale;
+        private string animState = "idle";
+        private FrameSet activeSet;
+        private double animTime;
 
         public readonly TranslateTransform Bob = new TranslateTransform();
         public readonly ScaleTransform Flip = new ScaleTransform(1, 1);
@@ -51,11 +58,21 @@ namespace DshPet
         public string LastActionKey = "";
         public DateTime ActionStart = DateTime.MinValue;
         public DateTime ActionUntil = DateTime.MinValue;
+        public double ActionOriginX;
+        public int PageIndex;
+        public string EdgeSide = "";
+        public bool EdgeHidden;
+        public DateTime EdgeHideAt = DateTime.MaxValue;
+        public double EdgeShownX;
+        public double EdgeShownY;
+        public double EdgeHiddenX;
+        public double EdgeHiddenY;
         public IntPtr Handle = IntPtr.Zero;
 
         private int appliedX = int.MinValue;
         private int appliedY = int.MinValue;
         private DragState drag;
+        private bool suppressNextClick;
 
         private sealed class DragState
         {
@@ -68,7 +85,7 @@ namespace DshPet
             public double VX;
             public double VY;
             public bool Moved;
-            public string PreviousMode = "idle";
+            public bool NativeLoop;
         }
 
         public PetWindow(Config config)
@@ -76,7 +93,9 @@ namespace DshPet
             cfg = config;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
-            Background = null;
+            // A 1/255 alpha background keeps the whole sprite rectangle hit-testable, so
+            // clicks and drags also work on the transparent margins of the artwork.
+            Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
             Topmost = true;
             ShowInTaskbar = false;
             ShowActivated = false;
@@ -98,6 +117,8 @@ namespace DshPet
             MouseDoubleClick += OnDoubleClick;
             MouseRightButtonUp += OnRightClick;
             MouseWheel += OnWheel;
+            MouseEnter += OnMouseEnter;
+            LocationChanged += OnLocationChanged;
         }
 
         private void AttachVisual(FrameworkElement element)
@@ -113,37 +134,40 @@ namespace DshPet
             Role = "";
             BaseWidth = Mascot.BaseWidth;
             BaseHeight = Mascot.BaseHeight;
-            AttachVisual(Mascot.CreateVisual());
+            animation = null;
+            whale = new WhaleAnimator();
+            AttachVisual(whale.Root);
         }
 
         /// <summary>Loads roles\&lt;role&gt;, falling back to the built-in mascot when the file
         /// is missing (fresh clones have no character art).</summary>
         public bool ApplyRole(string role)
         {
-            if (string.IsNullOrEmpty(role))
+            RoleAnim loaded = RoleAnim.Load(cfg, role);
+            if (loaded == null)
             {
                 UseMascot();
                 return false;
             }
             try
             {
-                string path = Path.Combine(AppPaths.RolesDir, role);
-                if (!File.Exists(path))
+                FrameSet idle = loaded.For("idle");
+                BitmapSource first = idle == null ? null : idle.Advance(0, 1);
+                if (first == null)
                 {
                     UseMascot();
                     return false;
                 }
-                BitmapImage bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(path);
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
                 Image image = new Image();
                 image.Stretch = Stretch.Fill;
-                image.Source = bitmap;
+                image.Source = first;
                 Role = role;
-                BaseWidth = bitmap.PixelWidth;
-                BaseHeight = bitmap.PixelHeight;
+                BaseWidth = first.PixelWidth;
+                BaseHeight = first.PixelHeight;
+                animation = loaded;
+                whale = null;
+                activeSet = null;
+                animState = "idle";
                 AttachVisual(image);
                 ResizePet();
                 return true;
@@ -153,6 +177,36 @@ namespace DshPet
                 UseMascot();
                 return false;
             }
+        }
+
+        /// <summary>Selects the animation state (idle / walk / one action key / sleep ...).</summary>
+        public void SetAnimState(string state)
+        {
+            if (state == animState) return;
+            animState = state;
+            activeSet = null;
+        }
+
+        /// <summary>Advances the frame animation (or the vector mascot) by one tick.</summary>
+        public void Advance(double dt, double speed)
+        {
+            animTime += dt;
+            if (whale != null)
+            {
+                whale.Update(animTime, speed);
+                return;
+            }
+            if (animation == null) return;
+            FrameSet set = animation.For(animState);
+            if (set == null || set.Empty) return;
+            if (!ReferenceEquals(set, activeSet))
+            {
+                activeSet = set;
+                set.Reset();
+            }
+            BitmapSource frame = set.Advance(dt, speed);
+            Image image = visual as Image;
+            if (image != null && frame != null && !ReferenceEquals(image.Source, frame)) image.Source = frame;
         }
 
         public void ResizePet()
@@ -253,6 +307,38 @@ namespace DshPet
             else if (best == "bottom") { Y = area.Bottom - Height - margin; }
             else return;
             ApplyPosition();
+            EdgeSide = best;
+            EdgeShownX = X;
+            EdgeShownY = Y;
+            EdgeHidden = false;
+        }
+
+        /// <summary>Slides the pet out of (or back from) the screen edge it is snapped to.</summary>
+        public void StartEdgeSlide(bool hide)
+        {
+            if (string.IsNullOrEmpty(EdgeSide)) return;
+            ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
+            double peek = cfg.GetNumber("edgeHide", "peekPx", 14);
+            if (hide)
+            {
+                EdgeShownX = X;
+                EdgeShownY = Y;
+                EdgeHiddenX = X;
+                EdgeHiddenY = Y;
+                if (EdgeSide == "left") EdgeHiddenX = area.Left - Width + peek;
+                else if (EdgeSide == "right") EdgeHiddenX = area.Right - peek;
+                else if (EdgeSide == "top") EdgeHiddenY = area.Top - Height + peek;
+                else if (EdgeSide == "bottom") EdgeHiddenY = area.Bottom - peek;
+                TargetX = EdgeHiddenX;
+                TargetY = EdgeHiddenY;
+            }
+            else
+            {
+                TargetX = EdgeShownX;
+                TargetY = EdgeShownY;
+            }
+            SpeedFactor = 1.0;
+            Mode = "edge";
         }
 
         public void StartWalk()
@@ -283,22 +369,42 @@ namespace DshPet
                 action = pool[Program.Rng.Next(pool.Count)];
             }
             DateTime now = DateTime.UtcNow;
+            ActionOriginX = X;
             LastActionKey = action;
             switch (action)
             {
-                case "hop": Action = "hop"; ActionUntil = now.AddMilliseconds(420); break;
-                case "spin": Action = "spin"; ActionUntil = now.AddMilliseconds(620); break;
-                case "wobble": Action = "wobble"; ActionUntil = now.AddMilliseconds(1000); break;
-                case "stretch": Action = "stretch"; ActionUntil = now.AddMilliseconds(760); break;
+                case "hop": Action = "hop"; ActionUntil = now.AddMilliseconds(480); break;
+                case "bounce": Action = "bounce"; ActionUntil = now.AddMilliseconds(950); break;
+                case "spin": Action = "spin"; ActionUntil = now.AddMilliseconds(680); break;
+                case "roll": Action = "roll"; ActionUntil = now.AddMilliseconds(1200); break;
+                case "wobble": Action = "wobble"; ActionUntil = now.AddMilliseconds(1100); break;
+                case "nod": Action = "nod"; ActionUntil = now.AddMilliseconds(1200); break;
+                case "shake": Action = "shake"; ActionUntil = now.AddMilliseconds(950); break;
+                case "wave": Action = "wave"; ActionUntil = now.AddMilliseconds(1300); break;
+                case "clap": Action = "clap"; ActionUntil = now.AddMilliseconds(950); break;
+                case "stretch": Action = "stretch"; ActionUntil = now.AddMilliseconds(950); break;
+                case "yawn": Action = "yawn"; ActionUntil = now.AddMilliseconds(1700); break;
+                case "shy": Action = "shy"; ActionUntil = now.AddMilliseconds(1500); break;
+                case "startle": Action = "startle"; ActionUntil = now.AddMilliseconds(600); break;
+                case "look": Action = "look"; ActionUntil = now.AddMilliseconds(1900); break;
+                case "greet": Action = "greet"; ActionUntil = now.AddMilliseconds(1500); break;
+                case "lie": Action = "lie"; ActionUntil = now.AddSeconds(6); break;
+                case "sleep": Action = "sleep"; ActionUntil = now.AddSeconds(25); break;
+                case "pace": Action = "pace"; ActionUntil = now.AddMilliseconds(2600); break;
+                case "peek": Action = "peek"; ActionUntil = now.AddSeconds(4); break;
+                case "stroll":
+                    StartWalk();
+                    SpeedFactor = 0.55;
+                    Action = "";
+                    ActionUntil = DateTime.MinValue;
+                    break;
                 case "dash":
                     StartWalk();
-                    if (Mode == "walk") SpeedFactor = 3.0;
-                    Action = "dash";
-                    ActionUntil = now.AddSeconds(3);
+                    SpeedFactor = 3.0;
+                    Action = "";
+                    ActionUntil = DateTime.MinValue;
                     break;
-                case "nap": Action = "nap"; ActionUntil = now.AddSeconds(20); break;
                 case "follow": Action = "follow"; ActionUntil = now.AddSeconds(12); break;
-                case "greet": Action = "hop"; ActionUntil = now.AddMilliseconds(420); break;
                 default: return;
             }
             ActionStart = now;
@@ -320,8 +426,6 @@ namespace DshPet
             drag.OriginY = Y;
             drag.LastX = X;
             drag.LastY = Y;
-            drag.PreviousMode = Mode;
-            Mode = "drag";
             CaptureMouse();
         }
 
@@ -329,31 +433,67 @@ namespace DshPet
         {
             if (drag == null) return;
             Point point = e.GetPosition(this);
-            X = drag.OriginX + (point.X - drag.Start.X);
-            Y = drag.OriginY + (point.Y - drag.Start.Y);
-            ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
-            X = Math.Max(area.Left - 8, Math.Min(X, area.Right - Width + 8));
-            Y = Math.Max(area.Top - 8, Math.Min(Y, area.Bottom - Height + 8));
-            ApplyPosition();
+            double dx = point.X - drag.Start.X;
+            double dy = point.Y - drag.Start.Y;
+            if (Math.Abs(dx) > 4 || Math.Abs(dy) > 4) drag.Moved = true;
+            if (!drag.Moved || drag.NativeLoop) return;
+
+            // Hand the move over to the OS once the mouse is clearly dragging. The native
+            // move loop is smooth (no fighting with WPF's own window positioning) and keeps
+            // the pet glued to the cursor; positions are sampled through LocationChanged.
+            drag.NativeLoop = true;
+            drag.LastX = X;
+            drag.LastY = Y;
+            drag.LastAt = DateTime.UtcNow;
+            Mode = "drag";
+            Native.ReleaseCapture();
+            Native.SendMessage(Handle, Native.WM_NCLBUTTONDOWN, (IntPtr)Native.HTCAPTION, IntPtr.Zero);
+            FinishDrag(drag);
+        }
+
+        private void OnLocationChanged(object sender, EventArgs e)
+        {
+            if (drag == null || !drag.NativeLoop) return;
+            X = Left;
+            Y = Top;
             DateTime now = DateTime.UtcNow;
             double span = (now - drag.LastAt).TotalSeconds;
             if (span > 0.02)
             {
-                drag.VX = (X - drag.LastX) / span;
-                drag.VY = (Y - drag.LastY) / span;
+                drag.VX = (X - drag.LastX) / span * 0.6 + drag.VX * 0.4;
+                drag.VY = (Y - drag.LastY) / span * 0.6 + drag.VY * 0.4;
                 drag.LastX = X;
                 drag.LastY = Y;
                 drag.LastAt = now;
             }
-            if (Math.Abs(point.X - drag.Start.X) > 4 || Math.Abs(point.Y - drag.Start.Y) > 4) drag.Moved = true;
+            EventHandler handler = Moved;
+            if (handler != null) handler(this, EventArgs.Empty);
         }
 
         private void OnMouseUp(object sender, MouseButtonEventArgs e)
         {
             if (drag == null) return;
             ReleaseMouseCapture();
-            DragState state = drag;
+            FinishDrag(drag);
+        }
+
+        private void FinishDrag(DragState state)
+        {
             drag = null;
+            double moved = Math.Abs(X - state.OriginX) + Math.Abs(Y - state.OriginY);
+            if (moved <= 4)
+            {
+                Mode = "idle";
+                if (suppressNextClick)
+                {
+                    // The second press of a double click: the DoubleClicked handler already ran.
+                    suppressNextClick = false;
+                    return;
+                }
+                EventHandler handler = Clicked;
+                if (handler != null) handler(this, EventArgs.Empty);
+                return;
+            }
             double speed = Math.Sqrt(state.VX * state.VX + state.VY * state.VY);
             if (speed > 320)
             {
@@ -362,18 +502,18 @@ namespace DshPet
                 Mode = "thrown";
                 return;
             }
-            if (state.Moved)
-            {
-                SetIdle();
-                return;
-            }
-            Mode = state.PreviousMode == "drag" ? "idle" : state.PreviousMode;
-            EventHandler handler = Clicked;
+            SetIdle();
+        }
+
+        private void OnMouseEnter(object sender, MouseEventArgs e)
+        {
+            EventHandler handler = Hovered;
             if (handler != null) handler(this, EventArgs.Empty);
         }
 
         private void OnDoubleClick(object sender, MouseButtonEventArgs e)
         {
+            suppressNextClick = true;
             EventHandler handler = DoubleClicked;
             if (handler != null) handler(this, EventArgs.Empty);
         }
@@ -395,6 +535,8 @@ namespace DshPet
         public event EventHandler Clicked;
         public event EventHandler DoubleClicked;
         public event EventHandler ContextRequested;
+        public event EventHandler Hovered;
+        public event EventHandler Moved;
         public event Action<object, bool> WheelZoomed;
     }
 }

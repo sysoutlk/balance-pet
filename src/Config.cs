@@ -194,10 +194,41 @@ namespace DshPet
 
         public static List<object> AsArray(object value)
         {
-            object[] array = value as object[];
-            if (array != null) return new List<object>(array);
-            List<object> list = value as List<object>;
-            return list ?? new List<object>();
+            // JavaScriptSerializer hands arrays back as ArrayList, so anything enumerable that
+            // is not a string or a key/value map counts as a list here.
+            List<object> items = new List<object>();
+            if (value == null) return items;
+            if (value is string) return items;
+            if (value is System.Collections.IDictionary) return items;
+            System.Collections.IEnumerable sequence = value as System.Collections.IEnumerable;
+            if (sequence == null) return items;
+            foreach (object item in sequence) items.Add(item);
+            return items;
+        }
+    }
+
+    internal static class Log
+    {
+        private const long MaxBytes = 512 * 1024;
+
+        /// <summary>Appends a line to pet-log.txt (best effort, keeps the file small).</summary>
+        public static void Write(string message)
+        {
+            try
+            {
+                string path = Path.Combine(AppPaths.Root, "pet-log.txt");
+                if (File.Exists(path))
+                {
+                    FileInfo info = new FileInfo(path);
+                    if (info.Length > MaxBytes) File.Delete(path);
+                }
+                File.AppendAllText(path,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "  " + message + Environment.NewLine,
+                    new UTF8Encoding(false));
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -459,6 +490,13 @@ namespace DshPet
             SetDefault("sleep", "enabled", true);
             SetDefault("sleep", "fromHour", 23);
             SetDefault("sleep", "toHour", 7);
+            SetDefault("edgeHide", "enabled", true);
+            SetDefault("edgeHide", "delaySec", 10.0);
+            SetDefault("edgeHide", "peekPx", 14.0);
+            SetDefault("clones", "auto", true);
+            SetDefault("clones", "max", 6.0);
+            SetDefault("clones", "pauseMinSec", 240.0);
+            SetDefault("clones", "pauseMaxSec", 600.0);
             SetDefault("alert", "balanceWarn", true);
             SetDefault("alert", "budgetWarn", true);
             SetDefault("alert", "quipsOn", true);
@@ -467,7 +505,11 @@ namespace DshPet
             SetDefault("actions", "enabled", true);
             SetDefault("actions", "pauseMinSec", 14.0);
             SetDefault("actions", "pauseMaxSec", 45.0);
-            SetDefault("actions", "pool", new string[] { "hop", "wobble", "stretch", "spin", "dash", "greet" });
+            SetDefault("actions", "pool", new string[]
+            {
+                "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",
+                "stretch", "yawn", "shy", "startle", "look", "greet"
+            });
             SetDefault("quips", "greeting", new string[]
             {
                 "今天也一起省点 token 吧～",
@@ -485,11 +527,24 @@ namespace DshPet
                 "这点儿还干活？我睡了"
             });
             SetDefault("quips", "hop", new string[] { "嘿咻！", "跳一下～" });
+            SetDefault("quips", "bounce", new string[] { "蹦蹦跳跳～", "看我连跳！" });
             SetDefault("quips", "spin", new string[] { "转圈圈！", "晕了晕了" });
+            SetDefault("quips", "roll", new string[] { "打滚！", "滚一圈～" });
             SetDefault("quips", "wobble", new string[] { "左右摇摆～", "看我摇摆" });
+            SetDefault("quips", "nod", new string[] { "嗯嗯！", "点头点头" });
+            SetDefault("quips", "shake", new string[] { "不行不行", "摇头" });
+            SetDefault("quips", "wave", new string[] { "挥手～", "嗨！这里这里" });
+            SetDefault("quips", "clap", new string[] { "鼓掌！", "啪啪啪" });
+            SetDefault("quips", "yawn", new string[] { "哈啊——", "困了…" });
+            SetDefault("quips", "shy", new string[] { "别看我啦…", "有点害羞" });
+            SetDefault("quips", "startle", new string[] { "吓我一跳！", "哇！" });
+            SetDefault("quips", "look", new string[] { "左看看…", "右看看…" });
+            SetDefault("quips", "lie", new string[] { "趴一会儿…", "歇歇脚" });
+            SetDefault("quips", "stroll", new string[] { "溜达一圈", "随便走走～" });
+            SetDefault("quips", "peek", new string[] { "探头看看…", "有人吗？" });
+            SetDefault("quips", "pace", new string[] { "踱两步", "走来走去" });
             SetDefault("quips", "stretch", new string[] { "伸个懒腰～", "啊——舒服" });
             SetDefault("quips", "dash", new string[] { "冲刺！", "让一让！" });
-            SetDefault("quips", "nap", new string[] { "眯一会儿…", "我先打个盹" });
             SetDefault("quips", "follow", new string[] { "跟着你～", "等等我！" });
             SetDefault("quips", "greet", new string[] { "你好呀！", "我在这儿～" });
         }

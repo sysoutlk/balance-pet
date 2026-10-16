@@ -14,6 +14,8 @@ namespace DshPet
         public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const int ATTACH_PARENT_PROCESS = -1;
+        public const int WM_NCLBUTTONDOWN = 0x00A1;
+        public const int HTCAPTION = 2;
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -26,5 +28,11 @@ namespace DshPet
 
         [DllImport("kernel32.dll")]
         public static extern bool AttachConsole(int processId);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
     }
 }

@@ -1,11 +1,14 @@
-// Engine: owns the pets, the bubble, the settings panel and the render loop.
+// Engine: owns the pets, the bubble, the settings card and the render loop.
 //
-// The loop is adaptive: while a pet is walking, performing an action, being dragged or
-// thrown (or the bubble is visible) it ticks at ~25 fps; otherwise it drops to ~4 fps and
-// only keeps the breathing animation and the walk/action schedule alive.
+// The loop is adaptive: while a pet is walking, acting, being dragged, thrown or sliding
+// to the screen edge (or the bubble is visible) it ticks at ~25 fps; otherwise it drops to
+// ~4 fps and only keeps the breathing animation and the walk/action schedule alive.
+//
+// Clicking a pet cycles through four DeepSeek-centric views: balance, today's spend,
+// peak/off-peak, data sources.
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Globalization;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
@@ -14,6 +17,8 @@ namespace DshPet
 {
     internal sealed class Engine
     {
+        private const int PageCount = 4;
+
         private readonly Config cfg;
         private readonly DispatcherTimer timer = new DispatcherTimer();
         public readonly DataService Data;
@@ -22,11 +27,19 @@ namespace DshPet
         private readonly SettingsPanel panel;
         private DateTime lastTick = DateTime.UtcNow;
         private DateTime lastPositionSave = DateTime.UtcNow;
+        private DateTime nextSplitAt = DateTime.MinValue;
+        private DateTime demoActionAt = DateTime.MinValue;
         private bool? lastPeak;
         private bool balanceLatched;
         private string budgetLatchedDay = "";
-        private string bubbleOverride = "";
-        private DateTime demoActionAt = DateTime.MinValue;
+        private int bubblePage;
+        private bool bubbleIsMessage;
+        private bool bubbleIsAlert;
+        private string alertTitle = "";
+        private string alertText = "";
+        private string messageTitle = "";
+        private string messageText = "";
+        private string bubbleQuip = "";
         public bool Demo;
         public bool Quitting;
 
@@ -49,7 +62,9 @@ namespace DshPet
             timer.Start();
             if (Demo && Pets.Count > 0)
             {
-                ShowBubble(Pets[0], "");
+                bubblePage = 0;
+                bubbleQuip = QuipFor("greeting");
+                ShowView(Pets[0], BuildPage(0), 3600);
                 demoActionAt = DateTime.UtcNow.AddSeconds(1);
             }
         }
@@ -96,6 +111,8 @@ namespace DshPet
             pet.DoubleClicked += OnPetDoubleClicked;
             pet.ContextRequested += OnPetContextRequested;
             pet.WheelZoomed += OnPetWheelZoomed;
+            pet.Hovered += OnPetHovered;
+            pet.Moved += OnPetMoved;
         }
 
         // ------------------------------------------------------------ 主循环
@@ -114,12 +131,14 @@ namespace DshPet
                 if (pet.Mode != "idle" || pet.Action.Length > 0) active = true;
             }
 
+            if (AutoSplitDue(now)) active = true;
+
             if (Demo)
             {
                 if (now >= demoActionAt)
                 {
                     demoActionAt = now.AddSeconds(2.6);
-                    PerformAction(Pets.Count > 0 ? Pets[0] : null, "random");
+                    PerformAction(Pets.Count > 0 ? Pets[0] : null, "random", false);
                 }
                 active = true;
             }
@@ -146,6 +165,7 @@ namespace DshPet
         {
             double speed = cfg.GetNumber("walk", "speedPxPerSec", 72);
             bool sleeping = pet.Sleeping;
+            AdvanceFrames(pet, dt, sleeping);
 
             if (pet.Mode == "drag")
             {
@@ -174,61 +194,39 @@ namespace DshPet
                 {
                     pet.Spin.Angle = 0;
                     pet.SetIdle();
+                    ScheduleEdgeHide(pet, now);
                 }
+                return;
+            }
+
+            if (pet.Mode == "edge")
+            {
+                double dx = pet.TargetX - pet.X;
+                double dy = pet.TargetY - pet.Y;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+                double step = 300 * dt;
+                if (distance <= step)
+                {
+                    pet.X = pet.TargetX;
+                    pet.Y = pet.TargetY;
+                    pet.ApplyPosition();
+                    pet.Mode = "idle";
+                    pet.EdgeHidden = Math.Abs(pet.X - pet.EdgeHiddenX) < 1 && Math.Abs(pet.Y - pet.EdgeHiddenY) < 1;
+                    ScheduleEdgeHide(pet, now);
+                    return;
+                }
+                pet.X += dx / distance * step;
+                pet.Y += dy / distance * step;
+                pet.Bob.Y = -2 * Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * 12));
+                pet.ApplyPosition();
                 return;
             }
 
             if (!string.IsNullOrEmpty(pet.Action))
             {
                 double total = (pet.ActionUntil - pet.ActionStart).TotalSeconds;
-                double progress = total <= 0 ? 1 : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
-                switch (pet.Action)
-                {
-                    case "hop":
-                        pet.Bob.Y = -30 * Math.Sin(Math.PI * progress);
-                        break;
-                    case "spin":
-                        pet.Spin.Angle = 360 * progress;
-                        break;
-                    case "wobble":
-                        pet.Spin.Angle = Math.Sin(progress * Math.PI * 6) * 14;
-                        break;
-                    case "stretch":
-                        {
-                            double k = Math.Sin(Math.PI * progress);
-                            pet.Squash.ScaleY = 1 + 0.16 * k;
-                            pet.Squash.ScaleX = 1 - 0.10 * k;
-                            break;
-                        }
-                    case "dash":
-                        pet.Bob.Y = -Math.Abs(Math.Sin(progress * Math.PI * 8)) * 3;
-                        pet.Spin.Angle = pet.Facing * 7;
-                        break;
-                    case "nap":
-                        pet.Bob.Y = Math.Sin(now.TimeOfDay.TotalSeconds * 0.9) * 1.4;
-                        break;
-                    case "follow":
-                        {
-                            System.Drawing.Point cursor = System.Windows.Forms.Cursor.Position;
-                            double dx = cursor.X - (pet.X + pet.Width / 2);
-                            double dy = cursor.Y - (pet.Y + pet.Height / 2);
-                            double distance = Math.Sqrt(dx * dx + dy * dy);
-                            if (distance < 90)
-                            {
-                                pet.ActionUntil = DateTime.UtcNow.AddMilliseconds(-1);
-                            }
-                            else
-                            {
-                                double follow = speed * 2.2;
-                                pet.X += dx / distance * follow * dt;
-                                pet.Y += dy / distance * follow * dt;
-                                if (Math.Abs(dx) > 6) pet.SetFacing(dx > 0 ? 1 : -1);
-                                pet.Bob.Y = -Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * 10)) * 3;
-                                pet.ApplyPosition();
-                            }
-                            break;
-                        }
-                }
+                double p = total <= 0 ? 1 : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
+                AnimateAction(pet, now, p);
                 if (now >= pet.ActionUntil) EndAction(pet);
                 return;
             }
@@ -241,6 +239,7 @@ namespace DshPet
                 if (distance < 4)
                 {
                     pet.SetIdle();
+                    ScheduleEdgeHide(pet, now);
                     return;
                 }
                 double step = speed * pet.SpeedFactor * dt;
@@ -248,13 +247,22 @@ namespace DshPet
                 pet.X += dx / distance * step;
                 pet.Y += dy / distance * step;
                 if (Math.Abs(dx) > 6) pet.SetFacing(dx > 0 ? 1 : -1);
-                pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * 9)) * -3;
+                double rate = pet.SpeedFactor >= 2 ? 16 : 9;
+                pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
+                if (pet.SpeedFactor >= 2) pet.Spin.Angle = pet.Facing * 7;
                 pet.ApplyPosition();
                 return;
             }
 
             // idle
+            pet.Spin.Angle = 0;
             pet.Bob.Y = Math.Sin(now.TimeOfDay.TotalSeconds * 1.4 + pet.Phase) * (sleeping ? 0.8 : 1.6);
+            if (pet.EdgeHidden) return;
+            if (now >= pet.EdgeHideAt && EdgeHideEnabled(pet))
+            {
+                pet.StartEdgeSlide(true);
+                return;
+            }
             if (sleeping) return;
             if (now >= pet.NextWalkAt && cfg.GetFlag("walk", "enabled", true))
             {
@@ -266,19 +274,231 @@ namespace DshPet
                 pet.StartAction("random");
                 if (Program.Rng.NextDouble() < 0.35)
                 {
-                    ShowBubble(pet, QuipFor(pet.LastActionKey), 2);
+                    ShowBubbleText(pet, QuipFor(pet.LastActionKey));
                 }
+            }
+        }
+
+        /// <summary>Maps the current mode/action to an animation state and advances frames.</summary>
+        private static void AdvanceFrames(PetWindow pet, double dt, bool sleeping)
+        {
+            string state = "idle";
+            double rate = 1.0;
+            if (!string.IsNullOrEmpty(pet.Action))
+            {
+                state = pet.Action;
+                rate = pet.Action == "sleep" ? 0.45 : (pet.Action == "lie" ? 0.6 : 1.0);
+            }
+            else if (pet.Mode == "walk")
+            {
+                state = "walk";
+                rate = Math.Max(0.6, pet.SpeedFactor);
+            }
+            else if (pet.Mode == "edge")
+            {
+                state = "walk";
+                rate = 1.3;
+            }
+            else if (pet.Mode == "thrown")
+            {
+                state = "spin";
+                rate = 1.5;
+            }
+            else if (pet.Mode == "drag")
+            {
+                state = "walk";
+                rate = 1.5;
+            }
+            else if (sleeping)
+            {
+                state = "sleep";
+                rate = 0.35;
+            }
+            pet.SetAnimState(state);
+            pet.Advance(dt, rate);
+        }
+
+        // ------------------------------------------------------------ 动作动画
+        private void AnimateAction(PetWindow pet, DateTime now, double p)
+        {
+            switch (pet.Action)
+            {
+                case "hop":
+                    pet.Bob.Y = -30 * Math.Sin(Math.PI * p);
+                    break;
+                case "bounce":
+                    pet.Bob.Y = -26 * Math.Abs(Math.Sin(3 * Math.PI * p));
+                    break;
+                case "spin":
+                    pet.Spin.Angle = 360 * p;
+                    break;
+                case "roll":
+                    pet.Spin.Angle = -720 * p;
+                    pet.Bob.Y = -14 * Math.Sin(Math.PI * p);
+                    break;
+                case "wobble":
+                    pet.Spin.Angle = 14 * Math.Sin(6 * Math.PI * p);
+                    break;
+                case "nod":
+                    pet.Bob.Y = -6 * Math.Abs(Math.Sin(3 * Math.PI * p));
+                    pet.Spin.Angle = 3 * Math.Sin(6 * Math.PI * p);
+                    break;
+                case "shake":
+                    pet.Bob.X = 7 * Math.Sin(6 * Math.PI * p);
+                    pet.Spin.Angle = 4 * Math.Sin(6 * Math.PI * p);
+                    break;
+                case "wave":
+                    pet.Spin.Angle = 11 * Math.Sin(8 * Math.PI * p);
+                    pet.Bob.Y = -4 * Math.Abs(Math.Sin(4 * Math.PI * p));
+                    break;
+                case "clap":
+                    {
+                        double k = Math.Abs(Math.Sin(8 * Math.PI * p));
+                        pet.Squash.ScaleX = 1 + 0.12 * k;
+                        pet.Bob.Y = -3 * k;
+                        break;
+                    }
+                case "stretch":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        pet.Squash.ScaleY = 1 + 0.18 * k;
+                        pet.Squash.ScaleX = 1 - 0.10 * k;
+                        break;
+                    }
+                case "yawn":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        pet.Squash.ScaleY = 1 + 0.22 * k;
+                        pet.Bob.Y = -5 * k;
+                        break;
+                    }
+                case "shy":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        pet.Squash.ScaleY = 1 - 0.14 * k;
+                        pet.Spin.Angle = -6 * k;
+                        pet.Bob.Y = 2 * Math.Sin(2 * Math.PI * p);
+                        break;
+                    }
+                case "startle":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        pet.Squash.ScaleX = 1 + 0.14 * k;
+                        pet.Squash.ScaleY = 1 + 0.14 * k;
+                        pet.Bob.Y = -18 * k;
+                        pet.Spin.Angle = 3 * Math.Sin(10 * Math.PI * p);
+                        break;
+                    }
+                case "lie":
+                case "sleep":
+                    {
+                        double down = Math.Min(1, p / 0.15);
+                        double back = p > 0.85 ? Math.Min(1, (p - 0.85) / 0.15) : 0;
+                        double amount = Math.Max(0, down - back);
+                        pet.Spin.Angle = 76 * amount;
+                        pet.Bob.Y = 6 * amount + Math.Sin(now.TimeOfDay.TotalSeconds * 1.6) * 1.2 * amount;
+                        break;
+                    }
+                case "look":
+                    {
+                        bool left = (p > 0.2 && p < 0.5) || (p > 0.7 && p < 0.9);
+                        pet.SetFacing(left ? -1 : 1);
+                        break;
+                    }
+                case "greet":
+                    if (p < 0.4)
+                    {
+                        pet.Bob.Y = -24 * Math.Sin(Math.PI * (p / 0.4));
+                    }
+                    else
+                    {
+                        double q = (p - 0.4) / 0.6;
+                        pet.Spin.Angle = 11 * Math.Sin(8 * Math.PI * q);
+                        pet.Bob.Y = -4 * Math.Abs(Math.Sin(4 * Math.PI * q));
+                    }
+                    break;
+                case "pace":
+                    {
+                        pet.X = pet.ActionOriginX + 130 * Math.Sin(2 * Math.PI * p);
+                        pet.SetFacing(Math.Cos(2 * Math.PI * p) > 0 ? 1 : -1);
+                        pet.Bob.Y = -2 * Math.Abs(Math.Sin(10 * Math.PI * p));
+                        pet.ApplyPosition();
+                        break;
+                    }
+                case "peek":
+                    {
+                        double out1 = Math.Min(1, p / 0.35);
+                        double back2 = p > 0.65 ? Math.Min(1, (p - 0.65) / 0.35) : 0;
+                        double amount = Math.Max(0, out1 - back2);
+                        ScreenArea area = ScreenArea.ForPoint(pet.X + pet.Width / 2, pet.Y + pet.Height / 2);
+                        bool towardsLeft = pet.ActionOriginX + pet.Width / 2 < (area.Left + area.Right) / 2;
+                        double hidden = towardsLeft ? area.Left - pet.Width + 18 : area.Right - 18;
+                        pet.X = pet.ActionOriginX + (hidden - pet.ActionOriginX) * amount;
+                        pet.Bob.Y = -2 * Math.Abs(Math.Sin(8 * Math.PI * p)) * (1 - amount);
+                        pet.ApplyPosition();
+                        break;
+                    }
+                case "follow":
+                    {
+                        System.Drawing.Point cursor = System.Windows.Forms.Cursor.Position;
+                        double dx = cursor.X - (pet.X + pet.Width / 2);
+                        double dy = cursor.Y - (pet.Y + pet.Height / 2);
+                        double distance = Math.Sqrt(dx * dx + dy * dy);
+                        if (distance < 90)
+                        {
+                            pet.ActionUntil = DateTime.UtcNow.AddMilliseconds(-1);
+                        }
+                        else
+                        {
+                            double followSpeed = cfg.GetNumber("walk", "speedPxPerSec", 72) * 2.2;
+                            pet.X += dx / distance * followSpeed * (1.0 / 25.0);
+                            pet.Y += dy / distance * followSpeed * (1.0 / 25.0);
+                            if (Math.Abs(dx) > 6) pet.SetFacing(dx > 0 ? 1 : -1);
+                            pet.Bob.Y = -Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * 10)) * 3;
+                            pet.ApplyPosition();
+                        }
+                        break;
+                    }
             }
         }
 
         private static void EndAction(PetWindow pet)
         {
             pet.Action = "";
+            pet.X = pet.ActionOriginX;
+            pet.ApplyPosition();
             pet.Spin.Angle = 0;
             pet.Squash.ScaleX = 1;
             pet.Squash.ScaleY = 1;
+            pet.Bob.X = 0;
             pet.Bob.Y = 0;
             pet.SetIdle();
+        }
+
+        // ------------------------------------------------------------ 贴边隐藏
+        private bool EdgeHideEnabled(PetWindow pet)
+        {
+            if (!cfg.GetFlagAt("edgeHide.enabled", true)) return false;
+            return !string.IsNullOrEmpty(pet.EdgeSide);
+        }
+
+        private void ScheduleEdgeHide(PetWindow pet, DateTime now)
+        {
+            if (!EdgeHideEnabled(pet) || pet.EdgeHidden)
+            {
+                pet.EdgeHideAt = DateTime.MaxValue;
+                return;
+            }
+            double delay = cfg.GetNumberAt("edgeHide.delaySec", 10);
+            if (delay < 1) delay = 1;
+            pet.EdgeHideAt = now.AddSeconds(delay);
+        }
+
+        private void RevealPet(PetWindow pet)
+        {
+            if (!pet.EdgeHidden) return;
+            pet.StartEdgeSlide(false);
+            pet.EdgeHideAt = DateTime.MaxValue;
         }
 
         // ------------------------------------------------------------ 交互
@@ -286,17 +506,42 @@ namespace DshPet
         {
             PetWindow pet = sender as PetWindow;
             if (pet == null) return;
-            ShowBubble(pet, QuipFor(pet.Sleeping ? "sleep" : "greeting"));
+            if (pet.EdgeHidden)
+            {
+                RevealPet(pet);
+                return;
+            }
+            ScheduleEdgeHide(pet, DateTime.UtcNow);
+            string quip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
+            int page = pet.PageIndex % PageCount;
+            pet.PageIndex = (page + 1) % PageCount;
+            bubbleIsMessage = false;
+            bubbleIsAlert = false;
+            bubblePage = page;
+            bubbleQuip = quip;
+            ShowView(pet, BuildPage(page), BubbleSeconds());
         }
 
         private void OnPetDoubleClicked(object sender, EventArgs e)
         {
-            PerformAction(sender as PetWindow, "random");
+            PerformAction(sender as PetWindow, "random", true);
         }
 
         private void OnPetContextRequested(object sender, EventArgs e)
         {
             TogglePanel(sender as PetWindow);
+        }
+
+        private void OnPetHovered(object sender, EventArgs e)
+        {
+            PetWindow pet = sender as PetWindow;
+            if (pet == null) return;
+            RevealPet(pet);
+        }
+
+        private void OnPetMoved(object sender, EventArgs e)
+        {
+            Bubble.Position(false);
         }
 
         private void OnPetWheelZoomed(object sender, bool up)
@@ -324,30 +569,66 @@ namespace DshPet
             else panel.ShowFor(pet);
         }
 
-        public void PerformAction(PetWindow pet, string key)
+        public void PerformAction(PetWindow pet, string key, bool speak)
         {
             if (pet == null && Pets.Count > 0) pet = Pets[0];
             if (pet == null) return;
+            if (pet.EdgeHidden) RevealPet(pet);
             pet.StartAction(key);
-            string label = string.IsNullOrEmpty(pet.LastActionKey) ? key : pet.LastActionKey;
-            if (cfg.GetFlag("alert", "quipsOn", true))
+            if (string.IsNullOrEmpty(pet.LastActionKey)) return;
+            if (speak && cfg.GetFlag("alert", "quipsOn", true))
             {
-                ShowBubble(pet, QuipFor(label), 3);
+                ShowBubbleText(pet, QuipFor(pet.LastActionKey));
             }
+        }
+
+        // ------------------------------------------------------------ 分身
+        public int CloneCap()
+        {
+            double max = cfg.GetNumberAt("clones.max", cfg.GetNumber("", "maxClones", 6));
+            return (int)max;   // 0 或负数 = 不限
+        }
+
+        private bool AutoSplitDue(DateTime now)
+        {
+            if (!cfg.GetFlagAt("clones.auto", true)) return false;
+            if (Pets.Count == 0) return false;
+            if (nextSplitAt == DateTime.MinValue)
+            {
+                nextSplitAt = now.AddSeconds(SplitInterval());
+                return false;
+            }
+            if (now < nextSplitAt) return false;
+            nextSplitAt = now.AddSeconds(SplitInterval());
+            int cap = CloneCap();
+            if (cap > 0 && Pets.Count >= 1 + cap) return false;
+            AddClone();
+            return true;
+        }
+
+        private double SplitInterval()
+        {
+            double min = cfg.GetNumberAt("clones.pauseMinSec", 240);
+            double max = cfg.GetNumberAt("clones.pauseMaxSec", 600);
+            if (max <= min) max = min + 60;
+            return min + Program.Rng.NextDouble() * (max - min);
         }
 
         public void AddClone()
         {
-            int max = (int)cfg.GetNumber("", "maxClones", 6);
-            if (Pets.Count >= 1 + max || Pets.Count == 0) return;
-            PetWindow source = Pets[0];
+            int cap = CloneCap();
+            if (cap > 0 && Pets.Count >= 1 + cap) return;
+            if (Pets.Count == 0) return;
+            PetWindow source = Pets[Program.Rng.Next(Pets.Count)];
             PetWindow pet = new PetWindow(cfg);
             pet.ApplyRole(source.Role);
             pet.ResizePet();
-            pet.Place(source.X + 70, source.Y - 50);
+            pet.Place(source.X + 60 + Program.Rng.Next(0, 60), source.Y - 30 - Program.Rng.Next(0, 60));
             WirePet(pet);
             Pets.Add(pet);
             pet.Show();
+            pet.SetIdle();
+            ScheduleEdgeHide(pet, DateTime.UtcNow);
         }
 
         public void RemoveClone()
@@ -358,26 +639,219 @@ namespace DshPet
             pet.Close();
         }
 
-        // ------------------------------------------------------------ 气泡 / 台词
+        // ------------------------------------------------------------ 气泡
         public void ShowBubble(PetWindow pet, string text)
         {
             if (pet == null && Pets.Count > 0) pet = Pets[0];
-            ShowBubble(pet, text, Demo ? 3600 : BubbleSeconds());
+            ShowBubbleText(pet, text);
         }
 
-        private void ShowBubble(PetWindow pet, string text, int seconds)
+        /// <summary>Shows a short message bubble (quips, alerts, peak transitions).</summary>
+        private void ShowBubbleText(PetWindow pet, string text, int seconds)
         {
             if (pet == null) return;
-            bubbleOverride = text;
-            Bubble.HideAt = DateTime.UtcNow.AddSeconds(seconds);
-            Bubble.ShowFor(pet, Data.Current, text, PeakBubbleText(), Data.Current.IsPeak);
+            if (pet.EdgeHidden) RevealPet(pet);
+            bubbleIsMessage = true;
+            bubbleIsAlert = false;
+            messageTitle = "";
+            messageText = text;
+            bubbleQuip = text;
+            ShowView(pet, BuildMessageView(text), seconds);
+        }
+
+        private void ShowBubbleText(PetWindow pet, string text)
+        {
+            ShowBubbleText(pet, text, BubbleSeconds());
+        }
+
+        private void ShowAlert(PetWindow pet, string title, string text)
+        {
+            if (pet == null) return;
+            bubbleIsMessage = true;
+            bubbleIsAlert = true;
+            alertTitle = title;
+            alertText = text;
+            messageTitle = title;
+            messageText = text;
+            bubbleQuip = "";
+            ShowView(pet, BuildAlertView(title, text), 8);
+        }
+
+        private void ShowView(PetWindow pet, BubbleView view, int seconds)
+        {
+            if (pet == null) return;
+            Bubble.HideAt = DateTime.UtcNow.AddSeconds(Demo ? 3600 : seconds);
+            Bubble.ShowFor(pet, view);
         }
 
         private int BubbleSeconds()
         {
             double seconds = cfg.GetNumber("bubble", "seconds", 7);
-            if (seconds < 2) seconds = 2;
+            if (seconds < 3) seconds = 3;
             return (int)seconds;
+        }
+
+        private BubbleView BuildMessageView(string text)
+        {
+            Snapshot data = Data.Current;
+            ProviderState primary = data.Primary;
+            BubbleView view = new BubbleView();
+            view.Title = primary == null ? "DeepSeek 余额" : primary.Name + " 余额";
+            view.Big = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
+            view.BigColor = "#203170";
+            view.Quip = text;
+            view.PeakText = PeakBubbleText();
+            view.PeakNow = data.IsPeak;
+            view.Source = SourceLine(data);
+            return view;
+        }
+
+        private BubbleView BuildAlertView(string title, string text)
+        {
+            Snapshot data = Data.Current;
+            BubbleView view = new BubbleView();
+            view.Title = string.IsNullOrEmpty(title) ? "提醒" : title;
+            view.Big = text;
+            view.BigSize = 15;
+            view.BigColor = "#e0433f";
+            view.PeakText = PeakBubbleText();
+            view.PeakNow = data.IsPeak;
+            view.Source = SourceLine(data);
+            return view;
+        }
+
+        private string SourceLine(Snapshot data)
+        {
+            string stamp = data.AtMs > 0
+                ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(data.AtMs).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)
+                : "--";
+            ProviderState primary = data.Primary;
+            string sourceText = primary == null ? "无数据源" : primary.SourceText;
+            if (data.OkCount > 1) sourceText = data.OkCount + " 个数据源";
+            return sourceText + " · " + stamp + " 更新";
+        }
+
+        /// <summary>Four DeepSeek-centric views, cycled by clicking the pet.</summary>
+        private BubbleView BuildPage(int index)
+        {
+            Snapshot data = Data.Current;
+            ProviderState primary = data.Primary;
+            BubbleView view = new BubbleView();
+            view.PageIndex = index;
+            view.PageCount = PageCount;
+            view.Quip = bubbleQuip;
+            view.PeakText = PeakBubbleText();
+            view.PeakNow = data.IsPeak;
+            view.Source = SourceLine(data);
+
+            if (index == 0)
+            {
+                view.Title = primary == null ? "DeepSeek 余额" : primary.Name + " 余额";
+                view.Big = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
+                if (primary != null && primary.Details.Count > 0)
+                {
+                    view.Sub = string.Join(" · ", primary.Details.ToArray());
+                }
+                view.Rows.Add(new KeyValuePair<string, string>("今日已用",
+                    primary == null ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency)));
+                view.ShowTrend = true;
+                view.Trend = data.History;
+                if (primary != null && !primary.Ok && !string.IsNullOrEmpty(primary.Error))
+                {
+                    view.Note = primary.Error;
+                    view.NoteError = true;
+                }
+                return view;
+            }
+
+            if (index == 1)
+            {
+                view.Title = "今日消耗";
+                view.Big = primary == null ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency);
+                view.Rows.Add(new KeyValuePair<string, string>("当前余额",
+                    primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency)));
+                double yesterday = 0;
+                double sum = 0;
+                int days = 0;
+                List<DayUsage> history = data.History;
+                for (int i = 0; i < history.Count; i++)
+                {
+                    if (i == history.Count - 2) yesterday = history[i].Usage;
+                    if (i < history.Count - 1)
+                    {
+                        sum += history[i].Usage;
+                        days++;
+                    }
+                }
+                view.Rows.Add(new KeyValuePair<string, string>("昨日", Fmt.Money(yesterday, primary == null ? "CNY" : primary.Currency)));
+                if (days > 0)
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>("近 7 日均值", Fmt.Money(sum / days, primary == null ? "CNY" : primary.Currency)));
+                }
+                view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
+                view.ShowTrend = true;
+                view.Trend = history;
+                return view;
+            }
+
+            if (index == 2)
+            {
+                view.Title = "峰谷时段（北京时间）";
+                view.Big = data.IsPeak ? "高峰时段" : "空闲时段";
+                view.BigSize = 21;
+                view.BigColor = data.IsPeak ? "#e0433f" : "#2fa24c";
+                view.Rows.Add(new KeyValuePair<string, string>("计价", data.IsPeak ? "高峰价格（空闲价 x2）" : "空闲价格（高峰价的一半）"));
+                view.Rows.Add(new KeyValuePair<string, string>("高峰时间", "工作日 09:00-12:00 / 14:00-18:00"));
+                view.Rows.Add(new KeyValuePair<string, string>("空闲时间", "其余时段（含周末与节假日）"));
+                view.Rows.Add(new KeyValuePair<string, string>("当前时间", DataService.BeijingNow().ToString("HH:mm:ss", CultureInfo.InvariantCulture)));
+                view.Rows.Add(new KeyValuePair<string, string>("距切换", CountdownText(data.NextChangeAtMs)));
+                return view;
+            }
+
+            view.Title = "数据源";
+            view.Big = data.OkCount + " / " + EnabledCount(data);
+            view.BigSize = 22;
+            foreach (ProviderState provider in data.Providers)
+            {
+                if (!provider.Enabled) continue;
+                if (!provider.Supported)
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>(provider.Name, "无公开接口"));
+                    continue;
+                }
+                view.Rows.Add(new KeyValuePair<string, string>(provider.Name,
+                    provider.Ok ? Fmt.Money(provider.Balance, provider.Currency) : "查询失败"));
+            }
+            view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
+            return view;
+        }
+
+        private static int EnabledCount(Snapshot data)
+        {
+            int count = 0;
+            foreach (ProviderState provider in data.Providers)
+            {
+                if (provider.Enabled && provider.Supported) count++;
+            }
+            return count;
+        }
+
+        private static string StampOf(long timeMs)
+        {
+            if (timeMs <= 0) return "--";
+            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(timeMs).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+        }
+
+        private static string CountdownText(long nextChangeAtMs)
+        {
+            long leftMs = nextChangeAtMs - DataService.NowMs();
+            if (leftMs < 0) leftMs = 0;
+            TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
+            if (left.TotalHours >= 1)
+            {
+                return ((int)left.TotalHours) + " 小时 " + left.Minutes + " 分 " + left.Seconds + " 秒";
+            }
+            return left.Minutes + " 分 " + left.Seconds + " 秒";
         }
 
         public string QuipFor(string key)
@@ -396,38 +870,53 @@ namespace DshPet
 
         public string PeakLine()
         {
-            Snapshot s = Data.Current;
-            long leftMs = s.NextChangeAtMs - DataService.NowMs();
+            Snapshot data = Data.Current;
+            long leftMs = data.NextChangeAtMs - DataService.NowMs();
             if (leftMs < 0) leftMs = 0;
             TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
             string countdown = left.TotalHours >= 1
-                ? ((int)left.TotalHours).ToString() + " 小时 " + left.Minutes.ToString() + " 分"
+                ? ((int)left.TotalHours) + " 小时 " + left.Minutes + " 分"
                 : Math.Max(1, (int)Math.Ceiling(left.TotalMinutes)) + " 分钟";
-            return (s.IsPeak ? "高峰时段 · 距谷时 " : "谷时半价 · 距高峰 ") + countdown;
+            return (data.IsPeak ? "高峰时段 · 距谷时 " : "谷时半价 · 距高峰 ") + countdown;
         }
 
         public string PeakBubbleText()
         {
-            Snapshot s = Data.Current;
-            long leftMs = s.NextChangeAtMs - DataService.NowMs();
+            Snapshot data = Data.Current;
+            long leftMs = data.NextChangeAtMs - DataService.NowMs();
             if (leftMs < 0) leftMs = 0;
             TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
             string countdown = left.TotalHours >= 1
-                ? ((int)left.TotalHours).ToString() + ":" + left.Minutes.ToString("00") + ":" + left.Seconds.ToString("00")
-                : left.Minutes.ToString() + ":" + left.Seconds.ToString("00");
-            return (s.IsPeak ? "高峰时段 · 价格 x2" : "谷时 · 半价") + "  还有 " + countdown;
+                ? ((int)left.TotalHours) + ":" + left.Minutes.ToString("00") + ":" + left.Seconds.ToString("00")
+                : left.Minutes + ":" + left.Seconds.ToString("00");
+            return (data.IsPeak ? "高峰时段 · 价格 x2" : "谷时 · 半价") + "  还有 " + countdown;
         }
 
         public static string ActionName(string key)
         {
             switch (key)
             {
-                case "hop": return "跳一下";
+                case "random": return "随机";
+                case "hop": return "蹦一下";
+                case "bounce": return "连蹦";
                 case "spin": return "转圈";
+                case "roll": return "打滚";
                 case "wobble": return "摇摆";
+                case "nod": return "点头";
+                case "shake": return "摇头";
+                case "wave": return "招手";
+                case "clap": return "鼓掌";
                 case "stretch": return "伸懒腰";
+                case "yawn": return "打哈欠";
+                case "shy": return "害羞";
+                case "startle": return "吓一跳";
+                case "lie": return "趴一会";
+                case "sleep": return "睡觉";
+                case "look": return "左看右看";
+                case "pace": return "踱步";
+                case "peek": return "探头";
+                case "stroll": return "溜达";
                 case "dash": return "冲刺";
-                case "nap": return "打盹";
                 case "follow": return "跟随";
                 case "greet": return "打招呼";
                 default: return key;
@@ -445,34 +934,43 @@ namespace DshPet
         private void ApplyData()
         {
             if (Quitting) return;
-            Snapshot s = Data.Current;
-            if (lastPeak.HasValue && lastPeak.Value != s.IsPeak && Pets.Count > 0)
+            Snapshot data = Data.Current;
+            if (lastPeak.HasValue && lastPeak.Value != data.IsPeak && Pets.Count > 0)
             {
-                ShowBubble(Pets[0], s.IsPeak
-                    ? "进高峰了，价格 x2，悠着点烧"
-                    : "谷时到了，半价啦", 6);
+                string text = data.IsPeak ? "进高峰了，价格 x2，悠着点烧" : "谷时到了，半价啦";
+                bubbleIsMessage = true;
+                bubbleIsAlert = false;
+                messageTitle = "";
+                messageText = text;
+                bubbleQuip = text;
+                ShowView(Pets[0], BuildMessageView(text), 6);
             }
-            lastPeak = s.IsPeak;
-            CheckAlerts(s);
+            lastPeak = data.IsPeak;
+            CheckAlerts(data);
             if (Bubble.Visibility == Visibility.Visible)
             {
-                Bubble.UpdateFrom(s, QuipFor("greeting"), bubbleOverride, PeakBubbleText(), s.IsPeak);
+                BubbleView view;
+                if (bubbleIsAlert) view = BuildAlertView(alertTitle, alertText);
+                else if (bubbleIsMessage) view = BuildMessageView(bubbleQuip);
+                else view = BuildPage(bubblePage);
+                Bubble.UpdateFrom(view);
             }
             if (panel.IsVisible) panel.UpdateDataText();
         }
 
-        private void CheckAlerts(Snapshot s)
+        private void CheckAlerts(Snapshot data)
         {
-            ProviderState primary = s.Primary;
+            ProviderState primary = data.Primary;
             if (cfg.GetFlag("alert", "balanceWarn", true)
-                && s.Limits != null && s.Limits.AlertBelow.HasValue
+                && data.Limits != null && data.Limits.AlertBelow.HasValue
                 && primary != null && primary.Ok && primary.Balance.HasValue && Pets.Count > 0)
             {
-                bool below = primary.Balance.Value < s.Limits.AlertBelow.Value;
+                bool below = primary.Balance.Value < data.Limits.AlertBelow.Value;
                 if (below && !balanceLatched)
                 {
                     balanceLatched = true;
-                    ShowBubble(Pets[0], "余额跌破 " + Fmt.Money(s.Limits.AlertBelow, primary.Currency) + " 了，该充钱啦！", 8);
+                    ShowAlert(Pets[0], "余额预警",
+                        "余额 " + Fmt.Money(primary.Balance, primary.Currency) + " 已低于 " + Fmt.Money(data.Limits.AlertBelow, primary.Currency));
                 }
                 else if (!below)
                 {
@@ -480,15 +978,16 @@ namespace DshPet
                 }
             }
             if (cfg.GetFlag("alert", "budgetWarn", true)
-                && s.Limits != null && s.Limits.Budget.HasValue
+                && data.Limits != null && data.Limits.Budget.HasValue
                 && primary != null && primary.TodayUsage.HasValue && Pets.Count > 0)
             {
-                bool over = primary.TodayUsage.Value >= s.Limits.Budget.Value;
+                bool over = primary.TodayUsage.Value >= data.Limits.Budget.Value;
                 string day = DataService.TodayKey();
                 if (over && budgetLatchedDay != day)
                 {
                     budgetLatchedDay = day;
-                    ShowBubble(Pets[0], "今日花销已经超过 " + Fmt.Money(s.Limits.Budget, primary.Currency) + " 啦！", 8);
+                    ShowAlert(Pets[0], "今日预算",
+                        "今日已用 " + Fmt.Money(primary.TodayUsage, primary.Currency) + "，超过预算 " + Fmt.Money(data.Limits.Budget, primary.Currency));
                 }
             }
         }
@@ -500,7 +999,8 @@ namespace DshPet
             foreach (PetWindow pet in Pets)
             {
                 Dictionary<string, object> node = new Dictionary<string, object>();
-                node["x"] = Math.Round(pet.X);
+                double x = pet.EdgeHidden ? pet.EdgeShownX : pet.X;
+                node["x"] = Math.Round(x);
                 node["y"] = Math.Round(pet.Y);
                 list.Add(node);
             }
@@ -523,20 +1023,20 @@ namespace DshPet
 
         public string Report()
         {
-            Snapshot s = Data.Current;
+            Snapshot data = Data.Current;
             StringBuilder sb = new StringBuilder();
             sb.Append("pets=" + Pets.Count);
-            sb.Append(" peak=" + (s.IsPeak ? "peak" : "offpeak"));
-            ProviderState primary = s.Primary;
+            sb.Append(" peak=" + (data.IsPeak ? "peak" : "offpeak"));
+            ProviderState primary = data.Primary;
             sb.Append(" primary=" + (primary == null ? "-" : primary.Id + ":" + Fmt.Money(primary.Balance, primary.Currency) + "(" + primary.SourceText + ")"));
             sb.Append(" providers=[");
             bool first = true;
-            foreach (ProviderState p in s.Providers)
+            foreach (ProviderState provider in data.Providers)
             {
-                if (!p.Enabled) continue;
+                if (!provider.Enabled) continue;
                 if (!first) sb.Append(", ");
                 first = false;
-                sb.Append(p.Id + "=" + (p.Ok ? Fmt.Money(p.Balance, p.Currency) : "ERR"));
+                sb.Append(provider.Id + "=" + (provider.Ok ? Fmt.Money(provider.Balance, provider.Currency) : "ERR"));
             }
             sb.Append("]");
             return sb.ToString();

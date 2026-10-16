@@ -20,7 +20,7 @@ namespace DshPet
         public static FrameworkElement CreateVisual()
         {
             Viewbox box = new Viewbox();
-            box.Child = BuildCanvas();
+            box.Child = (Canvas)BuildParts()[0];
             box.Stretch = Stretch.Fill;
             return box;
         }
@@ -35,6 +35,16 @@ namespace DshPet
         }
 
         private static Canvas BuildCanvas()
+        {
+            return (Canvas)BuildParts()[0];
+        }
+
+        /// <summary>
+        /// Builds the whale once and hands the animatable parts back to the caller:
+        /// [0] canvas, [1] upper fluke, [2] lower fluke, [3] eye, [4] glint,
+        /// [5..7] spout drops.
+        /// </summary>
+        public static object[] BuildParts()
         {
             Canvas canvas = new Canvas();
             canvas.Width = BaseWidth;
@@ -162,7 +172,16 @@ namespace DshPet
             Canvas.SetTop(drop3, 20);
             canvas.Children.Add(drop3);
 
-            return canvas;
+            object[] parts = new object[8];
+            parts[0] = canvas;
+            parts[1] = upperFluke;
+            parts[2] = lowerFluke;
+            parts[3] = eye;
+            parts[4] = glint;
+            parts[5] = drop1;
+            parts[6] = drop2;
+            parts[7] = drop3;
+            return parts;
         }
     }
 }

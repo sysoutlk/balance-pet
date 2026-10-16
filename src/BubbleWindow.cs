@@ -1,6 +1,6 @@
-// The speech bubble: primary provider balance, the other providers as compact rows,
-// today's usage, peak/off-peak phase with a countdown, a 7-day mini chart, one quip
-// line and the data source tag.
+// The speech bubble. It renders a BubbleView: a title, one big number, optional detail
+// rows, the peak/off-peak line with a countdown, an optional 7-day mini chart, one quip
+// line, a note line and the source tag. Clicking the pet cycles through several views.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,20 +11,40 @@ using System.Windows.Media.Effects;
 
 namespace DshPet
 {
+    internal sealed class BubbleView
+    {
+        public string Title = "";
+        public string Big = "";
+        public double BigSize = 25;
+        public string BigColor = "#203170";
+        public string Sub = "";
+        public List<KeyValuePair<string, string>> Rows = new List<KeyValuePair<string, string>>();
+        public string PeakText = "";
+        public bool PeakNow;
+        public bool ShowTrend;
+        public List<DayUsage> Trend = new List<DayUsage>();
+        public string Quip = "";
+        public string Note = "";
+        public bool NoteError;
+        public string Source = "";
+        public int PageIndex = -1;
+        public int PageCount;
+    }
+
     internal sealed class BubbleWindow : Window
     {
         private readonly Border card;
         private readonly TextBlock title;
         private readonly TextBlock amount;
-        private readonly TextBlock details;
-        private readonly StackPanel others;
-        private readonly TextBlock today;
+        private readonly TextBlock sub;
+        private readonly StackPanel rows;
         private readonly TextBlock peak;
+        private readonly StackPanel trend;
+        private readonly List<Border> bars = new List<Border>();
         private readonly TextBlock quip;
         private readonly TextBlock note;
         private readonly TextBlock source;
-        private readonly StackPanel trend;
-        private readonly List<Border> bars = new List<Border>();
+        private readonly StackPanel dots;
 
         public PetWindow Anchor;
         public DateTime HideAt = DateTime.MinValue;
@@ -56,25 +76,22 @@ namespace DshPet
             card.Effect = shadow;
 
             StackPanel panel = new StackPanel();
-            panel.MinWidth = 186;
-            title = MakeText(12, "#203170", "DeepSeek 余额");
+            panel.MinWidth = 190;
+            title = MakeText(12, "#203170", "");
             title.FontWeight = FontWeights.SemiBold;
             amount = MakeText(25, "#203170", "--");
             amount.FontWeight = FontWeights.Bold;
             amount.Margin = new Thickness(0, 2, 0, 2);
-            details = MakeText(11, "#8d6fd0", "");
-            details.Margin = new Thickness(0, 1, 0, 0);
-            details.Visibility = Visibility.Collapsed;
-
-            others = new StackPanel();
-            others.Margin = new Thickness(0, 6, 0, 0);
-            others.Visibility = Visibility.Collapsed;
-
-            today = MakeText(12, "#7d8bb0", "今日已用 --");
-            today.Margin = new Thickness(0, 6, 0, 0);
-            peak = MakeText(12, "#e0433f", "峰谷 --");
+            sub = MakeText(11, "#8d6fd0", "");
+            sub.Margin = new Thickness(0, 1, 0, 0);
+            sub.Visibility = Visibility.Collapsed;
+            rows = new StackPanel();
+            rows.Margin = new Thickness(0, 4, 0, 0);
+            peak = MakeText(12, "#e0433f", "");
             peak.FontWeight = FontWeights.SemiBold;
-            peak.Margin = new Thickness(0, 3, 0, 0);
+            peak.Margin = new Thickness(0, 4, 0, 0);
+            peak.TextWrapping = TextWrapping.Wrap;
+            peak.MaxWidth = 220;
 
             trend = new StackPanel();
             trend.Orientation = Orientation.Horizontal;
@@ -95,27 +112,34 @@ namespace DshPet
 
             quip = MakeText(11, "#2f4488", "");
             quip.TextWrapping = TextWrapping.Wrap;
-            quip.MaxWidth = 215;
+            quip.MaxWidth = 220;
             quip.Margin = new Thickness(0, 7, 0, 0);
             quip.Visibility = Visibility.Collapsed;
             note = MakeText(10, "#a8b3cc", "");
             note.TextWrapping = TextWrapping.Wrap;
-            note.MaxWidth = 215;
+            note.MaxWidth = 220;
             note.Margin = new Thickness(0, 5, 0, 0);
             note.Visibility = Visibility.Collapsed;
+
+            DockPanel footer = new DockPanel();
+            footer.Margin = new Thickness(0, 5, 0, 0);
+            dots = new StackPanel();
+            dots.Orientation = Orientation.Horizontal;
+            dots.VerticalAlignment = VerticalAlignment.Center;
+            DockPanel.SetDock(dots, Dock.Right);
+            footer.Children.Add(dots);
             source = MakeText(9, "#a8b3cc", "");
-            source.Margin = new Thickness(0, 5, 0, 0);
+            footer.Children.Add(source);
 
             panel.Children.Add(title);
             panel.Children.Add(amount);
-            panel.Children.Add(details);
-            panel.Children.Add(others);
-            panel.Children.Add(today);
+            panel.Children.Add(sub);
+            panel.Children.Add(rows);
             panel.Children.Add(peak);
             panel.Children.Add(trend);
             panel.Children.Add(quip);
             panel.Children.Add(note);
-            panel.Children.Add(source);
+            panel.Children.Add(footer);
             card.Child = panel;
             Content = card;
             MouseLeftButtonDown += delegate { HideNow(); };
@@ -135,92 +159,80 @@ namespace DshPet
             return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
         }
 
-        public void UpdateFrom(Snapshot data, string quipText, string overrideText, string peakText, bool peakNow)
+        public void UpdateFrom(BubbleView view)
         {
-            ProviderState primary = data.Primary;
-            title.Text = primary == null ? "余额" : primary.Name + " 余额";
-            amount.Text = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
-            if (primary != null && primary.Details.Count > 0)
+            title.Text = view.Title;
+            amount.Text = view.Big;
+            amount.FontSize = view.BigSize;
+            amount.Foreground = Brush(view.BigColor);
+            if (!string.IsNullOrEmpty(view.Sub))
             {
-                details.Text = string.Join(" · ", primary.Details.ToArray());
-                details.Visibility = Visibility.Visible;
+                sub.Text = view.Sub;
+                sub.Visibility = Visibility.Visible;
             }
             else
             {
-                details.Visibility = Visibility.Collapsed;
+                sub.Visibility = Visibility.Collapsed;
             }
-            UpdateOthers(data, primary);
-            today.Text = primary == null
-                ? "今日已用 --"
-                : "今日已用 " + Fmt.Money(primary.TodayUsage, primary.Currency);
-            RefreshPeak(peakText, peakNow);
-            RefreshNote(data, primary);
-            string shown = !string.IsNullOrEmpty(overrideText) ? overrideText : quipText;
-            if (!string.IsNullOrEmpty(shown))
+
+            rows.Children.Clear();
+            foreach (KeyValuePair<string, string> row in view.Rows)
             {
-                quip.Text = shown;
+                DockPanel line = new DockPanel();
+                line.Margin = new Thickness(0, 2, 0, 0);
+                TextBlock value = MakeText(11.5, "#203170", row.Value);
+                value.FontWeight = FontWeights.SemiBold;
+                value.TextAlignment = TextAlignment.Right;
+                DockPanel.SetDock(value, Dock.Right);
+                line.Children.Add(value);
+                TextBlock name = MakeText(10.5, "#7d8bb0", row.Key);
+                name.VerticalAlignment = VerticalAlignment.Center;
+                line.Children.Add(name);
+                rows.Children.Add(line);
+            }
+            rows.Visibility = view.Rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            RefreshPeak(view.PeakText, view.PeakNow);
+            trend.Visibility = view.ShowTrend ? Visibility.Visible : Visibility.Collapsed;
+            if (view.ShowTrend) UpdateTrend(view.Trend);
+
+            if (!string.IsNullOrEmpty(view.Quip))
+            {
+                quip.Text = view.Quip;
                 quip.Visibility = Visibility.Visible;
             }
             else
             {
                 quip.Visibility = Visibility.Collapsed;
             }
-            string stamp = data.AtMs > 0
-                ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(data.AtMs).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)
-                : "--";
-            int okCount = data.OkCount;
-            string sourceText = primary == null ? "无数据源" : primary.SourceText;
-            if (okCount > 1) sourceText = okCount + " 个数据源";
-            source.Text = sourceText + " · " + stamp + " 更新";
-            UpdateTrend(data.History);
-        }
-
-        private void UpdateOthers(Snapshot data, ProviderState primary)
-        {
-            others.Children.Clear();
-            foreach (ProviderState p in data.Providers)
+            if (!string.IsNullOrEmpty(view.Note))
             {
-                if (primary != null && p.Id == primary.Id) continue;
-                if (!p.Enabled || !p.Supported) continue;
-                DockPanel row = new DockPanel();
-                row.Margin = new Thickness(0, 2, 0, 0);
-                TextBlock value = MakeText(11.5, p.Ok ? "#203170" : "#b98a8a", p.Ok ? Fmt.Money(p.Balance, p.Currency) : "查询失败");
-                value.FontWeight = FontWeights.SemiBold;
-                value.TextAlignment = TextAlignment.Right;
-                DockPanel.SetDock(value, Dock.Right);
-                row.Children.Add(value);
-                TextBlock name = MakeText(10.5, "#7d8bb0", p.Name);
-                name.VerticalAlignment = VerticalAlignment.Center;
-                row.Children.Add(name);
-                others.Children.Add(row);
-            }
-            others.Visibility = others.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void RefreshNote(Snapshot data, ProviderState primary)
-        {
-            string text = "";
-            if (primary != null && !primary.Ok && !string.IsNullOrEmpty(primary.Error))
-            {
-                text = primary.Error;
-            }
-            else if (primary != null && primary.Ok && !string.IsNullOrEmpty(primary.Error))
-            {
-                text = primary.Error;
-            }
-            else if (data.Providers.Count > 0 && data.OkCount == 0 && !string.IsNullOrEmpty(data.Error))
-            {
-                text = data.Error;
-            }
-            if (!string.IsNullOrEmpty(text))
-            {
-                note.Text = text;
+                note.Text = view.Note;
                 note.Visibility = Visibility.Visible;
-                note.Foreground = Brush(data.Ok ? "#a8b3cc" : "#e0433f");
+                note.Foreground = Brush(view.NoteError ? "#e0433f" : "#a8b3cc");
             }
             else
             {
                 note.Visibility = Visibility.Collapsed;
+            }
+            source.Text = view.Source;
+            UpdateDots(view.PageIndex, view.PageCount);
+        }
+
+        private void UpdateDots(int index, int count)
+        {
+            dots.Children.Clear();
+            if (index < 0 || count <= 1) return;
+            for (int i = 0; i < count; i++)
+            {
+                Border dot = new Border();
+                dot.Width = 5;
+                dot.Height = 5;
+                dot.CornerRadius = new CornerRadius(3);
+                dot.Margin = new Thickness(3, 0, 0, 0);
+                dot.VerticalAlignment = VerticalAlignment.Center;
+                dot.Background = Brush(i == index ? "#4B6BFB" : "#C9D4EE");
+                dots.Children.Add(dot);
             }
         }
 
@@ -228,6 +240,7 @@ namespace DshPet
         {
             peak.Text = peakText;
             peak.Foreground = Brush(peakNow ? "#e0433f" : "#2fa24c");
+            peak.Visibility = string.IsNullOrEmpty(peakText) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void UpdateTrend(List<DayUsage> history)
@@ -254,10 +267,10 @@ namespace DshPet
             }
         }
 
-        public void ShowFor(PetWindow pet, Snapshot data, string overrideText, string peakText, bool peakNow)
+        public void ShowFor(PetWindow pet, BubbleView view)
         {
             Anchor = pet;
-            UpdateFrom(data, "", overrideText, peakText, peakNow);
+            UpdateFrom(view);
             Visibility = Visibility.Visible;
             UpdateLayout();
             Position(true);
