@@ -28,6 +28,7 @@ namespace DshPet
         private DateTime nextSplitAt = DateTime.MinValue;
         private DateTime nextShrinkAt = DateTime.MinValue;
         private DateTime demoActionAt = DateTime.MinValue;
+        private DateTime lastBumpQuipAt = DateTime.MinValue;
         private bool? lastPeak;
         private bool balanceLatched;
         private string budgetLatchedDay = "";
@@ -130,11 +131,14 @@ namespace DshPet
             if (dt > 0.6) dt = 0.6;
 
             bool active = false;
+            double walkSpeed = cfg.GetNumber("walk", "speedPxPerSec", 72);
             foreach (PetWindow pet in Pets)
             {
                 UpdatePet(pet, now, dt);
                 if (pet.Mode != "idle" || pet.Action.Length > 0) active = true;
             }
+            // 多桌宠碰撞：互相推开 + 把速度带给被撞的那只（撞到第三只还能继续串）
+            if (Pets.Count > 1 && ResolveCollisions(now, dt, walkSpeed)) active = true;
 
             if (AutoSplitDue(now)) active = true;
 
@@ -198,7 +202,7 @@ namespace DshPet
                 if (speedNow < stopSpeed)
                 {
                     pet.Spin.Angle = 0;
-                    pet.SetIdle();
+                    pet.SetIdleAfterThrow();   // 扔到哪就停哪，不再被吸到屏幕边上
                     ScheduleEdgeHide(pet, now);
                 }
                 return;
@@ -291,6 +295,144 @@ namespace DshPet
                     ShowBubbleText(pet, QuipFor(pet.LastActionKey));
                 }
             }
+        }
+
+        /// <summary>
+        /// 多桌宠碰撞：先把叠在一起的两只推开，再把速度沿碰撞方向递给对方——被撞的那只
+        /// 会被带着滑一程，撞上第三只还能继续串下去；被用户拖着的由用户掌着，只挤开别人。
+        /// </summary>
+        private bool ResolveCollisions(DateTime now, double dt, double walkSpeed)
+        {
+            bool touched = false;
+            double carryFactor = cfg.GetNumber("throw", "carryFactor", 0.72);
+            for (int i = 0; i < Pets.Count; i++)
+            {
+                for (int j = i + 1; j < Pets.Count; j++)
+                {
+                    PetWindow a = Pets[i];
+                    PetWindow b = Pets[j];
+                    // 收起 / 正在收放的宠物不参与：它们贴在屏幕边上，被推会穿帮。
+                    if (a.EdgeHidden || b.EdgeHidden || a.Tuck > 0.01 || b.Tuck > 0.01) continue;
+                    if (a.Mode == "edge" || b.Mode == "edge") continue;
+                    double avx, avy, bvx, bvy;
+                    MotionOf(a, walkSpeed, out avx, out avy);
+                    MotionOf(b, walkSpeed, out bvx, out bvy);
+                    // 按相对速度把检测盒撑开：扔得快的宠物不会一帧"穿"过对方。
+                    double growX = Math.Min(40, Math.Abs(avx - bvx) * dt * 0.5);
+                    double growY = Math.Min(40, Math.Abs(avy - bvy) * dt * 0.5);
+                    double overlapX = Math.Min(a.X + a.Width + growX, b.X + b.Width + growX) - Math.Max(a.X - growX, b.X - growX);
+                    if (overlapX <= 0) continue;
+                    double overlapY = Math.Min(a.Y + a.Height + growY, b.Y + b.Height + growY) - Math.Max(a.Y - growY, b.Y - growY);
+                    if (overlapY <= 0) continue;
+                    bool aFree = a.Mode != "drag";
+                    bool bFree = b.Mode != "drag";
+                    if (!aFree && !bFree) continue;
+                    double shareA = aFree && bFree ? 0.5 : (aFree ? 1.0 : 0.0);
+                    double shareB = 1.0 - shareA;
+                    double dirX = 0;
+                    double dirY = 0;
+                    if (overlapX <= overlapY)
+                    {
+                        dirX = b.X + b.Width / 2 >= a.X + a.Width / 2 ? 1.0 : -1.0;
+                        a.X -= dirX * overlapX * shareA;
+                        b.X += dirX * overlapX * shareB;
+                    }
+                    else
+                    {
+                        dirY = b.Y + b.Height / 2 >= a.Y + a.Height / 2 ? 1.0 : -1.0;
+                        a.Y -= dirY * overlapY * shareA;
+                        b.Y += dirY * overlapY * shareB;
+                    }
+                    double pushB = Carry(a, b, dirX, dirY, shareB, carryFactor);
+                    double pushA = Carry(b, a, -dirX, -dirY, shareA, carryFactor);
+                    if (shareA > 0 && a.Mode == "walk") a.StartWalk();   // 撞上了就换条路走
+                    if (shareB > 0 && b.Mode == "walk") b.StartWalk();
+                    ClampToScreen(a);
+                    ClampToScreen(b);
+                    a.ApplyPosition();
+                    b.ApplyPosition();
+                    touched = true;
+                    // 撞得狠才有台词，并且限流，不然两只挨着会一直叭叭。
+                    double push = Math.Max(pushA, pushB);
+                    if (push >= 450 && (now - lastBumpQuipAt).TotalSeconds > 9 && Program.Rng.NextDouble() < 0.7)
+                    {
+                        string quip = QuipFor("bump");
+                        if (!string.IsNullOrEmpty(quip))
+                        {
+                            lastBumpQuipAt = now;
+                            ShowBubbleText(pushB >= pushA ? b : a, quip);
+                        }
+                    }
+                }
+            }
+            return touched;
+        }
+
+        /// <summary>碰撞推挤后别把宠物推出屏幕。</summary>
+        private static void ClampToScreen(PetWindow pet)
+        {
+            ScreenArea area = ScreenArea.ForPoint(pet.X + pet.Width / 2, pet.Y + pet.Height / 2);
+            pet.X = Math.Max(area.Left, Math.Min(area.Right - pet.Width, pet.X));
+            pet.Y = Math.Max(area.Top, Math.Min(area.Bottom - pet.Height, pet.Y));
+        }
+
+        /// <summary>估算一只宠物当前的移动速度（拖拽中的由鼠标决定，碰撞里不推挤它）。</summary>
+        private static void MotionOf(PetWindow pet, double walkSpeed, out double vx, out double vy)
+        {
+            if (pet.Mode == "thrown")
+            {
+                vx = pet.VelocityX;
+                vy = pet.VelocityY;
+                return;
+            }
+            if (pet.Mode == "walk")
+            {
+                double dx = pet.TargetX - pet.X;
+                double dy = pet.TargetY - pet.Y;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+                if (distance > 1)
+                {
+                    vx = dx / distance * walkSpeed * pet.SpeedFactor;
+                    vy = dy / distance * walkSpeed * pet.SpeedFactor;
+                    return;
+                }
+            }
+            vx = 0;
+            vy = 0;
+        }
+
+        /// <summary>
+        /// 把 from 的动量沿碰撞方向递给 to：够快才会把对方带着滑出去；对方动不了（被用户
+        /// 拖着）时，撞人者像撞到墙一样弹回来。返回实际递出去的推力（0 = 没撞实）。
+        /// </summary>
+        private static double Carry(PetWindow from, PetWindow to, double dirX, double dirY, double share, double factor)
+        {
+            if (from.Mode != "thrown") return 0;
+            double along = from.VelocityX * dirX + from.VelocityY * dirY;
+            if (along <= 90) return 0;   // 擦着/蹭着而已，不算撞上
+            if (share <= 0)
+            {
+                from.VelocityX -= 1.55 * along * dirX;
+                from.VelocityY -= 1.55 * along * dirY;
+                return 0;
+            }
+            double push = Math.Min(along * factor, 1500);
+            to.VelocityX = ClampSpeed(to.VelocityX + dirX * push);
+            to.VelocityY = ClampSpeed(to.VelocityY + dirY * push);
+            to.Mode = "thrown";
+            to.Bob.Y = 0;
+            if (dirX != 0) to.SetFacing(dirX > 0 ? 1 : -1);
+            // 撞人者吃掉一部分动量，像真的撞到了东西。
+            from.VelocityX -= 0.35 * along * dirX;
+            from.VelocityY -= 0.35 * along * dirY;
+            return push;
+        }
+
+        private static double ClampSpeed(double value)
+        {
+            if (value > 2000) return 2000;
+            if (value < -2000) return -2000;
+            return value;
         }
 
         /// <summary>Maps the current mode/action to an animation state and advances frames.</summary>

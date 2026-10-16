@@ -16,6 +16,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using Ellipse = System.Windows.Shapes.Ellipse;
+using Path = System.Windows.Shapes.Path;
 
 namespace DshPet
 {
@@ -347,6 +348,7 @@ namespace DshPet
           <CheckBox x:Name='SnapChk' Style='{StaticResource Switch}' Content='贴边'/>
           <CheckBox x:Name='SleepChk' Style='{StaticResource Switch}' Content='作息'/>
           <CheckBox x:Name='QuipsChk' Style='{StaticResource Switch}' Content='台词'/>
+          <CheckBox x:Name='CollideChk' Style='{StaticResource Switch}' Content='碰撞带动'/>
         </WrapPanel>
         <DockPanel Margin='0,4,0,0'>
           <CheckBox x:Name='EdgeHideChk' Style='{StaticResource Switch}' Content='边缘隐藏' Margin='0,0,10,0'/>
@@ -448,6 +450,11 @@ namespace DshPet
         private Color cOk;
         private Color cErr;
         private Color cChip;
+        // 主题色只保留"当前这一块"：对勾 + 光晕标识选中；面板重建后由 BuildColorPalette 重新创建。
+        private Grid themeSwatchBox;
+        private Border themeSwatch;
+        private Path themeSwatchCheck;
+        private TextBlock themeSwatchHex;
 
         public PetWindow ActivePet;
         public bool Pinned;
@@ -468,7 +475,7 @@ namespace DshPet
             foreach (string name in new string[]
             {
                 "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
-                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","SpeedSlider","SpeedVal",
+                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
@@ -548,6 +555,7 @@ namespace DshPet
             BindSwitch("SnapChk", "snap", "enabled");
             BindSwitch("SleepChk", "sleep", "enabled");
             BindSwitch("QuipsChk", "alert", "quipsOn");
+            BindSwitch("CollideChk", "pets", "collide");
             BindSwitch("AlertChk", "alert", "balanceWarn");
             BindSwitch("BudgetChk", "alert", "budgetWarn");
             BindSwitch("EdgeHideChk", "edgeHide", "enabled");
@@ -560,20 +568,7 @@ namespace DshPet
             WireDropdown("FontDropBtn", FontValues, FontLabels, "bubble.font", false);
             WireDropdown("NumberFontDropBtn", NumberFontValues, NumberFontLabels, "bubble.numberFont", false);
             BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
-            ((Button)ui["PickThemeBtn"]).Click += delegate
-            {
-                string initial = cfg.GetStringAt("bubble.color1", "#4B6BFB");
-                ShowColorPicker(ui["PickThemeBtn"], initial, delegate(string hex)
-                {
-                    Pinned = true;   // 选色期间/之后都不要自动隐藏面板
-                    cfg.SetAt("bubble.color1", hex);
-                    cfg.SetAt("bubble.color2", ShiftHue(hex, 85));
-                    cfg.Set("bubble", "accent", "");
-                    cfg.Save();
-                    engine.Data.Refresh();
-                    RebuildForAccent(true);
-                });
-            };
+            ((Button)ui["PickThemeBtn"]).Click += delegate { OpenThemePicker((FrameworkElement)ui["PickThemeBtn"]); };
             ((Button)ui["MixAddBtn"]).Click += delegate
             {
                 Pinned = true;
@@ -581,13 +576,15 @@ namespace DshPet
                 ShowColorPicker(ui["MixAddBtn"], initial, delegate(string hex)
                 {
                     Pinned = true;
-                    List<string> colors = new List<string>(cfg.GetStrings("bubble", "colors"));
+                    // 上限之内只保留最近的颜色：加满之后新颜色会顶掉最早设置的那个。
+                    List<string> colors = BubbleTheme.MixColors(cfg);
                     if (!colors.Contains(hex)) colors.Add(hex);
+                    TrimMix(colors);
                     cfg.SetAt("bubble.colors", colors.ToArray());
                     cfg.Save();
                     engine.Data.Refresh();
                     Update();
-                });
+                }, true);
             };
             BuildMixPalette();
             ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -605,6 +602,7 @@ namespace DshPet
             BindBubbleSlider("BubbleTailSlider", "bubble.tailSize", "BubbleTailSliderVal", "0");
             BindBubbleSlider("BubbleOpacitySlider", "bubble.opacity", "BubbleOpacityVal", "0%");
             BindBubbleSlider("BubbleShadowSlider", "bubble.shadow", "BubbleShadowSliderVal", "0.00");
+            ((Button)ui["MixAddBtn"]).ToolTip = "从调色盘取色；超过上限会自动顶掉最早设置的颜色";
             BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
             previewTimer.Interval = TimeSpan.FromMilliseconds(110);
             previewTimer.Tick += delegate
@@ -719,7 +717,7 @@ namespace DshPet
             List<string> files = AppPaths.RoleFiles();
             foreach (string file in files)
             {
-                AddRoleButton(panel, file, Path.GetFileNameWithoutExtension(file), selected, file);
+                AddRoleButton(panel, file, System.IO.Path.GetFileNameWithoutExtension(file), selected, file);
             }
             if (files.Count == 0)
             {
@@ -751,7 +749,7 @@ namespace DshPet
                 {
                     BitmapImage bitmap = new BitmapImage();
                     bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(Path.Combine(AppPaths.RolesDir, thumbFile));
+                    bitmap.UriSource = new Uri(System.IO.Path.Combine(AppPaths.RolesDir, thumbFile));
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.DecodePixelWidth = 68;
                     bitmap.EndInit();
@@ -1266,6 +1264,7 @@ namespace DshPet
                 ((CheckBox)ui["SnapChk"]).IsChecked = cfg.GetFlag("snap", "enabled", true);
                 ((CheckBox)ui["SleepChk"]).IsChecked = cfg.GetFlag("sleep", "enabled", true);
                 ((CheckBox)ui["QuipsChk"]).IsChecked = cfg.GetFlag("alert", "quipsOn", true);
+                ((CheckBox)ui["CollideChk"]).IsChecked = cfg.GetFlagAt("pets.collide", true);
                 ((CheckBox)ui["AlertChk"]).IsChecked = cfg.GetFlag("alert", "balanceWarn", true);
                 ((CheckBox)ui["BudgetChk"]).IsChecked = cfg.GetFlag("alert", "budgetWarn", true);
                 ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
@@ -1338,9 +1337,11 @@ namespace DshPet
         }
 
         // ------------------------------------------------------------ 气泡强调色 / 动态配色
+        // 预置色不再铺在主界面：统一收进调色盘底部，主界面只展示"当前选中"。
         private static readonly string[] ColorPresets = new string[]
         {
-            "#4B6BFB", "#7C5CFF", "#A855F7", "#E8517B", "#F08A24", "#FBBF24", "#12B5A5", "#10B981", "#38BDF8", "#F472B6"
+            "#4B6BFB", "#7C5CFF", "#A855F7", "#E8517B", "#F08A24", "#FBBF24", "#12B5A5", "#10B981", "#38BDF8", "#F472B6",
+            "#F87171", "#0EA5E9"
         };
 
         // 主题 / 特效 / 字体：下拉选项（简单、好懂，一处设置）
@@ -1439,36 +1440,75 @@ namespace DshPet
             }
         }
 
+        /// <summary>主题色：只显示当前颜色（对勾 + 光晕），点色块或「调色盘…」都能换色。</summary>
         private void BuildColorPalette(string panelName, string path, string fallback)
         {
             WrapPanel panel = (WrapPanel)ui[panelName];
             panel.Children.Clear();
-            foreach (string hex in ColorPresets)
+            string hex = cfg.GetStringAt(path, fallback);
+            if (string.IsNullOrEmpty(hex) || !hex.StartsWith("#", StringComparison.Ordinal)) hex = fallback;
+            Color fill = Parse(hex);
+            Color ink = InkFor(fill);
+
+            themeSwatchBox = new Grid();
+            themeSwatchBox.Width = 34;
+            themeSwatchBox.Height = 34;
+            themeSwatchBox.Margin = new Thickness(0, 0, 4, 4);
+            themeSwatchBox.Cursor = System.Windows.Input.Cursors.Hand;
+            themeSwatchBox.ToolTip = "当前主题色 " + hex.ToUpperInvariant() + "，点一下打开调色盘";
+
+            themeSwatch = new Border();
+            themeSwatch.Width = 30;
+            themeSwatch.Height = 30;
+            themeSwatch.CornerRadius = new CornerRadius(10);
+            themeSwatch.Background = new SolidColorBrush(fill);
+            themeSwatch.BorderBrush = new SolidColorBrush(ink);
+            themeSwatch.BorderThickness = new Thickness(2);
+            DropShadowEffect glow = new DropShadowEffect();
+            glow.ShadowDepth = 0;
+            glow.BlurRadius = 14;
+            glow.Opacity = 0.55;
+            glow.Color = fill;
+            themeSwatch.Effect = glow;
+            themeSwatchBox.Children.Add(themeSwatch);
+
+            themeSwatchCheck = new Path();
+            themeSwatchCheck.Data = Geometry.Parse("M 11,17.5 L 15.5,22 L 23.5,12.5");
+            themeSwatchCheck.Stroke = new SolidColorBrush(ink);
+            themeSwatchCheck.StrokeThickness = 2.4;
+            themeSwatchCheck.StrokeStartLineCap = PenLineCap.Round;
+            themeSwatchCheck.StrokeEndLineCap = PenLineCap.Round;
+            themeSwatchCheck.StrokeLineJoin = PenLineJoin.Round;
+            themeSwatchCheck.IsHitTestVisible = false;
+            themeSwatchBox.Children.Add(themeSwatchCheck);
+
+            themeSwatchBox.MouseLeftButtonUp += delegate { OpenThemePicker(themeSwatchBox); };
+            panel.Children.Add(themeSwatchBox);
+
+            themeSwatchHex = new TextBlock();
+            themeSwatchHex.Text = hex.ToUpperInvariant();
+            themeSwatchHex.FontSize = 11;
+            themeSwatchHex.Foreground = new SolidColorBrush(cMuted);
+            themeSwatchHex.VerticalAlignment = VerticalAlignment.Center;
+            themeSwatchHex.Margin = new Thickness(2, 0, 8, 4);
+            panel.Children.Add(themeSwatchHex);
+        }
+
+        /// <summary>主题色改色：气泡主色 + 设置卡片强调色一起换，副色按主题色自动配一个。</summary>
+        private void OpenThemePicker(FrameworkElement anchor)
+        {
+            Pinned = true;   // 选色期间不要自动隐藏面板
+            string initial = cfg.GetStringAt("bubble.color1", "#4B6BFB");
+            ShowColorPicker(anchor, initial, delegate(string hex)
             {
-                Border swatch = new Border();
-                swatch.Width = 20;
-                swatch.Height = 20;
-                swatch.CornerRadius = new CornerRadius(6);
-                swatch.Margin = new Thickness(0, 0, 6, 4);
-                swatch.Cursor = System.Windows.Input.Cursors.Hand;
-                swatch.Tag = hex;
-                swatch.Background = Brush(hex);
-                string chosen = hex;
-                swatch.MouseLeftButtonUp += delegate
-                {
-                    cfg.SetAt(path, chosen);
-                    if (path == "bubble.color1")
-                    {
-                        // 主题色统一：一处设置，气泡 + 设置卡片同时生效；副色按主题色自动配一个。
-                        cfg.SetAt("bubble.color2", ShiftHue(chosen, 85));
-                        cfg.Set("bubble", "accent", "");
-                    }
-                    cfg.Save();
-                    engine.Data.Refresh();
-                    RebuildForAccent(path == "bubble.color1");
-                };
-                panel.Children.Add(swatch);
-            }
+                Pinned = true;
+                cfg.SetAt("bubble.color1", hex);
+                cfg.SetAt("bubble.color2", ShiftHue(hex, 85));
+                cfg.Set("bubble", "accent", "");
+                cfg.Save();
+                engine.Data.Refresh();
+                RebuildForAccent(true);
+            });
         }
 
         /// <summary>主题色会注入卡片模板，改色后重建面板让高亮色立即生效。</summary>
@@ -1600,6 +1640,10 @@ namespace DshPet
             keyBoxes.Clear();
             planStatus.Clear();
             planBoxes.Clear();
+            themeSwatchBox = null;
+            themeSwatch = null;
+            themeSwatchCheck = null;
+            themeSwatchHex = null;
             Build();
             if (!visible) return;
             // Stay where the user put the card: re-showing through ShowFor() would snap it back
@@ -1657,65 +1701,133 @@ namespace DshPet
 
         private void MarkPalette(string panelName, string current)
         {
-            foreach (object child in ((WrapPanel)ui[panelName]).Children)
-            {
-                Border swatch = child as Border;
-                if (swatch == null) continue;
-                bool selected = Convert.ToString(swatch.Tag) == current;
-                swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
-                swatch.BorderThickness = new Thickness(selected ? 2 : 0);
-            }
+            if (themeSwatch == null) return;
+            if (string.IsNullOrEmpty(current) || !current.StartsWith("#", StringComparison.Ordinal)) current = "#4B6BFB";
+            Color fill = Parse(current);
+            Color ink = InkFor(fill);
+            themeSwatch.Background = new SolidColorBrush(fill);
+            themeSwatch.BorderBrush = new SolidColorBrush(ink);
+            if (themeSwatchCheck != null) themeSwatchCheck.Stroke = new SolidColorBrush(ink);
+            DropShadowEffect glow = themeSwatch.Effect as DropShadowEffect;
+            if (glow != null) glow.Color = fill;
+            if (themeSwatchHex != null) themeSwatchHex.Text = current.ToUpperInvariant();
+            if (themeSwatchBox != null) themeSwatchBox.ToolTip = "当前主题色 " + current.ToUpperInvariant() + "，点一下打开调色盘";
         }
 
-        /// <summary>混合配色：点一下加入 / 再点移除，组成你自己的多色方案（bubble.colors）。</summary>
+        /// <summary>深色底配白、浅色底配墨色：对勾与描边在任何主题色上都看得清。</summary>
+        private static Color InkFor(Color fill)
+        {
+            double luma = (fill.R * 299 + fill.G * 587 + fill.B * 114) / 1000.0;
+            return luma > 165 ? Color.FromRgb(0x24, 0x2C, 0x40) : Colors.White;
+        }
+
+        /// <summary>混合配色：只列出已选颜色（点色块移除），新颜色从「添加颜色…」的调色盘里取。</summary>
         private void BuildMixPalette()
         {
-            WrapPanel panel = (WrapPanel)ui["MixPanel"];
-            panel.Children.Clear();
-            foreach (string hex in ColorPresets)
-            {
-                Border swatch = new Border();
-                swatch.Width = 20;
-                swatch.Height = 20;
-                swatch.CornerRadius = new CornerRadius(6);
-                swatch.Margin = new Thickness(0, 0, 6, 4);
-                swatch.Cursor = System.Windows.Input.Cursors.Hand;
-                swatch.Tag = hex;
-                swatch.Background = Brush(hex);
-                swatch.ToolTip = "点一下加入 / 再点移除";
-                string chosen = hex;
-                swatch.MouseLeftButtonUp += delegate { ToggleMixColor(chosen); };
-                panel.Children.Add(swatch);
-            }
+            MarkMixPalette();
         }
 
         private void ToggleMixColor(string hex)
         {
-            List<string> colors = new List<string>();
-            foreach (string item in cfg.GetStrings("bubble", "colors"))
-            {
-                if (!string.IsNullOrEmpty(item)) colors.Add(item);
-            }
+            List<string> colors = BubbleTheme.MixColors(cfg);
             if (colors.Contains(hex)) colors.Remove(hex);
-            else colors.Add(hex);
+            else
+            {
+                colors.Add(hex);
+                TrimMix(colors);
+            }
             cfg.SetAt("bubble.colors", colors.ToArray());
             cfg.Save();
             engine.Data.Refresh();
             Update();
         }
 
+        /// <summary>混色列表超上限时顶掉最早设置的颜色（FIFO），保证气泡不会挂一长串颜色。</summary>
+        private void TrimMix(List<string> colors)
+        {
+            int max = (int)cfg.GetNumberAt("bubble.mixMax", 6);
+            if (max < 2) max = 2;
+            if (max > 12) max = 12;
+            while (colors.Count > max) colors.RemoveAt(0);
+        }
+
         private void MarkMixPalette()
         {
-            List<string> colors = cfg.GetStrings("bubble", "colors");
             WrapPanel panel = (WrapPanel)ui["MixPanel"];
-            foreach (object child in panel.Children)
+            panel.Children.Clear();
+            List<string> colors = BubbleTheme.MixColors(cfg);
+            if (colors.Count == 0)
             {
-                Border swatch = child as Border;
-                if (swatch == null) continue;
-                bool selected = colors.Contains(Convert.ToString(swatch.Tag));
-                swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
-                swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+                TextBlock empty = new TextBlock();
+                empty.Text = "还没有混色，点右边从调色盘里挑";
+                empty.FontSize = 11;
+                empty.Foreground = new SolidColorBrush(cMuted);
+                empty.VerticalAlignment = VerticalAlignment.Center;
+                empty.Margin = new Thickness(0, 0, 6, 4);
+                panel.Children.Add(empty);
+                return;
             }
+            foreach (string hex in colors)
+            {
+                panel.Children.Add(MixSwatch(hex));
+            }
+        }
+
+        /// <summary>已选混色的色块：右上角小叉=点一下移除，悬停发光提示可点。</summary>
+        private FrameworkElement MixSwatch(string hex)
+        {
+            Color fill = Parse(hex);
+            Color ink = InkFor(fill);
+            Grid wrap = new Grid();
+            wrap.Width = 34;
+            wrap.Height = 34;
+            wrap.Margin = new Thickness(0, 0, 2, 4);
+            wrap.Cursor = System.Windows.Input.Cursors.Hand;
+            wrap.ToolTip = hex.ToUpperInvariant() + " · 点一下移除";
+
+            Border block = new Border();
+            block.Width = 28;
+            block.Height = 28;
+            block.CornerRadius = new CornerRadius(9);
+            block.Background = new SolidColorBrush(fill);
+            block.BorderBrush = new SolidColorBrush(Color.FromArgb(110, ink.R, ink.G, ink.B));
+            block.BorderThickness = new Thickness(1);
+            block.HorizontalAlignment = HorizontalAlignment.Left;
+            block.VerticalAlignment = VerticalAlignment.Bottom;
+            wrap.Children.Add(block);
+
+            Border badge = new Border();
+            badge.Width = 15;
+            badge.Height = 15;
+            badge.CornerRadius = new CornerRadius(8);
+            badge.Background = new SolidColorBrush(ink);
+            badge.HorizontalAlignment = HorizontalAlignment.Right;
+            badge.VerticalAlignment = VerticalAlignment.Top;
+            Canvas cross = new Canvas();
+            cross.Width = 9;
+            cross.Height = 9;
+            Path crossLine = new Path();
+            crossLine.Data = Geometry.Parse("M 1.5,1.5 L 7.5,7.5 M 7.5,1.5 L 1.5,7.5");
+            crossLine.Stroke = new SolidColorBrush(fill);
+            crossLine.StrokeThickness = 1.6;
+            crossLine.StrokeStartLineCap = PenLineCap.Round;
+            crossLine.StrokeEndLineCap = PenLineCap.Round;
+            cross.Children.Add(crossLine);
+            badge.Child = cross;
+            wrap.Children.Add(badge);
+
+            wrap.MouseEnter += delegate
+            {
+                DropShadowEffect glow = new DropShadowEffect();
+                glow.ShadowDepth = 0;
+                glow.BlurRadius = 12;
+                glow.Opacity = 0.6;
+                glow.Color = fill;
+                block.Effect = glow;
+            };
+            wrap.MouseLeave += delegate { block.Effect = null; };
+            wrap.MouseLeftButtonUp += delegate { ToggleMixColor(hex); };
+            return wrap;
         }
 
         private static System.Drawing.Color ToDrawing(Color color)
@@ -1725,6 +1837,12 @@ namespace DshPet
 
         // ------------------------------------------------------------ 内嵌调色盘（色相条 + SV 方块 + hex）
         private void ShowColorPicker(FrameworkElement anchor, string initialHex, Action<string> apply)
+        {
+            ShowColorPicker(anchor, initialHex, apply, false);
+        }
+
+        /// <summary>withMixCap = 混色调色盘：底部多一条「混色上限」，改小立刻让多余的旧色让位。</summary>
+        private void ShowColorPicker(FrameworkElement anchor, string initialHex, Action<string> apply, bool withMixCap)
         {
             Color initial = Parse(string.IsNullOrEmpty(initialHex) ? "#4B6BFB" : initialHex);
             double hue, sat, val;
@@ -1780,7 +1898,7 @@ namespace DshPet
             hexBox.Style = (Style)root.Resources["TxtBox"];
             hexBox.Width = 92;
             TextBlock caption = new TextBlock();
-            caption.Text = "按住拖动选色，或直接改 hex";
+            caption.Text = "拖动选色，或直接改 hex；下方预置一键取色";
             caption.FontSize = 10;
             caption.Foreground = new SolidColorBrush(cMuted);
             caption.Margin = new Thickness(0, 6, 0, 0);
@@ -1808,6 +1926,7 @@ namespace DshPet
             popup.PlacementTarget = anchor;
             popup.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
 
+            List<Border> presetDots = new List<Border>();
             Action refresh = null;
             refresh = delegate
             {
@@ -1817,11 +1936,46 @@ namespace DshPet
                 Canvas.SetTop(cursor, (1 - val) * 126 + 3);
                 Canvas.SetTop(hueMark, hue / 360.0 * 120 + 6);
                 preview.Background = new SolidColorBrush(current);
+                string shownHex = string.Format("#{0:X2}{1:X2}{2:X2}", current.R, current.G, current.B);
                 if (!hexBox.IsFocused)
                 {
-                    hexBox.Text = string.Format("#{0:X2}{1:X2}{2:X2}", current.R, current.G, current.B);
+                    hexBox.Text = shownHex;
+                }
+                // 预置色里命中当前色的那格描白圈：选中态一眼可见。
+                for (int i = 0; i < presetDots.Count; i++)
+                {
+                    bool on = string.Equals(Convert.ToString(presetDots[i].Tag), shownHex, StringComparison.OrdinalIgnoreCase);
+                    presetDots[i].BorderBrush = on ? Brushes.White : Brushes.Transparent;
                 }
             };
+            // 预置色收进调色盘底部：主界面不再挂一排预设色块，这里点一下即取色。
+            WrapPanel presets = new WrapPanel();
+            presets.Margin = new Thickness(0, 2, 0, 0);
+            foreach (string presetHex in ColorPresets)
+            {
+                Border dot = new Border();
+                dot.Width = 20;
+                dot.Height = 20;
+                dot.CornerRadius = new CornerRadius(7);
+                dot.Margin = new Thickness(0, 6, 6, 0);
+                dot.Cursor = System.Windows.Input.Cursors.Hand;
+                dot.Tag = presetHex;
+                dot.Background = Brush(presetHex);
+                dot.BorderBrush = Brushes.Transparent;
+                dot.BorderThickness = new Thickness(2);
+                dot.ToolTip = presetHex;
+                string presetPick = presetHex;
+                dot.MouseLeftButtonUp += delegate
+                {
+                    ToHsv(Parse(presetPick), out hue, out sat, out val);
+                    refresh();
+                    apply(presetPick);
+                };
+                presetDots.Add(dot);
+                presets.Children.Add(dot);
+            }
+            card.Children.Add(presets);
+            if (withMixCap) card.Children.Add(BuildMixCapRow());
             bool draggingSquare = false;
             bool draggingHue = false;
             System.Windows.Input.MouseButtonEventHandler down = delegate(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1863,6 +2017,51 @@ namespace DshPet
             strip.MouseLeftButtonUp += up;
             refresh();
             popup.IsOpen = true;
+        }
+
+        /// <summary>混色调色盘底部的「混色上限」：加满之后新颜色顶掉最早设置的，不会越加越长。</summary>
+        private FrameworkElement BuildMixCapRow()
+        {
+            StackPanel row = new StackPanel();
+            row.Orientation = Orientation.Horizontal;
+            row.Margin = new Thickness(0, 8, 0, 0);
+            TextBlock label = new TextBlock();
+            label.Text = "混色上限";
+            label.FontSize = 10;
+            label.Foreground = new SolidColorBrush(cMuted);
+            label.VerticalAlignment = VerticalAlignment.Center;
+            label.Margin = new Thickness(0, 0, 8, 0);
+            row.Children.Add(label);
+            Slider slider = new Slider();
+            slider.Style = (Style)root.Resources["Flat"];
+            slider.Width = 130;
+            slider.Minimum = 3;
+            slider.Maximum = 12;
+            slider.IsSnapToTickEnabled = true;
+            slider.TickFrequency = 1;
+            double saved = cfg.GetNumberAt("bubble.mixMax", 6);
+            slider.Value = Math.Max(3, Math.Min(12, saved));
+            TextBlock value = new TextBlock();
+            value.FontSize = 10;
+            value.Foreground = new SolidColorBrush(cFg2);
+            value.VerticalAlignment = VerticalAlignment.Center;
+            value.Margin = new Thickness(8, 0, 0, 0);
+            value.Text = ((int)slider.Value).ToString(CultureInfo.InvariantCulture) + " 色";
+            slider.ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                int mixMax = (int)Math.Round(e.NewValue);
+                value.Text = mixMax.ToString(CultureInfo.InvariantCulture) + " 色";
+                cfg.SetAt("bubble.mixMax", (double)mixMax);
+                List<string> mix = BubbleTheme.MixColors(cfg);
+                TrimMix(mix);
+                cfg.SetAt("bubble.colors", mix.ToArray());
+                cfg.Save();
+                MarkMixPalette();
+                engine.Data.Refresh();
+            };
+            row.Children.Add(slider);
+            row.Children.Add(value);
+            return row;
         }
 
         private static void ApplySquare(Point point, ref double hue, ref double sat, ref double val)
@@ -1981,10 +2180,7 @@ namespace DshPet
         private void ApplyPreviewBrush()
         {
             List<Color> list = new List<Color>();
-            foreach (string hex in cfg.GetStrings("bubble", "colors"))
-            {
-                if (!string.IsNullOrEmpty(hex) && hex.StartsWith("#", StringComparison.Ordinal)) list.Add(Parse(hex));
-            }
+            foreach (string hex in BubbleTheme.MixColors(cfg)) list.Add(Parse(hex));
             if (list.Count == 0) list.Add(Parse(cfg.GetStringAt("bubble.color1", "#4B6BFB")));
             string motion = cfg.GetString("bubble", "effect", "off");
             double depth = cfg.GetNumber("bubble", "effectDepth", 1.0);

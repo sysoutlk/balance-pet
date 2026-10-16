@@ -511,6 +511,7 @@ namespace DshPet
             SetDefault("bubble", "color1", "#4B6BFB");
             SetDefault("bubble", "color2", "#A855F7");
             SetDefault("bubble", "colors", new string[0]);   // 可选：["#4B6BFB","#22D3EE",...] 自定义混色
+            SetDefault("bubble", "mixMax", 6.0);             // 混色上限：超了顶掉最早设置的（FIFO）
             SetDefault("bubble", "speed", 1.0);
             SetDefault("bubble", "effectDepth", 1.0);
             SetDefault("bubble", "effectReverse", false);
@@ -568,6 +569,8 @@ namespace DshPet
             SetDefault("throw", "bounce", 0.55);
             SetDefault("throw", "stopSpeedPxPerSec", 40.0);
             SetDefault("throw", "minSpeedPxPerSec", 900.0);   // 低于这个速度松手 = 放下，不抛出
+            SetDefault("throw", "carryFactor", 0.72);        // 撞到别的桌宠时，递出去的动量比例
+            SetDefault("pets", "collide", true);             // 多桌宠互相碰撞 / 被撞的会被带着滑一程
             SetDefault("sleep", "enabled", true);
             SetDefault("sleep", "fromHour", 23);
             SetDefault("sleep", "toHour", 7);
@@ -629,6 +632,7 @@ namespace DshPet
             SetDefault("quips", "stretch", new string[] { "伸个懒腰～", "啊——舒服" });
             SetDefault("quips", "dash", new string[] { "冲刺！", "让一让！" });
             SetDefault("quips", "follow", new string[] { "跟着你～", "等等我！" });
+            SetDefault("quips", "bump", new string[] { "哎哟！", "谁撞我！", "让一让～", "撞到啦…" });
             SetDefault("quips", "greet", new string[] { "你好呀！", "我在这儿～" });
         }
 

@@ -299,6 +299,17 @@ namespace DshPet
 
         public void SetIdle()
         {
+            SetIdle(true);
+        }
+
+        /// <summary>被扔出去/被撞飞的收尾：就地停下，不吸附边缘（不然扔起来的乐趣全被吸走了）。</summary>
+        public void SetIdleAfterThrow()
+        {
+            SetIdle(false);
+        }
+
+        private void SetIdle(bool snapToEdge)
+        {
             Mode = "idle";
             // 拖离边缘后彻底解除贴边并恢复姿态；仍贴在边缘时保持收起状态。
             if (Tuck != 0 && !IsAgainstOwnEdge())
@@ -317,7 +328,7 @@ namespace DshPet
             int actionMin = (int)cfg.GetNumber("actions", "pauseMinSec", 14);
             int actionMax = Math.Max(actionMin + 1, (int)cfg.GetNumber("actions", "pauseMaxSec", 45));
             NextActionAt = DateTime.UtcNow.AddSeconds(Program.Rng.Next(actionMin, actionMax));
-            if (cfg.GetFlag("snap", "enabled", true)) Snap();
+            if (snapToEdge && cfg.GetFlag("snap", "enabled", true)) Snap();
         }
 
         /// <summary>是否仍然紧贴着自己记录的那条边。</summary>

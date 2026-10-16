@@ -593,9 +593,10 @@ namespace DshPet
             baseAccent = ParseColor(cfg.GetString("bubble", "color1", ""), accentText);
             secondColor = ParseColor(cfg.GetString("bubble", "color2", "#A855F7"), "#A855F7");
             blendColors.Clear();
-            foreach (string hex in cfg.GetStrings("bubble", "colors"))
+            // 只取最近 bubble.mixMax 个（默认 6）：超出上限的旧色自动让位，不给气泡留一长串颜色。
+            foreach (string hex in BubbleTheme.MixColors(cfg))
             {
-                if (!string.IsNullOrEmpty(hex) && hex.StartsWith("#", StringComparison.Ordinal)) blendColors.Add(ParseColor(hex, "#4B6BFB"));
+                blendColors.Add(ParseColor(hex, "#4B6BFB"));
             }
             if (blendColors.Count == 0)
             {

@@ -3,6 +3,7 @@
 // transparency, so these simulate it with alpha, highlights and a softer shadow) and
 // "monet" samples the desktop wallpaper and tint the whole card with its dominant colour.
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -202,6 +203,24 @@ namespace DshPet
         {
             Color color = FromHex(hex);
             return Color.FromArgb(alpha, color.R, color.G, color.B);
+        }
+
+        /// <summary>
+        /// 混合配色（bubble.colors）统一入口：最多保留 bubble.mixMax 个（默认 6），超出时顶掉
+        /// 最早设置的颜色——"加了新的就别再长长一条"。
+        /// </summary>
+        public static List<string> MixColors(Config cfg)
+        {
+            List<string> list = new List<string>();
+            foreach (string hex in cfg.GetStrings("bubble", "colors"))
+            {
+                if (!string.IsNullOrEmpty(hex) && hex.StartsWith("#", StringComparison.Ordinal)) list.Add(hex);
+            }
+            int max = (int)cfg.GetNumberAt("bubble.mixMax", 6);
+            if (max < 2) max = 2;
+            if (max > 12) max = 12;
+            while (list.Count > max) list.RemoveAt(0);
+            return list;
         }
 
         private static double Hue(Color color)
