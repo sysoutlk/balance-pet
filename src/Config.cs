@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Web.Script.Serialization;
@@ -232,6 +233,51 @@ namespace DshPet
         }
     }
 
+    /// <summary>
+    /// Shared HTTP plumbing. By default requests go direct (the .NET default would pick up a
+    /// stale system proxy and stall); setting network.proxy in pet-config.json routes them
+    /// through that proxy instead, which is handy when the OpenAI/Codex route flaps.
+    /// </summary>
+    internal static class Http
+    {
+        private static readonly Dictionary<string, HttpClient> cache = new Dictionary<string, HttpClient>();
+
+        public static HttpClient For(Config cfg, int timeoutSeconds)
+        {
+            string proxy = cfg == null ? "" : cfg.GetStringAt("network.proxy", "");
+            string key = proxy + "|" + timeoutSeconds;
+            HttpClient existing;
+            if (cache.TryGetValue(key, out existing)) return existing;
+            try
+            {
+                System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
+            }
+            catch
+            {
+            }
+            HttpClientHandler handler = new HttpClientHandler();
+            try
+            {
+                if (string.IsNullOrEmpty(proxy))
+                {
+                    handler.UseProxy = false;
+                }
+                else
+                {
+                    handler.Proxy = new System.Net.WebProxy(proxy);
+                    handler.UseProxy = true;
+                }
+            }
+            catch
+            {
+            }
+            HttpClient client = new HttpClient(handler);
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            cache[key] = client;
+            return client;
+        }
+    }
+
     internal static class Secret
     {
         private const string Prefix = "dpapi:";
@@ -448,6 +494,7 @@ namespace DshPet
             SetDefault("", "primaryProvider", "deepseek");
             SetDefault("", "statePath", "");
             SetDefault("", "apiKey", "");
+            SetDefault("network", "proxy", "");
             SetDefault("", "role", "");
             SetDefault("", "scale", 1.0);
             SetDefault("", "opacity", 1.0);

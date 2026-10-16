@@ -85,22 +85,7 @@ namespace DshPet
 
     internal static class Providers
     {
-        private static readonly HttpClient Client = CreateClient();
         public static string Version = "1.0.0";
-
-        private static HttpClient CreateClient()
-        {
-            HttpClient client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(8);
-            try
-            {
-                client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "dsh-pet/" + Version);
-            }
-            catch
-            {
-            }
-            return client;
-        }
 
         public static List<ProviderDef> Builtin()
         {
@@ -295,7 +280,7 @@ namespace DshPet
                         {
                             try
                             {
-                                moonshotBody = Get(baseUrl + "/v1/users/me/balance", def.Auth, key);
+                                moonshotBody = Get(cfg, baseUrl + "/v1/users/me/balance", def.Auth, key);
                                 break;
                             }
                             catch (Exception ex)
@@ -317,7 +302,7 @@ namespace DshPet
                     }
                     url = EndpointFor(cfg, def);
                 }
-                string body = Get(url, auth, key);
+                string body = Get(cfg, url, auth, key);
                 Parse(def, cfg, body, state);
                 state.Ok = state.Balance.HasValue;
                 if (!state.Ok && string.IsNullOrEmpty(state.Error)) state.Error = "响应里没有余额字段";
@@ -379,8 +364,10 @@ namespace DshPet
             return "";
         }
 
-        private static string Get(string url, string auth, string key)
+        private static string Get(Config cfg, string url, string auth, string key)
         {
+            HttpClient client = Http.For(cfg, 12);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "dsh-pet/" + Version);
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
             if (auth == "bearer" && !string.IsNullOrEmpty(key))
             {
@@ -390,7 +377,7 @@ namespace DshPet
             {
                 request.Headers.TryAddWithoutValidation("x-api-key", key);
             }
-            HttpResponseMessage response = Client.SendAsync(request).Result;
+            HttpResponseMessage response = client.SendAsync(request).Result;
             string body = response.Content.ReadAsStringAsync().Result;
             if (!response.IsSuccessStatusCode)
             {
@@ -399,6 +386,7 @@ namespace DshPet
                 if (code == 401 || code == 403) message = "密钥无效或权限不足";
                 else if (code == 404) message = "接口不存在";
                 else if (code == 429) message = "请求过于频繁，稍后再试";
+                else if (code == 451) message = "网络出口被服务方限制（HTTP 451），请更换线路/节点或设置 network.proxy";
                 else message = "请求失败";
                 string detail = ErrorMessageOf(body);
                 string text = "HTTP " + code + " · " + message;

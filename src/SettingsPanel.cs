@@ -278,6 +278,12 @@ namespace DshPet
           <Button x:Name='RefreshBtn' DockPanel.Dock='Right' Content='刷新余额' Width='88' Style='{StaticResource Btn}' Margin='0'/>
           <TextBlock x:Name='DataText' Style='{StaticResource Lbl}' Text='…' TextTrimming='CharacterEllipsis'/>
         </DockPanel>
+        <DockPanel Margin='0,6,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='HTTPS 代理' Width='66'/>
+          <TextBox x:Name='ProxyBox' Style='{StaticResource TxtBox}'/>
+        </DockPanel>
+        <TextBlock FontSize='10' Foreground='#7D8BB0' TextWrapping='Wrap' Margin='1,3,0,0'
+                   Text='留空 = 直连；填 http://127.0.0.1:7890 之类的地址可让查询走指定代理（网络出口被限制 HTTP 451 时很有用）。'/>
         <TextBlock Style='{StaticResource Sect}' Text='套餐用量（5 小时 / 7 天窗口）'/>
         <StackPanel x:Name='PlanList'/>
         <TextBlock Style='{StaticResource Sect}' Text='提醒'/>
@@ -339,7 +345,7 @@ namespace DshPet
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
-                "EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
@@ -413,6 +419,7 @@ namespace DshPet
             BindNumberBox("BudgetBox", "alert.budget");
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
             BindNumberBox("CloneMaxBox", "clones.max");
+            BindField("ProxyBox", "network.proxy");
             ((Button)ui["RefreshBtn"]).Click += delegate { engine.Data.Refresh(); };
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
             ((Button)ui["CloneRemoveBtn"]).Click += delegate { engine.RemoveClone(); Update(); };
@@ -441,6 +448,16 @@ namespace DshPet
             box.KeyDown += delegate(object sender, KeyEventArgs e)
             {
                 if (e.Key == Key.Enter) SaveNumberBox(box, path);
+            };
+        }
+
+        private void BindField(string name, string path)
+        {
+            TextBox box = (TextBox)ui[name];
+            box.LostFocus += delegate { SaveField(path, box.Text); };
+            box.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter) SaveField(path, box.Text);
             };
         }
 
@@ -1014,6 +1031,7 @@ namespace DshPet
                 ((TextBox)ui["BudgetBox"]).Text = budgetValue > 0 ? budgetValue.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
+                ((TextBox)ui["ProxyBox"]).Text = cfg.GetStringAt("network.proxy", "");
                 ((TextBlock)ui["CloneCount"]).Text = engine.Pets.Count.ToString(CultureInfo.InvariantCulture) + " 只";
                 string role = cfg.GetString("", "role", "");
                 foreach (object child in ((WrapPanel)ui["RolePanel"]).Children)

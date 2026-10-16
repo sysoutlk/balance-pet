@@ -58,34 +58,7 @@ namespace DshPet
 
     internal static class Plans
     {
-        private static readonly HttpClient Client = CreateClient();
         public const string KimiCliVersion = "1.41.0";
-
-        private static HttpClient CreateClient()
-        {
-            // Plan endpoints (chatgpt.com / kimi.com) stall behind a stale system proxy, which
-            // .NET picks up from the IE settings while other tools connect directly.
-            try
-            {
-                // Explicit TLS 1.2: the framework default can be too old for some gateways,
-                // while the TLS 1.3 enum value hangs older SChannel builds.
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-            }
-            catch
-            {
-            }
-            HttpClientHandler handler = new HttpClientHandler();
-            try
-            {
-                handler.UseProxy = false;
-            }
-            catch
-            {
-            }
-            HttpClient client = new HttpClient(handler);
-            client.Timeout = TimeSpan.FromSeconds(45);
-            return client;
-        }
 
         public static List<PlanDef> Catalog()
         {
@@ -150,7 +123,7 @@ namespace DshPet
                     state.Error = "未配置 API Key";
                     return state;
                 }
-                string body = Get(def, url, key);
+                string body = Get(cfg, def, url, key);
                 switch (def.Parser)
                 {
                     case "kimi": ParseKimi(body, state); break;
@@ -236,8 +209,9 @@ namespace DshPet
         }
 
         // ------------------------------------------------------------ HTTP
-        private static string Get(PlanDef def, string url, string key)
+        private static string Get(Config cfg, PlanDef def, string url, string key)
         {
+            HttpClient client = Http.For(cfg, 45);
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation("Accept", "application/json");
             if (def.Auth == "kimiCli")
@@ -278,7 +252,7 @@ namespace DshPet
                 request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
                 request.Headers.TryAddWithoutValidation("User-Agent", "dsh-pet/1.1");
             }
-            HttpResponseMessage response = Client.SendAsync(request).Result;
+            HttpResponseMessage response = client.SendAsync(request).Result;
             string body = response.Content.ReadAsStringAsync().Result;
             if (!response.IsSuccessStatusCode)
             {
@@ -287,6 +261,7 @@ namespace DshPet
                 if (code == 401 || code == 403) message = "密钥无效或权限不足";
                 else if (code == 404) message = "接口不存在";
                 else if (code == 429) message = "请求过于频繁，稍后再试";
+                else if (code == 451) message = "网络出口被服务方限制（HTTP 451），请更换线路/节点或设置 network.proxy";
                 else message = "请求失败";
                 throw new ProviderException("HTTP " + code + " · " + message, body);
             }

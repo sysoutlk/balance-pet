@@ -80,6 +80,13 @@
 火山方舟（豆包）的 Agent / Coding Plan 走的是需要 AK/SK 签名的控制面 OpenAPI，暂未内置；
 如果有网关把它包装成普通 JSON，用「自定义用量接口」即可接入。
 
+### 网络与代理
+
+查询默认**直连**（.NET 默认会继承系统代理，残留的代理设置会让 chatgpt.com 之类请求卡住）。
+如果出口本身受限（例如 OpenAI 对某些线路返回 `HTTP 451`），在设置卡片「数据源」的
+**HTTPS 代理**里填一个可用代理（如 `http://127.0.0.1:7890`）即可，清空则恢复直连；
+对应配置项是 `network.proxy`。
+
 以下平台**没有公开的 API Key 余额接口**，设置卡片里会注明，需要用官方控制台查看；
 有网关或中转的可以走「自定义接口」：
 通义千问 DashScope、豆包（火山方舟）、智谱 GLM、OpenAI、Anthropic Claude、Google Gemini、xAI Grok。
