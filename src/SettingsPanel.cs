@@ -270,6 +270,10 @@ namespace DshPet
           <TextBlock Text='主题色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
         </StackPanel>
+        <StackPanel Orientation='Horizontal' Margin='1,4,0,0'>
+          <TextBlock Text='混合配色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
+          <WrapPanel x:Name='MixPanel'/>
+        </StackPanel>
         <Grid Margin='0,9,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -415,6 +419,7 @@ namespace DshPet
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
                 "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel",
+                "MixPanel",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
@@ -493,6 +498,7 @@ namespace DshPet
             WireDropdown("FontDropBtn", FontValues, FontLabels, "bubble.font", false);
             WireDropdown("NumberFontDropBtn", NumberFontValues, NumberFontLabels, "bubble.numberFont", false);
             BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
+            BuildMixPalette();
             ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
@@ -1179,6 +1185,7 @@ namespace DshPet
                 SyncBubbleSlider("BubbleOpacitySlider", "BubbleOpacityVal", cfg.GetNumberAt("bubble.opacity", 1), "0%");
                 SyncBubbleSlider("BubbleShadowSlider", null, cfg.GetNumberAt("bubble.shadow", 0.28), "0.00");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
+                MarkMixPalette();
                 double below = cfg.GetNumberAt("alert.below", 0);
                 ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 double budgetValue = cfg.GetNumberAt("alert.budget", 0);
@@ -1226,8 +1233,9 @@ namespace DshPet
         // 主题 / 特效 / 字体：下拉选项（简单、好懂，一处设置）
         private static readonly string[] ThemeValues = new string[] { "light", "dark", "system", "glass", "frost", "monet" };
         private static readonly string[] ThemeLabels = new string[] { "浅色", "深色", "跟随系统", "液体玻璃", "磨砂", "莫奈取色" };
-        private static readonly string[] EffectValues = new string[] { "off", "mix", "flow", "duo", "breathe", "rainbow", "orbit", "shimmer" };
-        private static readonly string[] EffectLabels = new string[] { "关闭", "混色流动（多色混合）", "流光", "双色流转", "呼吸", "彩虹", "环游", "流光闪" };
+        // 动效（独立维度，和"混合配色"任意组合）
+        private static readonly string[] EffectValues = new string[] { "off", "flow", "swirl", "breathe", "shimmer", "shift", "rainbow" };
+        private static readonly string[] EffectLabels = new string[] { "关闭", "流动（颜色滑动）", "旋转（渐变转角度）", "呼吸（明暗起伏）", "闪动（快速高光）", "色相漂移", "彩虹（全色相）" };
         private static readonly string[] FontValues = new string[]
         {
             "", "Microsoft YaHei UI", "DengXian", "SimSun", "KaiTi", "Microsoft YaHei"
@@ -1519,6 +1527,57 @@ namespace DshPet
                 Border swatch = child as Border;
                 if (swatch == null) continue;
                 bool selected = Convert.ToString(swatch.Tag) == current;
+                swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
+                swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+            }
+        }
+
+        /// <summary>混合配色：点一下加入 / 再点移除，组成你自己的多色方案（bubble.colors）。</summary>
+        private void BuildMixPalette()
+        {
+            WrapPanel panel = (WrapPanel)ui["MixPanel"];
+            panel.Children.Clear();
+            foreach (string hex in ColorPresets)
+            {
+                Border swatch = new Border();
+                swatch.Width = 20;
+                swatch.Height = 20;
+                swatch.CornerRadius = new CornerRadius(6);
+                swatch.Margin = new Thickness(0, 0, 6, 4);
+                swatch.Cursor = System.Windows.Input.Cursors.Hand;
+                swatch.Tag = hex;
+                swatch.Background = Brush(hex);
+                swatch.ToolTip = "点一下加入 / 再点移除";
+                string chosen = hex;
+                swatch.MouseLeftButtonUp += delegate { ToggleMixColor(chosen); };
+                panel.Children.Add(swatch);
+            }
+        }
+
+        private void ToggleMixColor(string hex)
+        {
+            List<string> colors = new List<string>();
+            foreach (string item in cfg.GetStrings("bubble", "colors"))
+            {
+                if (!string.IsNullOrEmpty(item)) colors.Add(item);
+            }
+            if (colors.Contains(hex)) colors.Remove(hex);
+            else colors.Add(hex);
+            cfg.SetAt("bubble.colors", colors.ToArray());
+            cfg.Save();
+            engine.Data.Refresh();
+            Update();
+        }
+
+        private void MarkMixPalette()
+        {
+            List<string> colors = cfg.GetStrings("bubble", "colors");
+            WrapPanel panel = (WrapPanel)ui["MixPanel"];
+            foreach (object child in panel.Children)
+            {
+                Border swatch = child as Border;
+                if (swatch == null) continue;
+                bool selected = colors.Contains(Convert.ToString(swatch.Tag));
                 swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
                 swatch.BorderThickness = new Thickness(selected ? 2 : 0);
             }

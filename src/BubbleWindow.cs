@@ -341,9 +341,10 @@ namespace DshPet
             return Color.FromArgb(alpha, color.R, color.G, color.B);
         }
 
+        // 动效是独立维度：颜色怎么混（bubble.colors）与动效怎么动互不绑定，可任意组合。
         private static readonly string[] DynamicModes = new string[]
         {
-            "rainbow", "aurora", "breathe", "duo", "flow", "orbit", "shimmer", "mix"
+            "flow", "swirl", "breathe", "shimmer", "shift", "rainbow"
         };
 
         private Color DynamicColor()
@@ -352,37 +353,43 @@ namespace DshPet
             {
                 case "rainbow":
                     return HueColor(phase * 260);
-                case "aurora":
-                    {
-                        Color c = HueColor(Hue(baseAccent) + 60 * effectDepth * Math.Sin(Direction() * phase * 0.9));
-                        double k = 0.82 + 0.18 * effectDepth * Math.Sin(Direction() * phase * 1.7);
-                        return Color.FromRgb((byte)(c.R * k), (byte)(c.G * k), (byte)(c.B * k));
-                    }
                 case "breathe":
                     {
                         double k = 1 - effectDepth * (0.5 + 0.5 * Math.Sin(Direction() * phase * 1.4));
-                        return Color.FromRgb((byte)(baseAccent.R * k), (byte)(baseAccent.G * k), (byte)(baseAccent.B * k));
+                        return Modulate(BlendCenter(), k);
                     }
-                case "duo":
-                    return Blend(baseAccent, secondColor, PingPong(1.2));
-                case "flow":
-                    return Blend(baseAccent, secondColor, (phase * 0.5) % 1.0);
-                case "orbit":
-                    {
-                        double span = 180 * effectDepth;
-                        return HueColor(Hue(baseAccent) + span * Math.Sin(Direction() * phase * 1.1));
-                    }
+                case "shift":
+                    return HueColor(Hue(BlendCenter()) + effectDepth * 90 * Math.Sin(Direction() * phase * 0.8));
                 case "shimmer":
                     {
-                        double k = 1 - effectDepth * (0.45 + 0.45 * Math.Sin(Direction() * phase * 2.6));
-                        return Color.FromRgb(
-                            (byte)Math.Min(255, baseAccent.R + (255 - baseAccent.R) * (1 - k) * 0.55),
-                            (byte)Math.Min(255, baseAccent.G + (255 - baseAccent.G) * (1 - k) * 0.55),
-                            (byte)Math.Min(255, baseAccent.B + (255 - baseAccent.B) * (1 - k) * 0.55));
+                        double k = 0.75 + 0.5 * (0.5 + 0.5 * Math.Sin(Direction() * phase * 3.2)) * effectDepth;
+                        return Modulate(BlendCenter(), k);
                     }
+                case "flow":
+                case "swirl":
+                    return BlendCenter();
                 default:
                     return accent;
             }
+        }
+
+        private Color BlendCenter()
+        {
+            List<Color> colors = blendColors;
+            if (colors.Count == 0) return baseAccent;
+            if (colors.Count == 1) return colors[0];
+            double t = (phase * 0.25) % 1.0;
+            int index = (int)Math.Floor(t * colors.Count);
+            double local = t * colors.Count - index;
+            return Blend(colors[index % colors.Count], colors[(index + 1) % colors.Count], local);
+        }
+
+        private static Color Modulate(Color color, double factor)
+        {
+            return Color.FromRgb(
+                (byte)Math.Min(255, Math.Max(0, color.R * factor)),
+                (byte)Math.Min(255, Math.Max(0, color.G * factor)),
+                (byte)Math.Min(255, Math.Max(0, color.B * factor)));
         }
 
         /// <summary>0..1 ping-pong wave; depth scales how far it swings, reverse flips the phase.</summary>
@@ -401,9 +408,12 @@ namespace DshPet
         private Brush CurrentBrush()
         {
             if (dynamicMode.Length == 0) return FromColor(accent);
-            if (dynamicMode == "mix" || dynamicMode == "flow")
+            if (dynamicMode == "flow") return BlendBrush(0.32, true);
+            if (dynamicMode == "swirl") return BlendBrush(0.12, false);
+            if (dynamicMode == "rainbow") return RainbowBrush();
+            if (dynamicMode == "breathe" || dynamicMode == "shimmer" || dynamicMode == "shift")
             {
-                return BlendBrush(dynamicMode == "mix" ? 0.32 : 0.16);
+                return BlendBrush(0.05, true, true);   // 静止混色，由 DynamicColor 做明暗/色相动效
             }
             if (dynamicMode != "flow") return FromColor(DynamicColor());
             Color a = DynamicColor();
@@ -419,10 +429,15 @@ namespace DshPet
         }
 
         /// <summary>
-        /// 多色混搭：把 3~4 个颜色做成一个持续流动的渐变（颜色互相"流动融合"），
-        /// 角度还会缓慢旋转，就是 Codex++ 气泡那种动态色的感觉。
+        /// 多色混搭：把用户选的颜色做成渐变。slide = 颜色沿轴滑动（流动），
+        /// 否则只缓慢旋转角度（旋转）；calm = 色标基本不动，交给明暗/色相动效。
         /// </summary>
-        private Brush BlendBrush(double speed)
+        private Brush BlendBrush(double speed, bool slide)
+        {
+            return BlendBrush(speed, slide, false);
+        }
+
+        private Brush BlendBrush(double speed, bool slide, bool calm)
         {
             List<Color> colors = blendColors.Count > 1
                 ? blendColors
@@ -436,11 +451,25 @@ namespace DshPet
             int count = colors.Count;
             for (int i = 0; i < count; i++)
             {
-                double offset = (i / (double)count + phase * speed) % 1.0;
+                double offset = calm
+                    ? i / (double)count
+                    : (i / (double)count + (slide ? phase * speed : 0)) % 1.0;
                 brush.GradientStops.Add(new GradientStop(colors[i], offset));
             }
-            // 首尾再补一次，过渡不断层。
-            brush.GradientStops.Add(new GradientStop(colors[0], 1.0));
+            if (!calm) brush.GradientStops.Add(new GradientStop(colors[0], 1.0));
+            return brush;
+        }
+
+        private Brush RainbowBrush()
+        {
+            LinearGradientBrush brush = new LinearGradientBrush();
+            double angle = phase * 0.2;
+            brush.StartPoint = new Point(0.5 + 0.6 * Math.Cos(angle), 0.5 + 0.6 * Math.Sin(angle));
+            brush.EndPoint = new Point(0.5 - 0.6 * Math.Cos(angle), 0.5 - 0.6 * Math.Sin(angle));
+            for (int i = 0; i <= 5; i++)
+            {
+                brush.GradientStops.Add(new GradientStop(HueColor(phase * 260 + i * 72), i / 5.0));
+            }
             return brush;
         }
 
