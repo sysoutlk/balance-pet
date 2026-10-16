@@ -473,8 +473,9 @@ namespace DshPet
             BindSwitch("BubbleTailChk", "bubble", "tail");
             ((Button)ui["BubbleStyleBtn"]).Click += delegate
             {
-                string next = cfg.GetString("bubble", "style", "light") == "dark" ? "light" : "dark";
-                cfg.Set("bubble", "style", next);
+                string next = NextTheme(CurrentTheme());
+                cfg.Set("bubble", "theme", next);
+                cfg.Set("bubble", "style", "");
                 cfg.Save();
                 engine.Data.Refresh();
                 Update();
@@ -1152,7 +1153,7 @@ namespace DshPet
                 ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
                 ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
                 ((CheckBox)ui["RandomRoleChk"]).IsChecked = cfg.GetFlagAt("roles.random", true);
-                ((Button)ui["BubbleStyleBtn"]).Content = cfg.GetString("bubble", "style", "light") == "dark" ? "深色" : "浅色";
+                ((Button)ui["BubbleStyleBtn"]).Content = ThemeLabel(CurrentTheme());
                 ((CheckBox)ui["BubbleTrendChk"]).IsChecked = cfg.GetFlag("bubble", "trend", true);
                 ((CheckBox)ui["BubbleTailChk"]).IsChecked = cfg.GetFlag("bubble", "tail", true);
                 ((Button)ui["BubbleEffectBtn"]).Content = EffectLabel(cfg.GetString("bubble", "effect", "off"));
@@ -1221,6 +1222,41 @@ namespace DshPet
                 if (order[i] == current) return order[(i + 1) % order.Length];
             }
             return "breathe";
+        }
+
+        // 主题：浅色 / 深色 / 系统 / 液体玻璃 / 磨砂 / 莫奈取色
+        private static readonly string[] Themes = new string[] { "light", "dark", "system", "glass", "frost", "monet" };
+
+        private string CurrentTheme()
+        {
+            string theme = cfg.GetString("bubble", "theme", "");
+            if (string.IsNullOrEmpty(theme)) theme = cfg.GetString("bubble", "style", "light");
+            if (theme == "system")
+            {
+                theme = BubbleTheme.SystemPrefersDark() ? "dark" : "light";
+            }
+            return theme;
+        }
+
+        private static string ThemeLabel(string theme)
+        {
+            switch (theme)
+            {
+                case "dark": return "深色";
+                case "glass": return "液体玻璃";
+                case "frost": return "磨砂";
+                case "monet": return "莫奈取色";
+                default: return "浅色";
+            }
+        }
+
+        private static string NextTheme(string current)
+        {
+            for (int i = 0; i < Themes.Length; i++)
+            {
+                if (Themes[i] == current) return Themes[(i + 1) % Themes.Length];
+            }
+            return "dark";
         }
 
         private static string EffectLabel(string effect)

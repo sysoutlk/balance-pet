@@ -505,6 +505,7 @@ namespace DshPet
             SetDefault("bubble", "seconds", 7);
             SetDefault("bubble", "pollSeconds", 60);
             SetDefault("bubble", "style", "light");
+            SetDefault("bubble", "theme", "");
             SetDefault("bubble", "accent", "#4B6BFB");
             SetDefault("bubble", "effect", "off");
             SetDefault("bubble", "color1", "#4B6BFB");

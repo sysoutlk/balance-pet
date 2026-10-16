@@ -89,6 +89,7 @@ namespace DshPet
         private readonly StackPanel dots;
 
         private bool dark;
+        private ThemePalette palette = BubbleTheme.Resolve("light");
         private Color accent = (Color)ColorConverter.ConvertFromString("#4B6BFB");
         private Color baseAccent = (Color)ColorConverter.ConvertFromString("#4B6BFB");
         private Color secondColor = (Color)ColorConverter.ConvertFromString("#A855F7");
@@ -455,8 +456,10 @@ namespace DshPet
         public void ApplyStyle(Config cfg)
         {
             if (cfg == null) return;
-            string style = cfg.GetString("bubble", "style", "light");
-            dark = string.Equals(style, "dark", StringComparison.OrdinalIgnoreCase);
+            string theme = cfg.GetString("bubble", "theme", "");
+            if (string.IsNullOrEmpty(theme)) theme = cfg.GetString("bubble", "style", "light");
+            palette = BubbleTheme.Resolve(theme);
+            dark = palette.Dark;
             string accentText = cfg.GetString("bubble", "accent", "#4B6BFB");
             // Effect + colour pair. bubble.accent stays supported as the "primary colour" alias
             // (and older values like "rainbow"/"炫彩" still pick the matching effect).
@@ -475,6 +478,13 @@ namespace DshPet
             baseAccent = ParseColor(cfg.GetString("bubble", "color1", ""), accentText);
             secondColor = ParseColor(cfg.GetString("bubble", "color2", "#A855F7"), "#A855F7");
             accent = baseAccent;
+            // Monet (and any theme that brings its own accent) tints the widget unless the user
+            // picked colours explicitly.
+            if (theme == "monet" && baseAccent == (Color)ColorConverter.ConvertFromString("#4B6BFB"))
+            {
+                baseAccent = palette.Accent;
+                accent = palette.Accent;
+            }
             speedFactor = cfg.GetNumber("bubble", "speed", 1.0);
             if (speedFactor < 0.1) speedFactor = 0.1;
             if (speedFactor > 5) speedFactor = 5;
@@ -489,8 +499,8 @@ namespace DshPet
             showTrend = cfg.GetFlag("bubble", "trend", true);
             showTail = cfg.GetFlag("bubble", "tail", true);
 
-            card.Background = Brush(dark ? DarkCard : LightCard);
-            card.BorderBrush = Brush(dark ? DarkBorder : LightBorder);
+            card.Background = new SolidColorBrush(palette.Card);
+            card.BorderBrush = new SolidColorBrush(palette.Border);
             string cardColor = cfg.GetString("bubble", "cardColor", "");
             if (!string.IsNullOrEmpty(cardColor) && cardColor.StartsWith("#", StringComparison.Ordinal))
             {
@@ -515,7 +525,7 @@ namespace DshPet
             if (boxWidth < 140) boxWidth = 140;
             body.MinWidth = boxWidth;
             Opacity = cfg.GetNumber("bubble", "opacity", 1.0);
-            shadow.Opacity = cfg.GetNumber("bubble", "shadow", 0.28);
+            shadow.Opacity = cfg.GetNumber("bubble", "shadow", palette.ShadowOpacity);
             foreach (KeyValuePair<TextBlock, double> pair in scalable)
             {
                 pair.Key.FontSize = Math.Round(pair.Value * fontScale, 1);
@@ -527,15 +537,15 @@ namespace DshPet
             tailBottomShape.BorderBrush = card.BorderBrush;
             tailBottomShape.BorderThickness = card.BorderThickness;
             titleDot.Fill = CurrentBrush();
-            title.Foreground = Brush(dark ? DarkTitle : LightTitle);
-            amount.Foreground = Brush(dark ? DarkBig : LightBig);
-            sub.Foreground = Brush(dark ? DarkMuted : LightMuted);
-            quipBox.Background = Brush(dark ? DarkQuipBg : LightQuipBg);
-            quip.Foreground = Brush(dark ? DarkQuipText : LightQuipText);
-            source.Foreground = Brush(dark ? DarkSource : LightSource);
+            title.Foreground = new SolidColorBrush(palette.Title);
+            amount.Foreground = new SolidColorBrush(palette.Big);
+            sub.Foreground = new SolidColorBrush(palette.Muted);
+            quipBox.Background = new SolidColorBrush(palette.QuipBackground);
+            quip.Foreground = new SolidColorBrush(palette.QuipText);
+            source.Foreground = new SolidColorBrush(palette.Source);
             foreach (Border bar in bars)
             {
-                if (bar.Tag == null) bar.Background = Brush(dark ? DarkBarEmpty : LightBarEmpty);
+                if (bar.Tag == null) bar.Background = new SolidColorBrush(palette.BarEmpty);
             }
             ApplyAccentBrushes();
         }
@@ -566,11 +576,13 @@ namespace DshPet
                 line.Margin = new Thickness(0, 3, 0, 0);
                 line.ColumnDefinitions.Add(new ColumnDefinition());
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                TextBlock name = MakeText(10.5, dark ? DarkRowName : LightRowName, row.Key);
+                TextBlock name = MakeText(10.5, "#000000", row.Key);
+                name.Foreground = new SolidColorBrush(palette.Muted);
                 name.VerticalAlignment = VerticalAlignment.Center;
                 name.TextTrimming = TextTrimming.CharacterEllipsis;
                 Grid.SetColumn(name, 0);
-                TextBlock value = MakeText(11.5, dark ? DarkRowValue : LightRowValue, row.Value);
+                TextBlock value = MakeText(11.5, "#000000", row.Value);
+                value.Foreground = new SolidColorBrush(palette.RowValue);
                 value.FontWeight = FontWeights.SemiBold;
                 value.TextAlignment = TextAlignment.Right;
                 value.Margin = new Thickness(10, 0, 0, 0);
@@ -667,8 +679,8 @@ namespace DshPet
                 bar.Height = max > 0 && !empty ? Math.Max(3, Math.Round(26 * usage / max)) : 3;
                 bool today = !empty && index == history.Count - 1;
                 if (today) bar.Background = FromColor(accent);
-                else if (usage > 0) bar.Background = Brush(dark ? DarkBar : LightBar);
-                else bar.Background = Brush(dark ? DarkBarEmpty : LightBarEmpty);
+                else if (usage > 0) bar.Background = new SolidColorBrush(palette.Bar);
+                else bar.Background = new SolidColorBrush(palette.BarEmpty);
             }
         }
 
