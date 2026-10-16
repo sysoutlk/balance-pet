@@ -221,7 +221,9 @@ namespace DshPet
           </StackPanel>
         </DockPanel>
         <DockPanel Margin='0,6,0,0'>
-          <StackPanel x:Name='Nav' DockPanel.Dock='Left' Width='132'/>
+          <Border x:Name='NavHost' DockPanel.Dock='Left' Width='140' Background='__NAV__' CornerRadius='10' Padding='6,6,7,6' Margin='0,0,8,0'>
+            <StackPanel x:Name='Nav'/>
+          </Border>
           <StackPanel x:Name='Main'/>
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='主题与气泡'/>
@@ -1360,6 +1362,7 @@ namespace DshPet
             string buttonHover = dark ? "#33406A" : "#E1E6F4";
             string border = dark ? "#39456B" : "#D9DFEC";
             string chip = dark ? "#202A42" : "#E9EDF7";
+            string nav = dark ? "#171D2B" : "#F1F4FA";
             if (theme == "monet")
             {
                 row = ToHex(dark ? palette.QuipBackground : palette.BarEmpty);
@@ -1369,8 +1372,12 @@ namespace DshPet
                 buttonHover = ToHex(palette.Bar);
                 border = ToHex(palette.Border);
                 chip = ToHex(palette.BarEmpty);
+                nav = ToHex(dark ? palette.Card : palette.BarEmpty);
             }
+            if (theme == "glass") nav = "#B3FFFFFF";
+            if (theme == "frost") nav = "#D9FFFFFF";
             return Xaml
+                .Replace("__NAV__", nav)
                 .Replace("__CARD__", card)
                 .Replace("__CARD_BORDER__", cardBorder)
                 .Replace("__FG2__", ToHex(palette.Dark ? palette.RowValue : palette.Title))
