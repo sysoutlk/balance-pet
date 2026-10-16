@@ -7,8 +7,6 @@
 硅基流动、OpenRouter（覆盖 GPT / Claude / Gemini / Grok）都支持直连查询，其他平台可以走
 「自定义接口」。
 
-![screenshot](assets/screenshot.png)
-
 ## 特性
 
 - **编译版，不是脚本**：C# + WPF 单文件 exe（约 180 KB），无 Node / Python / PowerShell 依赖，
@@ -28,8 +26,6 @@
 3. 右键桌宠打开设置卡片，在「余额接口」里填各平台 API Key 并点「应用」。
 4. 可选：运行 `scripts\install-desktop-shortcut.ps1` 创建桌面快捷方式；
    运行 `scripts\install-autostart.ps1` 加入开机自启。
-
-![settings](assets/screenshot-settings.png)
 
 ### 交互
 

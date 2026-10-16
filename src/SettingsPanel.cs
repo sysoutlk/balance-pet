@@ -337,6 +337,22 @@ namespace DshPet
           <Slider x:Name='OpacitySlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.4' Maximum='1'/>
           <TextBlock x:Name='OpacityVal' Grid.Column='2' Style='{StaticResource Val}' Text='100%'/>
         </Grid>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='帧率'/>
+          <Slider x:Name='FpsSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='15' Maximum='120' IsSnapToTickEnabled='True' TickFrequency='1'/>
+          <TextBlock x:Name='FpsVal' Grid.Column='2' Style='{StaticResource Val}' Text='25 fps'/>
+        </Grid>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='空闲帧率'/>
+          <Slider x:Name='IdleFpsSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='1' Maximum='30' IsSnapToTickEnabled='True' TickFrequency='1'/>
+          <TextBlock x:Name='IdleFpsVal' Grid.Column='2' Style='{StaticResource Val}' Text='4 fps'/>
+        </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
         <UniformGrid x:Name='ActionGrid' Columns='4'/>
         <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
@@ -438,6 +454,7 @@ namespace DshPet
         private readonly DispatcherTimer previewTimer = new DispatcherTimer();
         private double previewPhase;
         private bool updating;
+        private int deviceHz = 60;          // 当前显示器刷新率：帧率滑杆的上限就是它
         // 代码里生成的行（数据源、套餐用量、输入框等）也跟随主题配色。
         private Color cRow;
         private Color cField;
@@ -474,6 +491,7 @@ namespace DshPet
             {
                 "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
+                "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
@@ -530,6 +548,29 @@ namespace DshPet
                 cfg.Set("", "opacity", Math.Round(e.NewValue, 2));
                 foreach (PetWindow pet in engine.Pets) pet.Opacity = e.NewValue;
                 ((TextBlock)ui["OpacityVal"]).Text = ((int)Math.Round(e.NewValue * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+                cfg.Save();
+            };
+            // 帧率上限 = 当前显示器的刷新率（滑块直接顶到设备极限，比屏幕快没意义）
+            deviceHz = Native.RefreshRate();
+            ((Slider)ui["FpsSlider"]).Maximum = Math.Max(30, deviceHz);
+            ((Slider)ui["FpsSlider"]).ToolTip = "当前显示器最高 " + deviceHz + " Hz";
+            // 空闲帧率同样顶到设备上限：想要一直丝滑的人可以直接拉满（代价是更耗电）。
+            ((Slider)ui["IdleFpsSlider"]).Maximum = Math.Max(30, deviceHz);
+            ((Slider)ui["IdleFpsSlider"]).ToolTip = "当前显示器最高 " + deviceHz + " Hz；拉满会更耗电";
+            ((Slider)ui["FpsSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                int fps = (int)Math.Round(e.NewValue);
+                cfg.SetAt("frames.activePerSecond", (double)fps);
+                ((TextBlock)ui["FpsVal"]).Text = fps.ToString(CultureInfo.InvariantCulture) + " fps";
+                cfg.Save();
+            };
+            ((Slider)ui["IdleFpsSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                int fps = (int)Math.Round(e.NewValue);
+                cfg.SetAt("frames.idlePerSecond", (double)fps);
+                ((TextBlock)ui["IdleFpsVal"]).Text = fps.ToString(CultureInfo.InvariantCulture) + " fps";
                 cfg.Save();
             };
             ((Slider)ui["SpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1061,20 +1102,30 @@ namespace DshPet
             if (signature == alertRowKey && list.Children.Count > 0) return;
             alertRowKey = signature;
             list.Children.Clear();
-            int count = 0;
+            List<UIElement> providerRows = new List<UIElement>();
             foreach (ProviderDef def in Providers.Effective(cfg))
             {
                 if (!cfg.GetFlagAt("providers." + def.Id + ".on", false)) continue;
-                list.Children.Add(BuildAlertRow(def));
-                count++;
+                if (!def.HasBalance) continue;   // 没有公开余额接口的平台没法做余额预警
+                providerRows.Add(BuildAlertRow(def));
             }
+            List<UIElement> planRows = new List<UIElement>();
             foreach (PlanDef plan in Plans.Catalog())
             {
                 if (!cfg.GetFlagAt("plans." + plan.Id + ".on", false)) continue;
-                list.Children.Add(BuildPlanAlertRow(plan));
-                count++;
+                planRows.Add(BuildPlanAlertRow(plan));
             }
-            if (count == 0)
+            if (providerRows.Count > 0)
+            {
+                list.Children.Add(AlertGroup("余额与预算（按平台）"));
+                foreach (UIElement row in providerRows) list.Children.Add(row);
+            }
+            if (planRows.Count > 0)
+            {
+                list.Children.Add(AlertGroup("套餐额度（按套餐）"));
+                foreach (UIElement row in planRows) list.Children.Add(row);
+            }
+            if (providerRows.Count == 0 && planRows.Count == 0)
             {
                 TextBlock hint = new TextBlock();
                 hint.Text = "先在「余额接口」或「套餐额度」里启用平台，它们的阈值就会出现在这里。";
@@ -1083,6 +1134,17 @@ namespace DshPet
                 hint.Margin = new Thickness(1, 2, 0, 2);
                 list.Children.Add(hint);
             }
+        }
+
+        /// <summary>提醒页的小分组标题：开多少显示多少，分组只是让页面好读。</summary>
+        private TextBlock AlertGroup(string text)
+        {
+            TextBlock group = new TextBlock();
+            group.Text = text;
+            group.FontSize = 10;
+            group.Foreground = new SolidColorBrush(cMuted);
+            group.Margin = new Thickness(1, 4, 0, 4);
+            return group;
         }
 
         private FrameworkElement BuildAlertRow(ProviderDef def)
@@ -1439,6 +1501,22 @@ namespace DshPet
                 SyncBubbleSlider("BubbleTailSlider", null, cfg.GetNumberAt("bubble.tailSize", 13), "0");
                 SyncBubbleSlider("BubbleOpacitySlider", "BubbleOpacityVal", cfg.GetNumberAt("bubble.opacity", 1), "0%");
                 SyncBubbleSlider("BubbleShadowSlider", null, cfg.GetNumberAt("bubble.shadow", 0.28), "0.00");
+                double fpsCap = Math.Max(30, deviceHz);
+                // 显示器降级/换了屏（或旧配置写的是 120）时，把超出上限的值收回来写回配置。
+                if (cfg.GetNumberAt("frames.activePerSecond", 25) > fpsCap)
+                {
+                    cfg.SetAt("frames.activePerSecond", fpsCap);
+                    cfg.Save();
+                }
+                if (cfg.GetNumberAt("frames.idlePerSecond", 4) > fpsCap)
+                {
+                    cfg.SetAt("frames.idlePerSecond", fpsCap);
+                    cfg.Save();
+                }
+                SyncBubbleSlider("FpsSlider", "FpsVal",
+                    Math.Min(cfg.GetNumberAt("frames.activePerSecond", 25), fpsCap), "0 fps");
+                SyncBubbleSlider("IdleFpsSlider", "IdleFpsVal",
+                    Math.Min(cfg.GetNumberAt("frames.idlePerSecond", 4), fpsCap), "0 fps");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
                 UpdatePreview();

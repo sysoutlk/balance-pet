@@ -40,6 +40,7 @@ namespace DshPet
         private string alertText = "";
         private string messageTitle = "";
         private string messageText = "";
+        private string alertNote = "";
         private string bubbleQuip = "";
         public bool Demo;
         public bool Quitting;
@@ -60,6 +61,9 @@ namespace DshPet
             Data.Start();
             timer.Interval = TimeSpan.FromMilliseconds(60);
             timer.Tick += OnTick;
+            // 先要 1ms 定时精度，帧率设置（frames.*.PerSecond）才不会被系统默认的
+            // ~15.6ms 调度精度磨掉一半（进程退出自动恢复，不需要手动还回去）。
+            Native.RaiseTimerResolution(1);
             timer.Start();
             if (Demo && Pets.Count > 0)
             {
@@ -161,7 +165,10 @@ namespace DshPet
                 active = true;
             }
 
-            TimeSpan interval = active ? TimeSpan.FromMilliseconds(40) : TimeSpan.FromMilliseconds(260);
+            // 帧率可调：动作/拖动/扔出去时按 frames.activePerSecond，闲下来按 frames.idlePerSecond
+            TimeSpan interval = active
+                ? FrameInterval("frames.activePerSecond", 25, 4)
+                : FrameInterval("frames.idlePerSecond", 4, 4);
             if (timer.Interval != interval) timer.Interval = interval;
 
             if ((now - lastPositionSave).TotalSeconds >= 30)
@@ -169,6 +176,20 @@ namespace DshPet
                 lastPositionSave = now;
                 SavePositions();
             }
+        }
+
+        /// <summary>把「每秒多少帧」换算成定时器间隔（毫秒）：帧率可调（frames.*），带上下限兜底。</summary>
+        private TimeSpan FrameInterval(string key, double fallback, double minMs)
+        {
+            double fps = cfg.GetNumberAt(key, fallback);
+            if (fps < 1) fps = fallback;
+            // 上限就是显示器刷新率：比屏幕还快没有意义，白白耗电。
+            int deviceHz = Native.RefreshRate();
+            if (fps > deviceHz) fps = deviceHz;
+            double ms = 1000.0 / fps;
+            if (ms < minMs) ms = minMs;
+            if (ms > 600) ms = 600;
+            return TimeSpan.FromMilliseconds(Math.Round(ms));
         }
 
         private void UpdatePet(PetWindow pet, DateTime now, double dt)
@@ -928,15 +949,27 @@ namespace DshPet
 
         private void ShowAlert(PetWindow pet, string title, string text)
         {
+            ShowAlert(pet, title, text, "");
+        }
+
+        /// <summary>
+        /// 提醒气泡：大数字槽位只放短值（金额/百分比/条数），长解释放备注栏换行显示，
+        /// 否则会被 Viewbox 缩成蚂蚁字。
+        /// </summary>
+        private void ShowAlert(PetWindow pet, string title, string text, string note)
+        {
             if (pet == null) return;
             bubbleIsMessage = true;
             bubbleIsAlert = true;
             alertTitle = title;
             alertText = text;
+            alertNote = note;
             messageTitle = title;
-            messageText = text;
+            messageText = string.IsNullOrEmpty(note) ? text : text + " " + note;
             bubbleQuip = "";
-            ShowView(pet, BuildAlertView(title, text), 8);
+            // 明细越长，气泡停得越久，够看完。
+            int seconds = 8 + Math.Min(8, note.Length / 24);
+            ShowView(pet, BuildAlertView(title, text, note), seconds);
         }
 
         private void ShowView(PetWindow pet, BubbleView view, int seconds)
@@ -971,12 +1004,22 @@ namespace DshPet
 
         private BubbleView BuildAlertView(string title, string text)
         {
+            return BuildAlertView(title, text, "");
+        }
+
+        private BubbleView BuildAlertView(string title, string text, string note)
+        {
             Snapshot data = Data.Current;
             BubbleView view = new BubbleView();
             view.Title = string.IsNullOrEmpty(title) ? "提醒" : title;
             view.Big = text;
             view.BigSize = 15;
             view.BigColor = "#e0433f";
+            if (!string.IsNullOrEmpty(note))
+            {
+                view.Note = note;
+                view.NoteError = true;
+            }
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
             view.Source = SourceLine(data);
@@ -1276,7 +1319,7 @@ namespace DshPet
             {
                 Bubble.ApplyStyle(cfg);
                 BubbleView view;
-                if (bubbleIsAlert) view = BuildAlertView(alertTitle, alertText);
+                if (bubbleIsAlert) view = BuildAlertView(alertTitle, alertText, alertNote);
                 else if (bubbleIsMessage) view = BuildMessageView(bubbleQuip);
                 else view = BuildPage(bubblePage);
                 Bubble.UpdateFrom(view);
@@ -1289,6 +1332,8 @@ namespace DshPet
             Thresholds limits = data.Limits;
             if (limits == null || Pets.Count == 0) return;
             string day = DataService.TodayKey();
+            List<string> headlines = new List<string>();
+            List<string> titles = new List<string>();
             List<string> notes = new List<string>();
             foreach (ProviderState provider in data.Providers)
             {
@@ -1302,8 +1347,9 @@ namespace DshPet
                     if (hit && !latched)
                     {
                         balanceLatched.Add(provider.Id);
-                        notes.Add(provider.Name + " 余额 " + Fmt.Money(provider.Balance, provider.Currency)
-                            + "，已低于 " + Fmt.Money(below, provider.Currency));
+                        headlines.Add(Fmt.Money(provider.Balance, provider.Currency));
+                        titles.Add(provider.Name + " 余额预警");
+                        notes.Add(provider.Name + " 余额已低于 " + Fmt.Money(below, provider.Currency));
                     }
                     else if (!hit && latched)
                     {
@@ -1318,8 +1364,9 @@ namespace DshPet
                     if (provider.TodayUsage.Value >= budget && !budgetLatched.Contains(key))
                     {
                         budgetLatched.Add(key);
-                        notes.Add(provider.Name + " 今日已用 " + Fmt.Money(provider.TodayUsage, provider.Currency)
-                            + "，超过预算 " + Fmt.Money(budget, provider.Currency));
+                        headlines.Add(Fmt.Money(provider.TodayUsage, provider.Currency));
+                        titles.Add(provider.Name + " 今日预算");
+                        notes.Add(provider.Name + " 今日已用超过预算 " + Fmt.Money(budget, provider.Currency));
                     }
                 }
             }
@@ -1343,9 +1390,10 @@ namespace DshPet
                         if (hit && !latched)
                         {
                             quotaLatched.Add(key);
-                            notes.Add(plan.Name + " " + window.Label + "用量 "
-                                + window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%，超过 "
-                                + threshold.ToString("0.#", CultureInfo.InvariantCulture) + "%");
+                            headlines.Add(window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%");
+                            titles.Add(plan.Name + " 额度提醒");
+                            notes.Add(plan.Name + " " + window.Label + "用量已达 "
+                                + threshold.ToString("0.#", CultureInfo.InvariantCulture) + "% 阈值");
                         }
                         else if (!hit && latched)
                         {
@@ -1354,10 +1402,14 @@ namespace DshPet
                     }
                 }
             }
-            // 一次刷新可能同时踩中几个平台：合成一条提醒，别互相顶掉。
-            if (notes.Count > 0)
+            // 大数字槽位只放短值；一次踩中多个平台时，明细并到备注里换行显示。
+            if (notes.Count == 1)
             {
-                ShowAlert(Pets[0], notes.Count > 1 ? "多个平台提醒" : "余额提醒", string.Join("；", notes.ToArray()));
+                ShowAlert(Pets[0], titles[0], headlines[0], notes[0]);
+            }
+            else if (notes.Count > 1)
+            {
+                ShowAlert(Pets[0], "多平台提醒", notes.Count + " 条", string.Join("\n", notes.ToArray()));
             }
         }
 

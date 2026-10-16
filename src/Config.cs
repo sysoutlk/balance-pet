@@ -496,6 +496,8 @@ namespace DshPet
             SetDefault("", "apiKey", "");
             SetDefault("network", "proxy", "");
             SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（不叫 dsh：应用是多平台的）
+            SetDefault("frames", "activePerSecond", 25.0);   // 动作/散步时的帧率（高性能可拉到 60~120）
+            SetDefault("frames", "idlePerSecond", 4.0);      // 闲置时的帧率（省电）
             SetDefault("", "role", "");
             SetDefault("roles", "random", true);
             SetDefault("", "scale", 1.0);
@@ -612,44 +614,84 @@ namespace DshPet
                 "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",
                 "stretch", "yawn", "shy", "startle", "look", "greet"
             });
-            SetDefault("quips", "greeting", new string[]
+            // 台词库 v2：默认池统一放在 QuipLibrary()，顺便按版本号做一次平滑升级
+            //（老配置里还是短池子的换成加量版，自己写长了的不动）。
+            double quipVersion = GetNumberAt("quips.version", 1);
+            foreach (KeyValuePair<string, string[]> pair in QuipLibrary())
+            {
+                SetDefault("quips", pair.Key, pair.Value);
+            }
+            SetDefault("quips", "version", 2);
+            if (quipVersion < 2)
+            {
+                foreach (KeyValuePair<string, string[]> pair in QuipLibrary())
+                {
+                    if (pair.Value.Length > GetStrings("quips", pair.Key).Count)
+                    {
+                        SetAt("quips." + pair.Key, pair.Value);
+                    }
+                }
+                SetAt("quips.version", 2.0);
+            }
+        }
+
+        /// <summary>内置台词库（动作键 → 台词池）：每个动作都给足几句，随机起来才不重复。</summary>
+        private static Dictionary<string, string[]> QuipLibrary()
+        {
+            Dictionary<string, string[]> map = new Dictionary<string, string[]>();
+            map["greeting"] = new string[]
             {
                 "今天也一起省点 token 吧～",
                 "省着点花，余额我盯着呢",
                 "余额我盯着的，你放心",
                 "别熬夜了，熬夜真的很贵",
                 "摸鱼可以，烧钱不行",
-                "这波消费，值不值？"
-            });
-            SetDefault("quips", "sleep", new string[]
+                "这波消费，值不值？",
+                "点我干嘛？想花钱了？",
+                "先说好，今天额度还剩多少？",
+                "你问我就对啦，我最会数钱",
+                "又来看余额，说明心里还有数",
+                "余额健康，人就不慌",
+                "账单不吓人，人才有底气",
+                "省一点是一点，蚊子腿也是肉",
+                "记得开谷时优惠再冲，半价呢",
+                "我在，随时给你报数",
+                "今天的钱，花在刀刃上了吗？"
+            };
+            map["sleep"] = new string[]
             {
                 "呼……呼……",
                 "（翻了个身）",
                 "zzz……半夜便宜，我先睡了",
-                "这点儿还干活？我睡了"
-            });
-            SetDefault("quips", "hop", new string[] { "嘿咻！", "跳一下～" });
-            SetDefault("quips", "bounce", new string[] { "蹦蹦跳跳～", "看我连跳！" });
-            SetDefault("quips", "spin", new string[] { "转圈圈！", "晕了晕了" });
-            SetDefault("quips", "roll", new string[] { "打滚！", "滚一圈～" });
-            SetDefault("quips", "wobble", new string[] { "左右摇摆～", "看我摇摆" });
-            SetDefault("quips", "nod", new string[] { "嗯嗯！", "点头点头" });
-            SetDefault("quips", "shake", new string[] { "不行不行", "摇头" });
-            SetDefault("quips", "wave", new string[] { "挥手～", "嗨！这里这里" });
-            SetDefault("quips", "clap", new string[] { "鼓掌！", "啪啪啪" });
-            SetDefault("quips", "yawn", new string[] { "哈啊——", "困了…" });
-            SetDefault("quips", "shy", new string[] { "别看我啦…", "有点害羞" });
-            SetDefault("quips", "startle", new string[] { "吓我一跳！", "哇！" });
-            SetDefault("quips", "look", new string[] { "左看看…", "右看看…" });
-            SetDefault("quips", "lie", new string[] { "趴一会儿…", "歇歇脚" });
-            SetDefault("quips", "stroll", new string[] { "溜达一圈", "随便走走～" });
-            SetDefault("quips", "peek", new string[] { "探头看看…", "有人吗？" });
-            SetDefault("quips", "pace", new string[] { "踱两步", "走来走去" });
-            SetDefault("quips", "stretch", new string[] { "伸个懒腰～", "啊——舒服" });
-            SetDefault("quips", "dash", new string[] { "冲刺！", "让一让！" });
-            SetDefault("quips", "follow", new string[] { "跟着你～", "等等我！" });
-            SetDefault("quips", "bump", new string[] { "哎哟！", "谁撞我！", "让一让～", "撞到啦…" });
-            SetDefault("quips", "greet", new string[] { "你好呀！", "我在这儿～" });
+                "这点儿还干活？我睡了",
+                "梦到余额涨了，别叫醒我",
+                "睡着了就不用花钱，晚安",
+                "呼噜声都是省下来的钱",
+                "（裹紧被子）明天再省"
+            };
+            map["hop"] = new string[] { "嘿咻！", "跳一下～", "蹦！", "轻点蹦，地板贵", "一跳一跳，精神十足", "让开点，我要起了！" };
+            map["bounce"] = new string[] { "蹦蹦跳跳～", "看我连跳！", "弹起来啦", "蹦得越高越省电", "一、二、三，再来！" };
+            map["spin"] = new string[] { "转圈圈！", "晕了晕了", "原地转三圈", "看我转得圆不圆", "转出个金星来" };
+            map["roll"] = new string[] { "打滚！", "滚一圈～", "滚过来又滚过去", "地面凉快", "滚成一团啦" };
+            map["wobble"] = new string[] { "左右摇摆～", "看我摇摆", "摇啊摇", "晃晃悠悠", "甩甩胳膊甩甩腿" };
+            map["nod"] = new string[] { "嗯嗯！", "点头点头", "说得对", "这个可以有", "同意同意" };
+            map["shake"] = new string[] { "不行不行", "摇头", "别了吧", "这么花可不行", "下次一定" };
+            map["wave"] = new string[] { "挥手～", "嗨！这里这里", "看到我了吗", "过来打个招呼呀", "挥挥手，不带走一片云彩", "手在这里！" };
+            map["clap"] = new string[] { "鼓掌！", "啪啪啪", "干得漂亮", "给你拍拍手", "这波操作满分" };
+            map["yawn"] = new string[] { "哈啊——", "困了…", "再撑一会儿就睡", "眼皮打架了", "打工人也是要睡觉的", "哈欠传染给你" };
+            map["shy"] = new string[] { "别看我啦…", "有点害羞", "看得我不好意思了", "脸有点烫", "（捂脸）", "别老盯着我嘛" };
+            map["startle"] = new string[] { "吓我一跳！", "哇！", "谁！", "心脏要跳出来了", "差点摔一跤", "别突然出声啊" };
+            map["look"] = new string[] { "左看看…", "右看看…", "这边没情况", "那边有点亮", "四处张望", "看看有没有人偷花钱" };
+            map["lie"] = new string[] { "趴一会儿…", "歇歇脚", "摊平了", "累瘫.jpg", "地上真舒服", "趴着也能盯余额" };
+            map["stroll"] = new string[] { "溜达一圈", "随便走走～", "散步去也", "活动活动筋骨", "沿着桌边走两步", "走到哪算哪" };
+            map["peek"] = new string[] { "探头看看…", "有人吗？", "悄悄看一眼", "溜边儿走", "别发现我", "探个头就走" };
+            map["pace"] = new string[] { "踱两步", "走来走去", "思考人生", "来回转圈想想事", "走到这头又走到那头" };
+            map["stretch"] = new string[] { "伸个懒腰～", "啊——舒服", "拉拉伸", "胳膊伸直了", "活动一下才不僵" };
+            map["dash"] = new string[] { "冲刺！", "让一让！", "赶时间！", "风一样的速度", "咻——", "别拦我" };
+            map["follow"] = new string[] { "跟着你～", "等等我！", "你去哪我去哪", "脚步跟上", "别走太快呀", "我贴着你走" };
+            map["bump"] = new string[] { "哎哟！", "谁撞我！", "让一让～", "撞到啦…", "看着点路呀", "骨头都要散了", "你赔我发型", "别挤别挤" };
+            map["greet"] = new string[] { "你好呀！", "我在这儿～", "报到！", "看见你啦", "来啦来啦", "今天也关照一下我" };
+            return map;
         }
 
         private void SetDefault(string section, string key, object value)

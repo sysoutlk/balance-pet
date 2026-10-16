@@ -8,8 +8,6 @@ dragged and thrown, and can clone itself. Balances are not limited to DeepSeek: 
 (Moonshot), SiliconFlow and OpenRouter (covers GPT / Claude / Gemini / Grok) are queried
 directly, and any other relay can be wired in through the "custom endpoint" provider.
 
-![screenshot](assets/screenshot.png)
-
 ## Highlights
 
 - **Compiled, not scripted**: a single C# + WPF executable (~180 KB). No Node / Python /
