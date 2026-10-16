@@ -225,6 +225,53 @@ namespace DshPet
         <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
         <TextBlock Style='{StaticResource Sect}' Text='外观'/>
         <WrapPanel x:Name='RolePanel'/>
+        <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
+        <TextBlock Style='{StaticResource Sect}' Text='气泡'/>
+        <WrapPanel>
+          <Button x:Name='BubbleStyleBtn' Content='浅色' Width='64' Style='{StaticResource Btn}'/>
+          <CheckBox x:Name='BubbleTrendChk' Style='{StaticResource Switch}' Content='图表'/>
+          <CheckBox x:Name='BubbleTailChk' Style='{StaticResource Switch}' Content='小尾巴'/>
+        </WrapPanel>
+        <DockPanel Margin='0,6,0,0'>
+          <Button x:Name='BubbleEffectBtn' Content='特效：关' Width='104' Style='{StaticResource Btn}'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='速率'/>
+          <Slider x:Name='BubbleSpeedSlider' Width='96' Minimum='0.2' Maximum='3' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleSpeedVal' Style='{StaticResource Val}' Text='1.0x'/>
+          <CheckBox x:Name='BubbleReverseChk' Style='{StaticResource Switch}' Content='反向' Margin='10,0,0,0'/>
+        </DockPanel>
+        <DockPanel Margin='0,4,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='深度' Width='34'/>
+          <Slider x:Name='BubbleDepthSlider' Width='96' Minimum='0' Maximum='1' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleDepthVal' Style='{StaticResource Val}' Text='1.0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='字号' Margin='10,0,0,0'/>
+          <Slider x:Name='BubbleFontSlider' Width='96' Minimum='0.7' Maximum='1.8' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleFontVal' Style='{StaticResource Val}' Text='1.0x'/>
+        </DockPanel>
+        <DockPanel Margin='0,4,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='宽度' Width='34'/>
+          <Slider x:Name='BubbleWidthSlider' Width='76' Minimum='150' Maximum='320' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleWidthVal' Style='{StaticResource Val}' Text='196'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='圆角' Margin='8,0,0,0'/>
+          <Slider x:Name='BubbleRadiusSlider' Width='70' Minimum='0' Maximum='28' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleRadiusVal' Style='{StaticResource Val}' Text='16'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='尾巴' Margin='8,0,0,0'/>
+          <Slider x:Name='BubbleTailSlider' Width='70' Minimum='8' Maximum='24' Style='{StaticResource Flat}'/>
+        </DockPanel>
+        <DockPanel Margin='0,4,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='不透明度' Width='54'/>
+          <Slider x:Name='BubbleOpacitySlider' Width='110' Minimum='0.5' Maximum='1' Style='{StaticResource Flat}'/>
+          <TextBlock x:Name='BubbleOpacityVal' Style='{StaticResource Val}' Text='100%'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='阴影' Margin='8,0,0,0'/>
+          <Slider x:Name='BubbleShadowSlider' Width='86' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
+        </DockPanel>
+        <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='主色' Margin='0,0,6,0'/>
+          <WrapPanel x:Name='Color1Panel'/>
+        </StackPanel>
+        <StackPanel Orientation='Horizontal' Margin='1,4,0,0'>
+          <TextBlock Style='{StaticResource Lbl}' Text='副色' Margin='0,0,6,0'/>
+          <WrapPanel x:Name='Color2Panel'/>
+        </StackPanel>
         <Grid Margin='0,9,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -345,7 +392,11 @@ namespace DshPet
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
-                "ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "BubbleStyleBtn","BubbleTrendChk","BubbleTailChk","BubbleEffectBtn","BubbleSpeedSlider","BubbleSpeedVal",
+                "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
+                "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
+                "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel","Color2Panel",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
@@ -415,6 +466,43 @@ namespace DshPet
             BindSwitch("BudgetChk", "alert", "budgetWarn");
             BindSwitch("EdgeHideChk", "edgeHide", "enabled");
             BindSwitch("CloneAutoChk", "clones", "auto");
+            BindSwitch("RandomRoleChk", "roles", "random");
+            BindSwitch("BubbleTrendChk", "bubble", "trend");
+            BindSwitch("BubbleTailChk", "bubble", "tail");
+            ((Button)ui["BubbleStyleBtn"]).Click += delegate
+            {
+                string next = cfg.GetString("bubble", "style", "light") == "dark" ? "light" : "dark";
+                cfg.Set("bubble", "style", next);
+                cfg.Save();
+                engine.Data.Refresh();
+                Update();
+            };
+            BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
+            BuildColorPalette("Color2Panel", "bubble.color2", "#A855F7");
+            ((Button)ui["BubbleEffectBtn"]).Click += delegate
+            {
+                cfg.Set("bubble", "effect", NextEffect(cfg.GetString("bubble", "effect", "off")));
+                cfg.Set("bubble", "accent", "");
+                cfg.Save();
+                engine.Data.Refresh();
+                Update();
+            };
+            ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.Set("bubble", "speed", Math.Round(e.NewValue, 2));
+                ((TextBlock)ui["BubbleSpeedVal"]).Text = e.NewValue.ToString("0.0", CultureInfo.InvariantCulture) + "x";
+                cfg.Save();
+                engine.Data.Refresh();
+            };
+            BindBubbleSlider("BubbleDepthSlider", "bubble.effectDepth", "BubbleDepthVal", "0.0");
+            BindBubbleSlider("BubbleFontSlider", "bubble.fontScale", "BubbleFontVal", "0.0x");
+            BindBubbleSlider("BubbleWidthSlider", "bubble.width", "BubbleWidthVal", "0");
+            BindBubbleSlider("BubbleRadiusSlider", "bubble.radius", "BubbleRadiusVal", "0");
+            BindBubbleSlider("BubbleTailSlider", "bubble.tailSize", "BubbleTailSliderVal", "0");
+            BindBubbleSlider("BubbleOpacitySlider", "bubble.opacity", "BubbleOpacityVal", "0%");
+            BindBubbleSlider("BubbleShadowSlider", "bubble.shadow", "BubbleShadowSliderVal", "0.00");
+            BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
             BindNumberBox("AlertBelowBox", "alert.below");
             BindNumberBox("BudgetBox", "alert.budget");
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
@@ -459,6 +547,36 @@ namespace DshPet
             {
                 if (e.Key == Key.Enter) SaveField(path, box.Text);
             };
+        }
+
+        /// <summary>Slider bound to a numeric config key; the label keeps a live read-out.</summary>
+        private void BindBubbleSlider(string sliderName, string path, string labelName, string format)
+        {
+            Slider slider = (Slider)ui[sliderName];
+            slider.ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt(path, Math.Round(e.NewValue, 3));
+                cfg.Save();
+                engine.Data.Refresh();
+                UpdateLabel(labelName, e.NewValue, format);
+            };
+        }
+
+        private void UpdateLabel(string labelName, double value, string format)
+        {
+            if (string.IsNullOrEmpty(labelName)) return;
+            TextBlock label = ui.ContainsKey(labelName) ? ui[labelName] as TextBlock : null;
+            if (label == null) return;
+            if (format == "0%") label.Text = ((int)Math.Round(value * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+            else if (format == "0.00") label.Text = value.ToString("0.00", CultureInfo.InvariantCulture);
+            else label.Text = value.ToString(format, CultureInfo.InvariantCulture);
+        }
+
+        private void SyncBubbleSlider(string sliderName, string labelName, double value, string format)
+        {
+            ((Slider)ui[sliderName]).Value = value;
+            UpdateLabel(labelName, value, format);
         }
 
         private void SaveNumberBox(TextBox box, string path)
@@ -539,6 +657,7 @@ namespace DshPet
             button.Click += delegate
             {
                 cfg.Set("", "role", chosen);
+                cfg.SetAt("roles.random", false);   // an explicit pick wins over random looks
                 foreach (PetWindow pet in engine.Pets) pet.ApplyRole(chosen);
                 cfg.Save();
                 Update();
@@ -1025,6 +1144,24 @@ namespace DshPet
                 ((CheckBox)ui["BudgetChk"]).IsChecked = cfg.GetFlag("alert", "budgetWarn", true);
                 ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
                 ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
+                ((CheckBox)ui["RandomRoleChk"]).IsChecked = cfg.GetFlagAt("roles.random", true);
+                ((Button)ui["BubbleStyleBtn"]).Content = cfg.GetString("bubble", "style", "light") == "dark" ? "深色" : "浅色";
+                ((CheckBox)ui["BubbleTrendChk"]).IsChecked = cfg.GetFlag("bubble", "trend", true);
+                ((CheckBox)ui["BubbleTailChk"]).IsChecked = cfg.GetFlag("bubble", "tail", true);
+                ((Button)ui["BubbleEffectBtn"]).Content = EffectLabel(cfg.GetString("bubble", "effect", "off"));
+                double bubbleSpeed = cfg.GetNumber("bubble", "speed", 1.0);
+                ((Slider)ui["BubbleSpeedSlider"]).Value = bubbleSpeed;
+                ((TextBlock)ui["BubbleSpeedVal"]).Text = bubbleSpeed.ToString("0.0", CultureInfo.InvariantCulture) + "x";
+                ((CheckBox)ui["BubbleReverseChk"]).IsChecked = cfg.GetFlag("bubble", "effectReverse", false);
+                SyncBubbleSlider("BubbleDepthSlider", "BubbleDepthVal", cfg.GetNumberAt("bubble.effectDepth", 1), "0.0");
+                SyncBubbleSlider("BubbleFontSlider", "BubbleFontVal", cfg.GetNumberAt("bubble.fontScale", 1), "0.0x");
+                SyncBubbleSlider("BubbleWidthSlider", "BubbleWidthVal", cfg.GetNumberAt("bubble.width", 196), "0");
+                SyncBubbleSlider("BubbleRadiusSlider", "BubbleRadiusVal", cfg.GetNumberAt("bubble.radius", 16), "0");
+                SyncBubbleSlider("BubbleTailSlider", null, cfg.GetNumberAt("bubble.tailSize", 13), "0");
+                SyncBubbleSlider("BubbleOpacitySlider", "BubbleOpacityVal", cfg.GetNumberAt("bubble.opacity", 1), "0%");
+                SyncBubbleSlider("BubbleShadowSlider", null, cfg.GetNumberAt("bubble.shadow", 0.28), "0.00");
+                MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
+                MarkPalette("Color2Panel", cfg.GetStringAt("bubble.color2", "#A855F7"));
                 double below = cfg.GetNumberAt("alert.below", 0);
                 ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 double budgetValue = cfg.GetNumberAt("alert.budget", 0);
@@ -1061,6 +1198,74 @@ namespace DshPet
             ((TextBlock)ui["SubText"]).Text = engine.PeakLine() + "　" + data.OkCount + " 个数据源在线";
             UpdateProviderStatus();
             UpdatePlanStatus();
+        }
+
+        // ------------------------------------------------------------ 气泡强调色 / 动态配色
+        private static readonly string[] ColorPresets = new string[]
+        {
+            "#4B6BFB", "#7C5CFF", "#A855F7", "#E8517B", "#F08A24", "#FBBF24", "#12B5A5", "#10B981", "#38BDF8", "#F472B6"
+        };
+
+        private static string NextEffect(string current)
+        {
+            string[] order = new string[] { "off", "breathe", "duo", "flow", "rainbow", "orbit", "shimmer" };
+            for (int i = 0; i < order.Length; i++)
+            {
+                if (order[i] == current) return order[(i + 1) % order.Length];
+            }
+            return "breathe";
+        }
+
+        private static string EffectLabel(string effect)
+        {
+            switch (effect)
+            {
+                case "breathe": return "特效：呼吸";
+                case "duo": return "特效：双色";
+                case "flow": return "特效：流光";
+                case "rainbow": return "特效：彩虹";
+                case "orbit": return "特效：环游";
+                case "shimmer": return "特效：流光闪";
+                default: return "特效：关";
+            }
+        }
+
+        private void BuildColorPalette(string panelName, string path, string fallback)
+        {
+            WrapPanel panel = (WrapPanel)ui[panelName];
+            panel.Children.Clear();
+            foreach (string hex in ColorPresets)
+            {
+                Border swatch = new Border();
+                swatch.Width = 20;
+                swatch.Height = 20;
+                swatch.CornerRadius = new CornerRadius(6);
+                swatch.Margin = new Thickness(0, 0, 6, 4);
+                swatch.Cursor = System.Windows.Input.Cursors.Hand;
+                swatch.Tag = hex;
+                swatch.Background = Brush(hex);
+                string chosen = hex;
+                swatch.MouseLeftButtonUp += delegate
+                {
+                    cfg.SetAt(path, chosen);
+                    cfg.Save();
+                    engine.Data.Refresh();
+                    Update();
+                };
+                panel.Children.Add(swatch);
+            }
+        }
+
+        private void MarkPalette(string panelName, string current)
+        {
+            foreach (object child in ((WrapPanel)ui[panelName]).Children)
+            {
+                Border swatch = child as Border;
+                if (swatch == null) continue;
+                bool selected = Convert.ToString(swatch.Tag) == current;
+                swatch.BorderBrush = selected ? Brush("#FFFFFF") : Brushes.Transparent;
+                swatch.BorderThickness = new Thickness(selected ? 2 : 0);
+            }
         }
     }
 }

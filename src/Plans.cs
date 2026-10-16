@@ -75,6 +75,9 @@ namespace DshPet
                 "MiniMax Coding Plan 额度（api.minimaxi.com）。"));
             list.Add(Def("opencode", "OpenCode Go", "https://opencode.ai/zen/go/v1/usage", "bearer", "generic",
                 "$10/月订阅，美元额度三个时间窗口。"));
+            list.Add(Def("aliyun", "阿里云 Token Plan / Coding Plan",
+                "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "bearer", "aliyun",
+                "先列出套餐可用模型，再查该模型的用量窗口；国际站可改 plans.aliyun.baseUrl。"));
             PlanDef custom = Def("custom", "自定义用量接口", "", "bearer", "generic",
                 "任意返回额度 JSON 的接口；会从响应里自动识别 limit/used/percentage/重置时间。");
             custom.IsCustom = true;
@@ -129,6 +132,7 @@ namespace DshPet
                     case "kimi": ParseKimi(body, state); break;
                     case "codex": ParseCodex(body, state); break;
                     case "zhipu": ParseZhipu(body, state); break;
+                    case "aliyun": QueryAliyun(cfg, def, key, state); break;
                     default: ParseGeneric(body, state, def.IsCustom ? cfg.GetStringAt("plans.custom.path", "") : ""); break;
                 }
                 state.Ok = state.Windows.Count > 0;
@@ -364,6 +368,75 @@ namespace DshPet
                     + (resetMs > 0 ? "  ·  " + ResetText(resetMs / 1000.0) : "");
                 state.Windows.Add(window);
             }
+        }
+
+        /// <summary>
+        /// Alibaba ModelStudio token/coding plans: the usage endpoint is per model
+        /// (`/models/{id}/usage`), so list the plan's models first and probe the first few
+        /// until one answers with a quota payload.
+        /// </summary>
+        private static void QueryAliyun(Config cfg, PlanDef def, string key, PlanState state)
+        {
+            string baseUrl = cfg.GetStringAt("plans.aliyun.baseUrl", def.Url).TrimEnd('/');
+            if (string.IsNullOrEmpty(baseUrl)) baseUrl = def.Url.TrimEnd('/');
+            List<string> models = new List<string>();
+            string configured = cfg.GetStringAt("plans.aliyun.model", "");
+            if (!string.IsNullOrEmpty(configured)) models.Add(configured.Trim());
+            try
+            {
+                string listBody = Get(cfg, def, baseUrl + "/models", key);
+                foreach (string id in ModelIds(listBody))
+                {
+                    if (!models.Contains(id)) models.Add(id);
+                }
+            }
+            catch (Exception ex)
+            {
+                state.Error = InnermostMessage(ex);
+            }
+            string lastError = state.Error;
+            int probes = 0;
+            foreach (string model in models)
+            {
+                if (string.IsNullOrEmpty(model)) continue;
+                if (probes >= 8) break;
+                probes++;
+                try
+                {
+                    string body = Get(cfg, def, baseUrl + "/models/" + Uri.EscapeDataString(model) + "/usage", key);
+                    ParseGeneric(body, state, "");
+                    if (state.Ok)
+                    {
+                        state.Note = "模型：" + model;
+                        return;
+                    }
+                    state.Windows.Clear();
+                    lastError = "模型 " + model + " 没有返回用量窗口";
+                }
+                catch (Exception ex)
+                {
+                    lastError = model + "：" + InnermostMessage(ex);
+                }
+            }
+            state.Error = string.IsNullOrEmpty(lastError) ? "没有查到可用模型的用量" : lastError;
+        }
+
+        private static List<string> ModelIds(string body)
+        {
+            List<string> ids = new List<string>();
+            try
+            {
+                Dictionary<string, object> data = Json.ReadText(body);
+                foreach (object item in Json.AsArray(Json.Get(data, "data")))
+                {
+                    string id = Convert.ToString(Json.Get(Json.AsObject(item), "id"), CultureInfo.InvariantCulture);
+                    if (!string.IsNullOrEmpty(id) && ids.Count < 16) ids.Add(id);
+                }
+            }
+            catch
+            {
+            }
+            return ids;
         }
 
         /// <summary>

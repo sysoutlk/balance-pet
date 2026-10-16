@@ -70,7 +70,7 @@ namespace DshPet
         // ------------------------------------------------------------ 初始化
         private void BuildPets()
         {
-            string role = cfg.GetString("", "role", "");
+            string role = PickRole("");
             List<Dictionary<string, object>> saved = cfg.GetObjects("", "pets");
             if (saved.Count == 0)
             {
@@ -247,14 +247,17 @@ namespace DshPet
                     pet.StartEdgeSlide(false);
                     return;
                 }
-                if (now >= pet.PeekAt)
-                {
-                    pet.PeekAt = now.AddSeconds(6 + Program.Rng.NextDouble() * 8);
-                    pet.PeekUntil = now.AddMilliseconds(900);
-                    pet.StartPeek();
-                }
+                // Stays tucked in (with its own animation) until the user drags it out.
                 return;
             }
+            if (pet.Dropped && EdgeHideEnabled(pet))
+            {
+                // Dropped against an edge: tuck in right away instead of waiting for the timer.
+                pet.Dropped = false;
+                pet.StartEdgeSlide(true);
+                return;
+            }
+            pet.Dropped = false;
             if (EdgeHideEnabled(pet))
             {
                 if (pet.EdgeHideAt == DateTime.MaxValue)
@@ -351,14 +354,6 @@ namespace DshPet
 
             if (Math.Abs(pet.Tuck - pet.TargetTuck) > 0.001) return;
 
-            // A peek stays poked out for a moment before squeezing back in.
-            if (pet.PeekUntil != DateTime.MinValue)
-            {
-                if (now < pet.PeekUntil) return;
-                pet.PeekUntil = DateTime.MinValue;
-                pet.TargetTuck = 1;
-                return;
-            }
             if (pet.TargetTuck >= 0.999) pet.EdgeHidden = true;
             else if (pet.TargetTuck <= 0.001) pet.EdgeHidden = false;
             pet.Mode = "idle";
@@ -636,6 +631,26 @@ namespace DshPet
             return (int)max;   // 0 或负数 = 不限
         }
 
+        /// <summary>Picks the look for a new pet: random when roles.random is on (clones prefer
+        /// something other than their parent), otherwise the configured role.</summary>
+        public static string PickRole(string avoid)
+        {
+            Config config = Program.CurrentConfig;
+            string configured = config == null ? "" : config.GetString("", "role", "");
+            if (config == null || !config.GetFlagAt("roles.random", true)) return configured;
+            List<string> pool = AppPaths.RoleFiles();
+            if (pool.Count == 0) return configured;
+            if (pool.Count < 6) pool.Add("");   // small libraries: let the built-in whale join in
+            string picked = pool[Program.Rng.Next(pool.Count)];
+            int guard = 0;
+            while (picked == avoid && guard < 8)
+            {
+                picked = pool[Program.Rng.Next(pool.Count)];
+                guard++;
+            }
+            return picked;
+        }
+
         private bool AutoSplitDue(DateTime now)
         {
             if (!cfg.GetFlagAt("clones.auto", true)) return false;
@@ -668,7 +683,7 @@ namespace DshPet
             if (Pets.Count == 0) return;
             PetWindow source = Pets[Program.Rng.Next(Pets.Count)];
             PetWindow pet = new PetWindow(cfg);
-            pet.ApplyRole(source.Role);
+            pet.ApplyRole(PickRole(source.Role));
             pet.ResizePet();
             pet.Place(source.X + 60 + Program.Rng.Next(0, 60), source.Y - 30 - Program.Rng.Next(0, 60));
             WirePet(pet);
@@ -727,6 +742,7 @@ namespace DshPet
         private void ShowView(PetWindow pet, BubbleView view, int seconds)
         {
             if (pet == null) return;
+            Bubble.ApplyStyle(cfg);
             Bubble.HideAt = DateTime.UtcNow.AddSeconds(Demo ? 3600 : seconds);
             Bubble.ShowFor(pet, view);
         }
@@ -1028,6 +1044,7 @@ namespace DshPet
             CheckAlerts(data);
             if (Bubble.Visibility == Visibility.Visible)
             {
+                Bubble.ApplyStyle(cfg);
                 BubbleView view;
                 if (bubbleIsAlert) view = BuildAlertView(alertTitle, alertText);
                 else if (bubbleIsMessage) view = BuildMessageView(bubbleQuip);

@@ -496,6 +496,7 @@ namespace DshPet
             SetDefault("", "apiKey", "");
             SetDefault("network", "proxy", "");
             SetDefault("", "role", "");
+            SetDefault("roles", "random", true);
             SetDefault("", "scale", 1.0);
             SetDefault("", "opacity", 1.0);
             SetDefault("", "maxClones", 6);
@@ -503,6 +504,25 @@ namespace DshPet
             SetDefault("", "pollSeconds", 0);
             SetDefault("bubble", "seconds", 7);
             SetDefault("bubble", "pollSeconds", 60);
+            SetDefault("bubble", "style", "light");
+            SetDefault("bubble", "accent", "#4B6BFB");
+            SetDefault("bubble", "effect", "off");
+            SetDefault("bubble", "color1", "#4B6BFB");
+            SetDefault("bubble", "color2", "#A855F7");
+            SetDefault("bubble", "speed", 1.0);
+            SetDefault("bubble", "effectDepth", 1.0);
+            SetDefault("bubble", "effectReverse", false);
+            SetDefault("bubble", "fontScale", 1.0);
+            SetDefault("bubble", "width", 196.0);
+            SetDefault("bubble", "radius", 16.0);
+            SetDefault("bubble", "opacity", 1.0);
+            SetDefault("bubble", "shadow", 0.28);
+            SetDefault("bubble", "borderWidth", 1.0);
+            SetDefault("bubble", "tailSize", 13.0);
+            SetDefault("bubble", "cardColor", "");
+            SetDefault("bubble", "textColor", "");
+            SetDefault("bubble", "trend", true);
+            SetDefault("bubble", "tail", true);
 
             // Provider toggles. Only endpoints with a documented balance API are on-by-default
             // candidates; everything ships off until the user configures a key.

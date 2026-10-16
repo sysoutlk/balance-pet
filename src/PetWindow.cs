@@ -69,8 +69,7 @@ namespace DshPet
         public double EdgeHiddenY;
         public double Tuck;                 // 0 = fully out, 1 = squeezed against the edge
         public double TargetTuck;
-        public DateTime PeekAt = DateTime.MinValue;
-        public DateTime PeekUntil = DateTime.MinValue;
+        public bool Dropped;                // the user just let go of the pet
         public IntPtr Handle = IntPtr.Zero;
 
         private int appliedX = int.MinValue;
@@ -357,17 +356,8 @@ namespace DshPet
             else
             {
                 TargetTuck = 0;
-                PeekUntil = DateTime.MinValue;
             }
             SpeedFactor = 1.0;
-            Mode = "edge";
-        }
-
-        /// <summary>Briefly pokes out of the edge while hidden.</summary>
-        public void StartPeek()
-        {
-            if (!EdgeHidden) return;
-            TargetTuck = 0.55;
             Mode = "edge";
         }
 
@@ -525,6 +515,7 @@ namespace DshPet
                 return;
             }
             double speed = Math.Sqrt(state.VX * state.VX + state.VY * state.VY);
+            Dropped = true;
             if (speed > 320)
             {
                 VelocityX = Math.Max(-2400, Math.Min(2400, state.VX));

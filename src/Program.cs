@@ -20,6 +20,7 @@ namespace DshPet
     {
         public const string Version = "1.0.0";
         public static readonly Random Rng = new Random();
+        public static Config CurrentConfig;
 
         private const string HelpText =
             "dsh-pet " + Version + "\n" +
@@ -56,6 +57,7 @@ namespace DshPet
             }
 
             Config cfg = Config.Load(AppPaths.ConfigPath);
+            CurrentConfig = cfg;
             if (Has(flags, "--self-test")) return SelfTest(cfg);
 
             bool createdNew;
