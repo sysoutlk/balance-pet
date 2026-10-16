@@ -212,13 +212,17 @@ namespace DshPet
           </Setter>
         </Style>
       </ScrollViewer.Resources>
-      <StackPanel x:Name='Main' Width='394'>
+      <StackPanel x:Name='ContentRoot' Width='510'>
         <DockPanel x:Name='Header' Background='Transparent'>
           <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='✕' Width='26' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}'/>
           <StackPanel Margin='0,2,0,0'>
             <TextBlock Text='DSH 桌宠' FontSize='15' FontWeight='Bold' Foreground='#EAF0FF'/>
             <TextBlock x:Name='SubText' Text='…' FontSize='10' Foreground='#8FA0C8' Margin='0,3,0,0'/>
           </StackPanel>
+        </DockPanel>
+        <DockPanel Margin='0,6,0,0'>
+          <StackPanel x:Name='Nav' DockPanel.Dock='Left' Width='104'/>
+          <StackPanel x:Name='Main'/>
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
         <UniformGrid x:Name='ActionGrid' Columns='4'/>
@@ -228,14 +232,14 @@ namespace DshPet
         <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
         <TextBlock Style='{StaticResource Sect}' Text='气泡'/>
         <WrapPanel>
-          <Button x:Name='BubbleStyleBtn' Content='浅色' Width='64' Style='{StaticResource Btn}'/>
-          <Button x:Name='BubbleFontBtn' Content='字体：系统' Width='96' Style='{StaticResource Btn}'/>
-          <Button x:Name='BubbleNumberFontBtn' Content='数字：跟随' Width='96' Style='{StaticResource Btn}'/>
+          <Button x:Name='ThemeDropBtn' Content='主题：浅色  ▾' Width='112' Style='{StaticResource Btn}'/>
+          <Button x:Name='EffectDropBtn' Content='特效：关  ▾' Width='104' Style='{StaticResource Btn}'/>
+          <Button x:Name='FontDropBtn' Content='字体：系统  ▾' Width='104' Style='{StaticResource Btn}'/>
+          <Button x:Name='NumberFontDropBtn' Content='数字：跟随  ▾' Width='104' Style='{StaticResource Btn}'/>
           <CheckBox x:Name='BubbleTrendChk' Style='{StaticResource Switch}' Content='图表'/>
           <CheckBox x:Name='BubbleTailChk' Style='{StaticResource Switch}' Content='小尾巴'/>
         </WrapPanel>
         <DockPanel Margin='0,6,0,0'>
-          <Button x:Name='BubbleEffectBtn' Content='特效：关' Width='104' Style='{StaticResource Btn}'/>
           <TextBlock Style='{StaticResource Lbl}' Text='速率'/>
           <Slider x:Name='BubbleSpeedSlider' Width='96' Minimum='0.2' Maximum='3' Style='{StaticResource Flat}'/>
           <TextBlock x:Name='BubbleSpeedVal' Style='{StaticResource Val}' Text='1.0x'/>
@@ -267,12 +271,8 @@ namespace DshPet
           <Slider x:Name='BubbleShadowSlider' Width='86' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
         </DockPanel>
         <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
-          <TextBlock Text='主色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
+          <TextBlock Text='主题色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
-        </StackPanel>
-        <StackPanel Orientation='Horizontal' Margin='1,4,0,0'>
-          <TextBlock Text='副色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
-          <WrapPanel x:Name='Color2Panel'/>
         </StackPanel>
         <Grid Margin='0,9,0,0'>
           <Grid.ColumnDefinitions>
@@ -387,7 +387,10 @@ namespace DshPet
 
         public void Build()
         {
-            root = (Window)XamlReader.Parse(Xaml);
+            // 主题色（bubble.color1）同时给设置卡片的高亮着色：一处设置，两处生效。
+            string accent = cfg.GetStringAt("bubble.color1", "#4B6BFB");
+            if (string.IsNullOrEmpty(accent) || !accent.StartsWith("#", StringComparison.Ordinal)) accent = "#4B6BFB";
+            root = (Window)XamlReader.Parse(Xaml.Replace("#4B6BFB", accent));
             foreach (string name in new string[]
             {
                 "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
@@ -395,11 +398,11 @@ namespace DshPet
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
-                "Main",
-                "BubbleStyleBtn","BubbleFontBtn","BubbleNumberFontBtn","BubbleTrendChk","BubbleTailChk","BubbleEffectBtn","BubbleSpeedSlider","BubbleSpeedVal",
+                "ContentRoot","Main","Nav",
+                "ThemeDropBtn","EffectDropBtn","FontDropBtn","NumberFontDropBtn","BubbleTrendChk","BubbleTailChk","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
-                "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel","Color2Panel",
+                "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
             })
             {
@@ -427,7 +430,7 @@ namespace DshPet
             BuildRoleButtons();
             BuildProviderRows();
             BuildPlanRows();
-            BuildCollapsibleSections();
+            BuildNavPages();
 
             ((Slider)ui["ScaleSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -473,41 +476,11 @@ namespace DshPet
             BindSwitch("RandomRoleChk", "roles", "random");
             BindSwitch("BubbleTrendChk", "bubble", "trend");
             BindSwitch("BubbleTailChk", "bubble", "tail");
-            ((Button)ui["BubbleStyleBtn"]).Click += delegate
-            {
-                string next = NextTheme(CurrentTheme());
-                cfg.Set("bubble", "theme", next);
-                cfg.Set("bubble", "style", "");
-                cfg.Save();
-                engine.Data.Refresh();
-                Update();
-            };
-            ((Button)ui["BubbleFontBtn"]).Click += delegate
-            {
-                string next = NextFont(cfg.GetString("bubble", "font", ""));
-                cfg.Set("bubble", "font", next);
-                cfg.Save();
-                engine.Data.Refresh();
-                Update();
-            };
-            ((Button)ui["BubbleNumberFontBtn"]).Click += delegate
-            {
-                string current = cfg.GetString("bubble", "numberFont", "");
-                cfg.Set("bubble", "numberFont", current.Length == 0 ? "Cascadia Mono, Consolas, Courier New" : "");
-                cfg.Save();
-                engine.Data.Refresh();
-                Update();
-            };
+            WireDropdown("ThemeDropBtn", ThemeValues, ThemeLabels, "bubble.theme", true);
+            WireDropdown("EffectDropBtn", EffectValues, EffectLabels, "bubble.effect", true);
+            WireDropdown("FontDropBtn", FontValues, FontLabels, "bubble.font", false);
+            WireDropdown("NumberFontDropBtn", NumberFontValues, NumberFontLabels, "bubble.numberFont", false);
             BuildColorPalette("Color1Panel", "bubble.color1", "#4B6BFB");
-            BuildColorPalette("Color2Panel", "bubble.color2", "#A855F7");
-            ((Button)ui["BubbleEffectBtn"]).Click += delegate
-            {
-                cfg.Set("bubble", "effect", NextEffect(cfg.GetString("bubble", "effect", "off")));
-                cfg.Set("bubble", "accent", "");
-                cfg.Save();
-                engine.Data.Refresh();
-                Update();
-            };
             ((Slider)ui["BubbleSpeedSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
@@ -1171,17 +1144,17 @@ namespace DshPet
                 ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
                 ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
                 ((CheckBox)ui["RandomRoleChk"]).IsChecked = cfg.GetFlagAt("roles.random", true);
-                ((Button)ui["BubbleStyleBtn"]).Content = ThemeLabel(CurrentTheme());
                 string fontNow = cfg.GetString("bubble", "font", "");
-                ((Button)ui["BubbleFontBtn"]).Content = FontLabel(fontNow);
-                ((Button)ui["BubbleNumberFontBtn"]).Content = cfg.GetString("bubble", "numberFont", "").Length == 0 ? "数字：跟随" : "数字：等宽";
+                ((Button)ui["ThemeDropBtn"]).Content = "主题：" + DropLabel(ThemeValues, ThemeLabels, "bubble.theme", "浅色") + "  ▾";
+                ((Button)ui["EffectDropBtn"]).Content = "特效：" + DropLabel(EffectValues, EffectLabels, "bubble.effect", "关闭") + "  ▾";
+                ((Button)ui["FontDropBtn"]).Content = "字体：" + DropLabel(FontValues, FontLabels, "bubble.font", "跟随系统") + "  ▾";
+                ((Button)ui["NumberFontDropBtn"]).Content = "数字：" + DropLabel(NumberFontValues, NumberFontLabels, "bubble.numberFont", "跟随字体") + "  ▾";
                 // 设置卡片本身也跟随同一个字体，保证整卡观感一致。
                 root.FontFamily = string.IsNullOrEmpty(fontNow)
                     ? System.Windows.SystemFonts.MessageFontFamily
                     : new FontFamily(fontNow);
                 ((CheckBox)ui["BubbleTrendChk"]).IsChecked = cfg.GetFlag("bubble", "trend", true);
                 ((CheckBox)ui["BubbleTailChk"]).IsChecked = cfg.GetFlag("bubble", "tail", true);
-                ((Button)ui["BubbleEffectBtn"]).Content = EffectLabel(cfg.GetString("bubble", "effect", "off"));
                 double bubbleSpeed = cfg.GetNumber("bubble", "speed", 1.0);
                 ((Slider)ui["BubbleSpeedSlider"]).Value = bubbleSpeed;
                 ((TextBlock)ui["BubbleSpeedVal"]).Text = bubbleSpeed.ToString("0.0", CultureInfo.InvariantCulture) + "x";
@@ -1194,7 +1167,6 @@ namespace DshPet
                 SyncBubbleSlider("BubbleOpacitySlider", "BubbleOpacityVal", cfg.GetNumberAt("bubble.opacity", 1), "0%");
                 SyncBubbleSlider("BubbleShadowSlider", null, cfg.GetNumberAt("bubble.shadow", 0.28), "0.00");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
-                MarkPalette("Color2Panel", cfg.GetStringAt("bubble.color2", "#A855F7"));
                 double below = cfg.GetNumberAt("alert.below", 0);
                 ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 double budgetValue = cfg.GetNumberAt("alert.budget", 0);
@@ -1239,78 +1211,79 @@ namespace DshPet
             "#4B6BFB", "#7C5CFF", "#A855F7", "#E8517B", "#F08A24", "#FBBF24", "#12B5A5", "#10B981", "#38BDF8", "#F472B6"
         };
 
-        private static string NextEffect(string current)
+        // 主题 / 特效 / 字体：下拉选项（简单、好懂，一处设置）
+        private static readonly string[] ThemeValues = new string[] { "light", "dark", "system", "glass", "frost", "monet" };
+        private static readonly string[] ThemeLabels = new string[] { "浅色", "深色", "跟随系统", "液体玻璃", "磨砂", "莫奈取色" };
+        private static readonly string[] EffectValues = new string[] { "off", "breathe", "duo", "flow", "rainbow", "orbit", "shimmer" };
+        private static readonly string[] EffectLabels = new string[] { "关闭", "呼吸", "双色流转", "流光", "彩虹", "环游", "流光闪" };
+        private static readonly string[] FontValues = new string[]
         {
-            string[] order = new string[] { "off", "breathe", "duo", "flow", "rainbow", "orbit", "shimmer" };
-            for (int i = 0; i < order.Length; i++)
-            {
-                if (order[i] == current) return order[(i + 1) % order.Length];
-            }
-            return "breathe";
-        }
-
-        // 主题：浅色 / 深色 / 系统 / 液体玻璃 / 磨砂 / 莫奈取色
-        private static readonly string[] Themes = new string[] { "light", "dark", "system", "glass", "frost", "monet" };
-
-        private string CurrentTheme()
-        {
-            string theme = cfg.GetString("bubble", "theme", "");
-            if (string.IsNullOrEmpty(theme)) theme = cfg.GetString("bubble", "style", "light");
-            if (theme == "system")
-            {
-                theme = BubbleTheme.SystemPrefersDark() ? "dark" : "light";
-            }
-            return theme;
-        }
-
-        private static string ThemeLabel(string theme)
-        {
-            switch (theme)
-            {
-                case "dark": return "深色";
-                case "glass": return "液体玻璃";
-                case "frost": return "磨砂";
-                case "monet": return "莫奈取色";
-                default: return "浅色";
-            }
-        }
-
-        private static string NextTheme(string current)
-        {
-            for (int i = 0; i < Themes.Length; i++)
-            {
-                if (Themes[i] == current) return Themes[(i + 1) % Themes.Length];
-            }
-            return "dark";
-        }
-
-        // 字体：跟随系统 / 微软雅黑 / 等线 / 宋体 / 楷体
-        private static readonly string[][] Fonts = new string[][]
-        {
-            new string[] { "", "系统" },
-            new string[] { "Microsoft YaHei UI", "微软雅黑" },
-            new string[] { "DengXian", "等线" },
-            new string[] { "SimSun", "宋体" },
-            new string[] { "KaiTi", "楷体" }
+            "", "Microsoft YaHei UI", "DengXian", "SimSun", "KaiTi", "Microsoft YaHei"
         };
-
-        private static string NextFont(string current)
+        private static readonly string[] FontLabels = new string[]
         {
-            for (int i = 0; i < Fonts.Length; i++)
+            "跟随系统", "微软雅黑 UI", "等线", "宋体", "楷体", "微软雅黑"
+        };
+        private static readonly string[] NumberFontValues = new string[]
+        {
+            "", "Cascadia Mono, Consolas, Courier New"
+        };
+        private static readonly string[] NumberFontLabels = new string[] { "跟随字体", "等宽数字（数字不跳动）" };
+
+        /// <summary>下拉：点按钮弹出选项列表，选中即写入配置并刷新。</summary>
+        private void WireDropdown(string buttonName, string[] values, string[] labels, string path, bool refresh)
+        {
+            Button button = (Button)ui[buttonName];
+            button.Click += delegate
             {
-                if (Fonts[i][0] == current) return Fonts[(i + 1) % Fonts.Length][0];
-            }
-            return "";
+                Popup popup = new Popup();
+                popup.AllowsTransparency = true;
+                popup.StaysOpen = false;
+                StackPanel list = new StackPanel();
+                list.Width = Math.Max(150, button.ActualWidth);
+                Border card = new Border();
+                card.Background = Brush("#1B2236");
+                card.BorderBrush = Brush("#39456B");
+                card.BorderThickness = new Thickness(1);
+                card.CornerRadius = new CornerRadius(10);
+                card.Padding = new Thickness(4);
+                card.Child = list;
+                popup.Child = card;
+                string current = cfg.GetStringAt(path, "");
+                foreach (string value in values)
+                {
+                    int index = Array.IndexOf(values, value);
+                    Button item = new Button();
+                    item.Style = (Style)root.Resources["Mini"];
+                    item.Padding = new Thickness(10, 0, 10, 0);
+                    item.HorizontalContentAlignment = HorizontalAlignment.Left;
+                    item.Content = (value == current ? "● " : "   ") + labels[index];
+                    string chosen = value;
+                    item.Click += delegate
+                    {
+                        cfg.SetAt(path, chosen);
+                        if (path == "bubble.theme") cfg.Set("bubble", "style", "");
+                        if (path == "bubble.effect") cfg.Set("bubble", "accent", "");
+                        cfg.Save();
+                        popup.IsOpen = false;
+                        if (refresh) engine.Data.Refresh();
+                        Update();
+                    };
+                    list.Children.Add(item);
+                }
+                popup.PlacementTarget = button;
+                popup.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                popup.IsOpen = true;
+            };
         }
 
-        private static string FontLabel(string current)
+        private string DropLabel(string[] values, string[] labels, string path, string fallback)
         {
-            foreach (string[] font in Fonts)
-            {
-                if (font[0] == current) return "字体：" + font[1];
-            }
-            return "字体：自定义";
+            string current = cfg.GetStringAt(path, fallback);
+            int index = Array.IndexOf(values, current);
+            return index < 0 ? fallback : labels[index];
         }
+
 
         private static string EffectLabel(string effect)
         {
@@ -1344,11 +1317,82 @@ namespace DshPet
                 swatch.MouseLeftButtonUp += delegate
                 {
                     cfg.SetAt(path, chosen);
+                    if (path == "bubble.color1")
+                    {
+                        // 主题色统一：一处设置，气泡 + 设置卡片同时生效；副色按主题色自动配一个。
+                        cfg.SetAt("bubble.color2", ShiftHue(chosen, 85));
+                        cfg.Set("bubble", "accent", "");
+                    }
                     cfg.Save();
                     engine.Data.Refresh();
-                    Update();
+                    RebuildForAccent(path == "bubble.color1");
                 };
                 panel.Children.Add(swatch);
+            }
+        }
+
+        /// <summary>主题色会注入卡片模板，改色后重建面板让高亮色立即生效。</summary>
+        private void RebuildForAccent(bool rebuild)
+        {
+            if (!rebuild)
+            {
+                Update();
+                return;
+            }
+            bool visible = IsVisible;
+            PetWindow active = ActivePet;
+            try
+            {
+                if (root != null) root.Close();
+            }
+            catch
+            {
+            }
+            ui.Clear();
+            statusById.Clear();
+            keyBoxes.Clear();
+            planStatus.Clear();
+            planBoxes.Clear();
+            Build();
+            if (visible) ShowFor(active);
+        }
+
+        private static string ShiftHue(string hex, double degrees)
+        {
+            try
+            {
+                Color color = (Color)ColorConverter.ConvertFromString(hex);
+                double r = color.R / 255.0, g = color.G / 255.0, b = color.B / 255.0;
+                double max = Math.Max(r, Math.Max(g, b));
+                double min = Math.Min(r, Math.Min(g, b));
+                double d = max - min;
+                double h = 0;
+                if (d > 0.0001)
+                {
+                    if (max == r) h = 60 * (((g - b) / d) % 6);
+                    else if (max == g) h = 60 * ((b - r) / d + 2);
+                    else h = 60 * ((r - g) / d + 4);
+                }
+                h = (h + degrees) % 360;
+                double c = max * 0 + d;
+                double x = c * (1 - Math.Abs(((h / 60.0) % 2) - 1));
+                double m = max - c;
+                double rr = 0, gg = 0, bb = 0;
+                double segment = (h % 360 + 360) % 360 / 60.0;
+                if (segment < 1) { rr = c; gg = x; }
+                else if (segment < 2) { rr = x; gg = c; }
+                else if (segment < 3) { gg = c; bb = x; }
+                else if (segment < 4) { gg = x; bb = c; }
+                else if (segment < 5) { rr = x; bb = c; }
+                else { rr = c; bb = x; }
+                return string.Format("#{0:X2}{1:X2}{2:X2}",
+                    (byte)Math.Round((rr + m) * 255),
+                    (byte)Math.Round((gg + m) * 255),
+                    (byte)Math.Round((bb + m) * 255));
+            }
+            catch
+            {
+                return "#A855F7";
             }
         }
 
@@ -1369,66 +1413,71 @@ namespace DshPet
         /// Turns every [Sect] heading into a collapsible group header so the card stays tidy;
         /// the open/closed state is remembered in pet-config.json (ui.sections).
         /// </summary>
-        private void BuildCollapsibleSections()
+        /// <summary>左侧导航：每个 [Sect] 标题变成一页，点哪页只显示那一页。</summary>
+        private void BuildNavPages()
         {
-            StackPanel main = (StackPanel)ui["Main"];
-            List<UIElement> original = new List<UIElement>();
-            foreach (UIElement child in main.Children) original.Add(child);
-            main.Children.Clear();
+            StackPanel content = (StackPanel)ui["ContentRoot"];
+            StackPanel nav = (StackPanel)ui["Nav"];
+            StackPanel host = (StackPanel)ui["Main"];
+            List<UIElement> children = new List<UIElement>();
+            foreach (UIElement child in content.Children) children.Add(child);
+            content.Children.Clear();
+            for (int i = 0; i < children.Count && i < 2; i++) content.Children.Add(children[i]);
 
             Style sectionStyle = (Style)root.Resources["Sect"];
-            Button header = null;
-            StackPanel group = null;
-            foreach (UIElement child in original)
+            navButtons.Clear();
+            pageOrder.Clear();
+            StackPanel page = null;
+            for (int i = 2; i < children.Count; i++)
             {
+                UIElement child = children[i];
                 TextBlock text = child as TextBlock;
-                bool isHeader = text != null && ReferenceEquals(text.Style, sectionStyle);
-                if (!isHeader)
+                if (text != null && ReferenceEquals(text.Style, sectionStyle))
                 {
-                    if (group == null) main.Children.Add(child);
-                    else group.Children.Add(child);
+                    string title = text.Text;
+                    page = new StackPanel();
+                    page.Visibility = Visibility.Collapsed;
+                    host.Children.Add(page);
+                    Button item = new Button();
+                    item.Style = (Style)root.Resources["Btn"];
+                    item.Width = 96;
+                    item.Height = 26;
+                    item.Margin = new Thickness(0, 0, 0, 4);
+                    item.Padding = new Thickness(8, 0, 8, 0);
+                    item.FontSize = 11;
+                    item.HorizontalContentAlignment = HorizontalAlignment.Left;
+                    item.Content = title.Length > 8 ? title.Substring(0, 8) : title;
+                    item.Tag = page;
+                    item.BorderThickness = new Thickness(0);
+                    item.BorderBrush = Brushes.Transparent;
+                    Button button = item;
+                    item.Click += delegate { ShowPage(button, (StackPanel)button.Tag); };
+                    nav.Children.Add(item);
+                    navButtons.Add(item);
+                    pageOrder.Add(title);
                     continue;
                 }
+                if (page != null) page.Children.Add(child);
+            }
+            if (navButtons.Count > 0) ShowPage(navButtons[0], (StackPanel)navButtons[0].Tag);
+        }
 
-                string title = text.Text;
-                header = new Button();
-                header.Height = 28;
-                header.Margin = new Thickness(0, 10, 0, 4);
-                header.Padding = new Thickness(10, 0, 10, 0);
-                header.FontSize = 12;
-                header.Foreground = Brush("#E6ECFF");
-                header.HorizontalContentAlignment = HorizontalAlignment.Left;
-                header.Cursor = System.Windows.Input.Cursors.Hand;
-                header.Template = SectionHeaderTemplate();
-                group = new StackPanel();
-                string id = "section:" + title;
-                bool open = cfg.GetFlagAt("ui." + id, DefaultSectionOpen(title));
-                header.Content = (open ? "▾  " : "▸  ") + title;
-                group.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-                // Capture per-iteration copies: the loop variables themselves are shared, which
-                // made every header toggle the last group (the "extra group at the end" bug).
-                Button thisHeader = header;
-                StackPanel thisGroup = group;
-                string thisTitle = title;
-                string thisId = id;
-                header.Click += delegate
+        private void ShowPage(Button active, StackPanel page)
+        {
+            foreach (Button item in navButtons)
+            {
+                StackPanel target = item.Tag as StackPanel;
+                if (target != null)
                 {
-                    bool nowOpen = thisGroup.Visibility != Visibility.Visible;
-                    thisGroup.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
-                    thisHeader.Content = (nowOpen ? "▾  " : "▸  ") + thisTitle;
-                    cfg.SetAt("ui." + thisId, nowOpen);
-                    cfg.Save();
-                };
-                main.Children.Add(header);
-                main.Children.Add(group);
+                    target.Visibility = ReferenceEquals(target, page) ? Visibility.Visible : Visibility.Collapsed;
+                }
+                item.BorderThickness = new Thickness(ReferenceEquals(item, active) ? 2 : 0);
+                item.BorderBrush = ReferenceEquals(item, active) ? Brush("#4B6BFB") : Brushes.Transparent;
             }
         }
 
-        private static bool DefaultSectionOpen(string title)
-        {
-            // Everyday sections start open, the long configuration blocks start collapsed.
-            return title == "外观" || title == "动作点播" || title == "行为" || title == "数据源（余额 API）";
-        }
+        private readonly List<Button> navButtons = new List<Button>();
+        private readonly List<string> pageOrder = new List<string>();
 
         private static ControlTemplate SectionHeaderTemplate()
         {
