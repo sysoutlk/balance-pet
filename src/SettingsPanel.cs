@@ -2424,7 +2424,8 @@ namespace DshPet
             ((TextBlock)ui["FxRow"]).Foreground = new SolidColorBrush(palette.Muted);
             ((TextBlock)ui["FxAmount"]).FontSize = 19 * cfg.GetNumber("bubble", "fontScale", 1.0);
             double radius = cfg.GetNumber("bubble", "radius", 16);
-            card.CornerRadius = new CornerRadius(Math.Max(2, radius * 0.7));
+            // 预览忠实反映真实圆角（不再打 0.7 折），阴影也跟着圆角走，与气泡一致。
+            card.CornerRadius = new CornerRadius(Math.Max(2, Math.Min(40, radius)));
             double width = cfg.GetNumber("bubble", "width", 196);
             card.Width = 110 + (Math.Max(150, Math.Min(320, width)) - 150) / 170.0 * 180;
             card.Opacity = cfg.GetNumber("bubble", "opacity", 1.0);
@@ -2435,11 +2436,12 @@ namespace DshPet
             if (previewShadow == null)
             {
                 previewShadow = new DropShadowEffect();
-                previewShadow.ShadowDepth = 3;
-                previewShadow.BlurRadius = 18;
                 previewShadow.Color = Colors.Black;
                 card.Effect = previewShadow;
             }
+            double previewRadius = Math.Max(0, Math.Min(40, radius));
+            previewShadow.BlurRadius = (14 + previewRadius * 0.5) * 0.7;
+            previewShadow.ShadowDepth = (3 + previewRadius * 0.15) * 0.6;
             previewShadow.Opacity = cfg.GetNumber("bubble", "shadow", 0.28);
 
             tail.Width = tailSize;

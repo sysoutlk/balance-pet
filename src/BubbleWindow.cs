@@ -582,6 +582,11 @@ namespace DshPet
             card.BorderThickness = new Thickness(borderWidth);
             double radius = cfg.GetNumber("bubble", "radius", 16);
             card.CornerRadius = new CornerRadius(Math.Max(0, radius));
+            // 阴影跟着圆角走：直角配紧一点的阴影，越圆阴影越柔、偏移越大
+            //（radius=16 时正好是原来的 22 / 5，老配置观感不变）。
+            double shadowRadius = Math.Max(0, Math.Min(40, radius));
+            shadow.BlurRadius = 14 + shadowRadius * 0.5;
+            shadow.ShadowDepth = 3 + shadowRadius * 0.15;
             double tailSize = cfg.GetNumber("bubble", "tailSize", 13);
             if (tailSize < 6) tailSize = 6;
             if (tailSize > 26) tailSize = 26;
