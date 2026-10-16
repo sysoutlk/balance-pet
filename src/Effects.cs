@@ -98,11 +98,18 @@ namespace DshPet
         private double spawnTimer;
         private double burstTimer;
         private double swayClock;
+        private double spawnX;      // 发射点相对中心偏移（贴边喷灰用）
+        private double spawnY;
 
         public bool Busy { get { return mode.Length > 0 || particles.Count > 0; } }
 
         /// <summary>开始一段特效（mode: fireworks / hearts / sparkles / confetti）。</summary>
         public void Start(string kind, double seconds)
+        {
+            Start(kind, seconds, 0, 0);
+        }
+
+        public void Start(string kind, double seconds, double dx, double dy)
         {
             if (window == null)
             {
@@ -133,6 +140,8 @@ namespace DshPet
             left = seconds;
             spawnTimer = 0;
             burstTimer = 0.35;
+            spawnX = dx;
+            spawnY = dy;
             if (!window.IsVisible) window.Show();
             canvas.InvalidateVisual();
         }
@@ -295,6 +304,25 @@ namespace DshPet
                         chip.Spin = (rng.NextDouble() * 2 - 1) * 260;
                         chip.Color = HueColor(rng.NextDouble() * 360);
                         particles.Add(chip);
+                    }
+                    break;
+                case "puff":
+                    if (spawnTimer <= 0)
+                    {
+                        spawnTimer = 0.045;
+                        Particle puff = new Particle();
+                        puff.Kind = 0;
+                        puff.X = cx + spawnX + (rng.NextDouble() * 2 - 1) * 8;
+                        puff.Y = cy + spawnY + (rng.NextDouble() * 2 - 1) * 8;
+                        puff.VX = (rng.NextDouble() * 2 - 1) * 60 + spawnX * 0.6;
+                        puff.VY = (rng.NextDouble() * 2 - 1) * 60 + spawnY * 0.6;
+                        puff.Gravity = -20;
+                        puff.Size = 5 + rng.NextDouble() * 8;
+                        puff.Life = 0.35 + rng.NextDouble() * 0.25;
+                        puff.MaxLife = puff.Life;
+                        byte grey = (byte)(190 + rng.Next(50));
+                        puff.Color = Color.FromRgb(grey, grey, grey);
+                        particles.Add(puff);
                     }
                     break;
             }

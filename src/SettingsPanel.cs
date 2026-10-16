@@ -404,6 +404,14 @@ namespace DshPet
           <TextBox x:Name='EdgeDelayBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='秒' Margin='5,0,0,0'/>
         </DockPanel>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='贴边露出'/>
+          <Slider x:Name='SliverSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.05' Maximum='0.8'/>
+          <TextBlock x:Name='SliverVal' Grid.Column='2' Style='{StaticResource Val}' Text='32%'/>
+        </Grid>
         <Grid Margin='0,6,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -534,6 +542,7 @@ namespace DshPet
                 "PlanList",
                 "RandomRoleChk","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
+                "SliverSlider","SliverVal",
                 "ContentRoot","Main","Nav",
                 "ThemeDropBtn","EffectDropBtn","FontDropBtn","NumberFontDropBtn","BubbleTrendChk","BubbleTailChk","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
@@ -692,6 +701,18 @@ namespace DshPet
                 cfg.Save();
                 RefreshProps();
                 SetHatStatus("已摘掉");
+            };
+            ((Slider)ui["SliverSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("edgeHide.sliverRatio", Math.Round(e.NewValue, 2));
+                ((TextBlock)ui["SliverVal"]).Text = ((int)Math.Round(e.NewValue * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+                cfg.Save();
+                // 已经收起来的桌宠立刻按新比例重新收一次，改完马上能看到
+                foreach (PetWindow pet in engine.Pets)
+                {
+                    if (pet.EdgeHidden) pet.StartEdgeSlide(true);
+                }
             };
             ((Slider)ui["HatSizeSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -1704,6 +1725,7 @@ namespace DshPet
                 SyncBubbleSlider("HatSizeSlider", "HatSizeVal", cfg.GetNumberAt("props.hatSize", 0.55), "0%");
                 SyncBubbleSlider("HatXSlider", "HatXVal", cfg.GetNumberAt("props.hatX", 0.5), "0%");
                 SyncBubbleSlider("HatYSlider", "HatYVal", cfg.GetNumberAt("props.hatY", 0.04), "0%");
+                SyncBubbleSlider("SliverSlider", "SliverVal", cfg.GetNumberAt("edgeHide.sliverRatio", 0.32), "0%");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
                 UpdatePreview();

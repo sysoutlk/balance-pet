@@ -587,6 +587,8 @@ namespace DshPet
             SetDefault("edgeHide", "enabled", true);
             SetDefault("edgeHide", "delaySec", 10.0);
             SetDefault("edgeHide", "peekPx", 14.0);
+            // 收进去后在屏幕边上留多少：按贴边方向的尺寸取比例（0.32 = 留 32%，能看清头）
+            SetDefault("edgeHide", "sliverRatio", 0.32);
             SetDefault("clones", "auto", true);
             SetDefault("clones", "max", 6.0);
             SetDefault("clones", "min", 1.0);

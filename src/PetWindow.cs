@@ -44,6 +44,16 @@ namespace DshPet
         public readonly ScaleTransform Flip = new ScaleTransform(1, 1);
         public readonly ScaleTransform Squash = new ScaleTransform(1, 1);
         public readonly RotateTransform Spin = new RotateTransform(0);
+        // 贴边专用：朝墙倾一点 + 挤压时鼓一下再落回（和动作动画用的那几组互不打扰）
+        public readonly ScaleTransform TuckShape = new ScaleTransform(1, 1);
+        public readonly RotateTransform TuckSpin = new RotateTransform(0);
+        private double tuckTurn;            // 贴边时翻转的角度（让头朝屏幕里）
+        private double tuckProgress;        // 翻转进度（缓入缓出后的 t）
+        private double tuckWobble;          // 落位后的回弹
+        private double tuckWriggle;         // 收着的时候偶尔扭一下
+        private double tuckIdleClock;
+        private double nextWriggle;
+        public double TuckOffset;           // 贴边时的位移小动作（正值 = 更深地缩进边缘）
 
         public string Role = "";
         public double BaseWidth = Mascot.BaseWidth;
@@ -121,6 +131,8 @@ namespace DshPet
             group.Children.Add(Squash);
             group.Children.Add(Flip);
             group.Children.Add(Bob);
+            group.Children.Add(TuckShape);
+            group.Children.Add(TuckSpin);
 
             UseMascot();
 
@@ -258,10 +270,16 @@ namespace DshPet
         /// <summary>播一段特效（fireworks / hearts / sparkles / confetti）。</summary>
         public void PlayFx(string kind, double seconds)
         {
+            PlayFx(kind, seconds, 0, 0);
+        }
+
+        /// <summary>播一段特效，dx/dy 是发射点相对桌宠中心的偏移（贴边喷灰用）。</summary>
+        public void PlayFx(string kind, double seconds, double dx, double dy)
+        {
             if (!cfg.GetFlagAt("fx.enabled", true)) return;
             if (fx == null) fx = new FxLayer();
             fx.Follow(X, Y, Width, Height);
-            fx.Start(kind, seconds);
+            fx.Start(kind, seconds, dx, dy);
         }
 
         public bool FxBusy
@@ -282,6 +300,7 @@ namespace DshPet
         {
             animTime += dt;
             UpdateFx(dt);
+            UpdateTuckMotion(dt);
             if (whale != null)
             {
                 whale.Update(animTime, speed);
@@ -315,9 +334,11 @@ namespace DshPet
         }
 
         /// <summary>
-        /// Squeezes the sprite toward the screen edge instead of clipping it: the window
-        /// gets narrower (and a touch taller) so the whole pet squeezes flat, like pressing
-        /// itself into the edge. t = 0 fully visible, t = 1 fully tucked in.
+        /// 贴边：整只滑到屏幕外面去，只在屏幕边上留一小条，**不做任何压缩变形**。
+        /// 关键在于"不管贴哪条边，露出来的都是头"：贴左右边时把角色侧躺 90°滑出去，
+        /// 贴上边时倒过来 180°，贴下边保持原样——这样留在边上的那一条永远是头/上半身。
+        /// t = 0 完全露出，t = 1 完全收进去；位置由引擎的 UpdateEdgeSlide 插值，
+        /// 外加落位回弹/呼吸（TuckOffset，只有位移没有形变）。
         /// </summary>
         public void ApplyTuck(double t)
         {
@@ -325,14 +346,89 @@ namespace DshPet
             if (t > 1) t = 1;
             Tuck = t;
             double scale = cfg.GetNumber("", "scale", 1.0);
-            double widthFactor = 1 - 0.82 * t;
-            double heightFactor = 1 + 0.10 * t;
-            Width = Math.Max(14, Math.Round(BaseWidth * scale * widthFactor));
-            Height = Math.Max(24, Math.Round(BaseHeight * scale * heightFactor));
+            double baseW = Math.Max(40, Math.Round(BaseWidth * scale));
+            double baseH = Math.Max(40, Math.Round(BaseHeight * scale));
+            // 头朝向屏幕里：左边 +90°（头朝右）、右边 -90°（头朝左）、上边 180°（头朝下）
+            if (EdgeSide == "left") tuckTurn = 90;
+            else if (EdgeSide == "right") tuckTurn = -90;
+            else if (EdgeSide == "top") tuckTurn = 180;
+            else tuckTurn = 0;
+            tuckProgress = t * t * (3 - 2 * t);   // 缓入缓出，翻转不愣
+            if (visual != null)
+            {
+                // 角色按原始长宽渲染（不拉伸），旋转后由窗口包住
+                visual.Width = baseW;
+                visual.Height = baseH;
+            }
+            bool sideways = EdgeSide == "left" || EdgeSide == "right";
+            Width = sideways ? baseH : baseW;
+            Height = sideways ? baseW : baseH;
+            if (propLayer != null)
+            {
+                // 贴边过程中把装扮层收起来（不然帽子会孤零零飘着）
+                propLayer.Visibility = t > 0.05 ? Visibility.Collapsed : Visibility.Visible;
+            }
+            UpdateTuckLook();
             Left = Math.Round(X, 1);
             Top = Math.Round(Y, 1);
             appliedX = (int)Math.Round(X);
             appliedY = (int)Math.Round(Y);
+        }
+
+        /// <summary>贴边只有"转身 + 位移"：把翻转到当前进度，形变一律复位。</summary>
+        private void UpdateTuckLook()
+        {
+            TuckShape.ScaleX = 1;
+            TuckShape.ScaleY = 1;
+            TuckSpin.Angle = tuckTurn * tuckProgress;
+        }
+
+        /// <summary>
+        /// 贴着边时的小动作，全部用位移表达（不动形变）：
+        /// 收进去的一瞬间冲过头再回弹；收好之后每隔几秒往屏幕外/里轻轻探一下（呼吸感）。
+        /// </summary>
+        private void UpdateTuckMotion(double dt)
+        {
+            bool tucked = Tuck > 0.001 || tuckWobble > 0;
+            if (!tucked) return;
+            tuckIdleClock += dt;
+            if (tuckWobble > 0)
+            {
+                tuckWobble -= dt;
+                if (tuckWobble < 0) tuckWobble = 0;
+            }
+            if (tuckWriggle > 0)
+            {
+                tuckWriggle -= dt;
+                if (tuckWriggle < 0) tuckWriggle = 0;
+            }
+            if (Tuck > 0.999 && tuckWobble <= 0 && tuckWriggle <= 0 && tuckIdleClock >= nextWriggle)
+            {
+                tuckWriggle = 0.9;                                  // 收着的时候隔几秒探一下头
+                nextWriggle = tuckIdleClock + 5 + Program.Rng.NextDouble() * 6;
+            }
+            // 全部换算成"往屏幕里/外挪多少像素"：正值 = 更深地缩进边缘
+            double offset = 0;
+            if (tuckWobble > 0) offset -= Math.Sin((0.55 - tuckWobble) * 30) * tuckWobble * 16;
+            if (tuckWriggle > 0) offset += Math.Sin((0.9 - tuckWriggle) * 16) * tuckWriggle * 6;
+            if (Tuck > 0.999 && tuckWobble <= 0) offset += Math.Sin(tuckIdleClock * 2.1) * 2.2;
+            TuckOffset = offset;
+            // 回弹/探头时轻轻晃一下角度（仍然是"转身"，不是拉扁）
+            TuckSpin.Angle = tuckTurn * tuckProgress
+                + (tuckWobble > 0 ? Math.Sin((0.55 - tuckWobble) * 30) * tuckWobble * 4 : 0)
+                + (tuckWriggle > 0 ? Math.Sin((0.9 - tuckWriggle) * 16) * tuckWriggle * 2.5 : 0);
+        }
+
+        /// <summary>贴边落位/弹出时的收尾：回弹一下，收进去时再喷一小团灰（有特效层才喷）。</summary>
+        public void OnTuckSettled(bool hidden)
+        {
+            tuckIdleClock = 0;
+            nextWriggle = 4.5 + Program.Rng.NextDouble() * 5;
+            tuckWobble = hidden ? 0.55 : 0.4;
+            if (!hidden) return;
+            double dx = EdgeSide == "left" ? -Width * 0.45 : (EdgeSide == "right" ? Width * 0.45 : 0);
+            double dy = EdgeSide == "top" ? -Height * 0.45 : (EdgeSide == "bottom" ? Height * 0.45 : 0);
+            PlayFx("puff", 0.45, dx, dy);
         }
 
         public void Place(double x, double y)

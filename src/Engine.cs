@@ -520,18 +520,34 @@ namespace DshPet
             ScreenArea area = ScreenArea.ForPoint(pet.EdgeShownX + pet.BaseWidth / 2, pet.EdgeShownY + pet.BaseHeight / 2);
             double tuckX = pet.EdgeShownX;
             double tuckY = pet.EdgeShownY;
-            if (pet.EdgeSide == "left") tuckX = area.Left + 1;
-            else if (pet.EdgeSide == "right") tuckX = area.Right - pet.Width - 1;
-            else if (pet.EdgeSide == "top") tuckY = area.Top + 1;
-            else if (pet.EdgeSide == "bottom") tuckY = area.Bottom - pet.Height - 1;
-            pet.X = pet.EdgeShownX + (tuckX - pet.EdgeShownX) * pet.Tuck;
-            pet.Y = pet.EdgeShownY + (tuckY - pet.EdgeShownY) * pet.Tuck;
+            // 收进去 = 整只滑到屏幕外面，只在屏幕边上留一条（不做压缩变形）。
+            // 留多少按贴边方向的尺寸取比例：留得太少只剩一条缝，多了才看得清是"头探出来"。
+            double sliverRatio = cfg.GetNumberAt("edgeHide.sliverRatio", 0.32);
+            if (sliverRatio < 0.04) sliverRatio = 0.04;
+            if (sliverRatio > 0.8) sliverRatio = 0.8;
+            double sideSize = (pet.EdgeSide == "left" || pet.EdgeSide == "right") ? pet.Width : pet.Height;
+            double sliver = Math.Round(sideSize * sliverRatio);
+            if (sliver < 10) sliver = 10;
+            if (pet.EdgeSide == "left") tuckX = area.Left - pet.Width + sliver;
+            else if (pet.EdgeSide == "right") tuckX = area.Right - sliver;
+            else if (pet.EdgeSide == "top") tuckY = area.Top - pet.Height + sliver;
+            else if (pet.EdgeSide == "bottom") tuckY = area.Bottom - sliver;
+            // 落位回弹/呼吸：往屏幕里外挪几像素（TuckOffset 正值 = 更深）
+            if (pet.EdgeSide == "left") tuckX -= pet.TuckOffset;
+            else if (pet.EdgeSide == "right") tuckX += pet.TuckOffset;
+            else if (pet.EdgeSide == "top") tuckY -= pet.TuckOffset;
+            else if (pet.EdgeSide == "bottom") tuckY += pet.TuckOffset;
+            double eased = pet.Tuck * pet.Tuck * (3 - 2 * pet.Tuck);   // 缓入缓出，滑动不愣
+            pet.X = pet.EdgeShownX + (tuckX - pet.EdgeShownX) * eased;
+            pet.Y = pet.EdgeShownY + (tuckY - pet.EdgeShownY) * eased;
             pet.ApplyPosition();
 
             if (Math.Abs(pet.Tuck - pet.TargetTuck) > 0.001) return;
 
-            if (pet.TargetTuck >= 0.999) pet.EdgeHidden = true;
+            bool hidden = pet.TargetTuck >= 0.999;
+            if (hidden) pet.EdgeHidden = true;
             else if (pet.TargetTuck <= 0.001) pet.EdgeHidden = false;
+            pet.OnTuckSettled(hidden);   // 回弹一下（收进去时再喷一小团灰）
             pet.Mode = "idle";
             ScheduleEdgeHide(pet, now);
         }
@@ -650,7 +666,11 @@ namespace DshPet
                         double amount = Math.Max(0, out1 - back2);
                         ScreenArea area = ScreenArea.ForPoint(pet.X + pet.Width / 2, pet.Y + pet.Height / 2);
                         bool towardsLeft = pet.ActionOriginX + pet.Width / 2 < (area.Left + area.Right) / 2;
-                        double hidden = towardsLeft ? area.Left - pet.Width + 18 : area.Right - 18;
+                        double peekRatio = cfg.GetNumberAt("edgeHide.sliverRatio", 0.32);
+                        if (peekRatio < 0.04) peekRatio = 0.04;
+                        if (peekRatio > 0.8) peekRatio = 0.8;
+                        double sliverPeek = Math.Max(10, Math.Round(pet.Width * peekRatio));
+                        double hidden = towardsLeft ? area.Left - pet.Width + sliverPeek : area.Right - sliverPeek;
                         pet.X = pet.ActionOriginX + (hidden - pet.ActionOriginX) * amount;
                         pet.Bob.Y = -2 * Math.Abs(Math.Sin(8 * Math.PI * p)) * (1 - amount);
                         pet.ApplyPosition();
