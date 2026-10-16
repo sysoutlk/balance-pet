@@ -258,6 +258,7 @@ namespace DshPet
                 return;
             }
             pet.Dropped = false;
+            if (pet.Tuck > 0.01) return;   // mid-tuck: no walking, no random actions
             if (EdgeHideEnabled(pet))
             {
                 if (pet.EdgeHideAt == DateTime.MaxValue)
@@ -538,7 +539,8 @@ namespace DshPet
 
         private void RevealPet(PetWindow pet)
         {
-            if (!pet.EdgeHidden) return;
+            // Also pull back a half-finished tuck: hovering must never let it finish hiding.
+            if (!pet.EdgeHidden && pet.Tuck < 0.05) return;
             pet.StartEdgeSlide(false);
             pet.EdgeHideAt = DateTime.MaxValue;
         }

@@ -300,7 +300,8 @@ namespace DshPet
         public void SetIdle()
         {
             Mode = "idle";
-            if (Tuck != 0)
+            // Never pop out of a tuck just because an idle/action transition happened.
+            if (Tuck != 0 && !EdgeHidden && TargetTuck < 0.999)
             {
                 TargetTuck = 0;
                 ApplyTuck(0);
@@ -366,6 +367,10 @@ namespace DshPet
             if (!cfg.GetFlag("walk", "enabled", true)) return;
             ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
             double margin = cfg.GetNumber("walk", "marginPx", 12);
+            // Keep normal strolls out of the snap zone: only a user drag (or a throw) should
+            // park the pet against an edge, otherwise it would tuck itself in on its own.
+            double snapDistance = cfg.GetFlag("snap", "enabled", true) ? cfg.GetNumber("snap", "distancePx", 140) : 0;
+            margin += snapDistance;
             double minX = area.Left + margin;
             double maxX = Math.Max(minX, area.Right - Width - margin);
             double minY = area.Top + margin;

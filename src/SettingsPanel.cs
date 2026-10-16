@@ -25,7 +25,7 @@ namespace DshPet
         FontFamily='Microsoft YaHei UI, Segoe UI' TextOptions.TextFormattingMode='Display'>
   <Window.Resources>
     <Style x:Key='Btn' TargetType='Button'>
-      <Setter Property='Foreground' Value='#E6ECFF'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='FontSize' Value='12'/>
       <Setter Property='Height' Value='30'/>
       <Setter Property='Margin' Value='0,0,7,7'/>
@@ -35,12 +35,12 @@ namespace DshPet
       <Setter Property='Template'>
         <Setter.Value>
           <ControlTemplate TargetType='Button'>
-            <Border x:Name='b' Background='#252D48' CornerRadius='9' Padding='11,0'
+            <Border x:Name='b' Background='__BTN__' CornerRadius='9' Padding='11,0'
                     BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'>
               <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='b' Property='Background' Value='#33406A'/></Trigger>
+              <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='b' Property='Background' Value='__BTN_HOVER__'/></Trigger>
               <Trigger Property='IsPressed' Value='True'><Setter TargetName='b' Property='Background' Value='#4B6BFB'/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -70,7 +70,7 @@ namespace DshPet
       </Setter>
     </Style>
     <Style x:Key='Switch' TargetType='CheckBox'>
-      <Setter Property='Foreground' Value='#C9D4EE'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='FontSize' Value='12'/>
       <Setter Property='Margin' Value='0,5,16,5'/>
       <Setter Property='Cursor' Value='Hand'/>
@@ -78,8 +78,8 @@ namespace DshPet
         <Setter.Value>
           <ControlTemplate TargetType='CheckBox'>
             <StackPanel Orientation='Horizontal' Background='Transparent'>
-              <Border x:Name='track' Width='34' Height='19' CornerRadius='10' Background='#2A3350'>
-                <Ellipse x:Name='knob' Width='13' Height='13' Fill='#8FA0C8' HorizontalAlignment='Left' Margin='3,0,0,0'/>
+              <Border x:Name='track' Width='34' Height='19' CornerRadius='10' Background='__TRACK__'>
+                <Ellipse x:Name='knob' Width='13' Height='13' Fill='__MUTED__' HorizontalAlignment='Left' Margin='3,0,0,0'/>
               </Border>
               <ContentPresenter Margin='8,0,0,0' VerticalAlignment='Center'/>
             </StackPanel>
@@ -101,7 +101,7 @@ namespace DshPet
         <Setter.Value>
           <ControlTemplate TargetType='Slider'>
             <Grid Background='Transparent'>
-              <Border Height='4' CornerRadius='2' Background='#2A3350' VerticalAlignment='Center'/>
+              <Border Height='4' CornerRadius='2' Background='__TRACK__' VerticalAlignment='Center'/>
               <Track x:Name='PART_Track'>
                 <Track.DecreaseRepeatButton>
                   <RepeatButton Command='Slider.DecreaseLarge' Focusable='False'>
@@ -139,27 +139,27 @@ namespace DshPet
     <Style x:Key='Sect' TargetType='TextBlock'>
       <Setter Property='FontSize' Value='11'/>
       <Setter Property='FontWeight' Value='SemiBold'/>
-      <Setter Property='Foreground' Value='#8FA0C8'/>
+      <Setter Property='Foreground' Value='__MUTED__'/>
       <Setter Property='Margin' Value='1,16,0,7'/>
     </Style>
     <Style x:Key='Val' TargetType='TextBlock'>
       <Setter Property='FontSize' Value='11'/>
-      <Setter Property='Foreground' Value='#C9D4EE'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='VerticalAlignment' Value='Center'/>
       <Setter Property='Margin' Value='8,0,0,0'/>
     </Style>
     <Style x:Key='Lbl' TargetType='TextBlock'>
       <Setter Property='FontSize' Value='12'/>
-      <Setter Property='Foreground' Value='#C9D4EE'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='VerticalAlignment' Value='Center'/>
     </Style>
     <Style x:Key='KeyBox' TargetType='PasswordBox'>
       <Setter Property='Height' Value='26'/>
       <Setter Property='FontSize' Value='11'/>
-      <Setter Property='Foreground' Value='#E6ECFF'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='CaretBrush' Value='White'/>
-      <Setter Property='Background' Value='#121828'/>
-      <Setter Property='BorderBrush' Value='#2A3350'/>
+      <Setter Property='Background' Value='__FIELD__'/>
+      <Setter Property='BorderBrush' Value='__TRACK__'/>
       <Setter Property='BorderThickness' Value='1'/>
       <Setter Property='Padding' Value='6,0'/>
       <Setter Property='VerticalContentAlignment' Value='Center'/>
@@ -167,16 +167,16 @@ namespace DshPet
     <Style x:Key='TxtBox' TargetType='TextBox'>
       <Setter Property='Height' Value='26'/>
       <Setter Property='FontSize' Value='11'/>
-      <Setter Property='Foreground' Value='#E6ECFF'/>
+      <Setter Property='Foreground' Value='__FG2__'/>
       <Setter Property='CaretBrush' Value='White'/>
-      <Setter Property='Background' Value='#121828'/>
-      <Setter Property='BorderBrush' Value='#2A3350'/>
+      <Setter Property='Background' Value='__FIELD__'/>
+      <Setter Property='BorderBrush' Value='__TRACK__'/>
       <Setter Property='BorderThickness' Value='1'/>
       <Setter Property='Padding' Value='6,0'/>
       <Setter Property='VerticalContentAlignment' Value='Center'/>
     </Style>
   </Window.Resources>
-  <Border Background='#F2171C2B' CornerRadius='16' BorderBrush='#2EFFFFFF' BorderThickness='1' Padding='18,13,18,15'>
+  <Border Background='__CARD__' CornerRadius='16' BorderBrush='__CARD_BORDER__' BorderThickness='1' Padding='18,13,18,15'>
     <Border.Effect>
       <DropShadowEffect BlurRadius='26' ShadowDepth='6' Opacity='0.5' Color='#000000'/>
     </Border.Effect>
@@ -216,21 +216,15 @@ namespace DshPet
         <DockPanel x:Name='Header' Background='Transparent'>
           <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='✕' Width='26' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}'/>
           <StackPanel Margin='0,2,0,0'>
-            <TextBlock Text='DSH 桌宠' FontSize='15' FontWeight='Bold' Foreground='#EAF0FF'/>
-            <TextBlock x:Name='SubText' Text='…' FontSize='10' Foreground='#8FA0C8' Margin='0,3,0,0'/>
+            <TextBlock Text='DSH 桌宠' FontSize='15' FontWeight='Bold' Foreground='__FG__'/>
+            <TextBlock x:Name='SubText' Text='…' FontSize='10' Foreground='__MUTED__' Margin='0,3,0,0'/>
           </StackPanel>
         </DockPanel>
         <DockPanel Margin='0,6,0,0'>
-          <StackPanel x:Name='Nav' DockPanel.Dock='Left' Width='104'/>
+          <StackPanel x:Name='Nav' DockPanel.Dock='Left' Width='132'/>
           <StackPanel x:Name='Main'/>
         </DockPanel>
-        <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
-        <UniformGrid x:Name='ActionGrid' Columns='4'/>
-        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
-        <TextBlock Style='{StaticResource Sect}' Text='外观'/>
-        <WrapPanel x:Name='RolePanel'/>
-        <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
-        <TextBlock Style='{StaticResource Sect}' Text='气泡'/>
+        <TextBlock Style='{StaticResource Sect}' Text='主题与气泡'/>
         <WrapPanel>
           <Button x:Name='ThemeDropBtn' Content='主题：浅色  ▾' Width='112' Style='{StaticResource Btn}'/>
           <Button x:Name='EffectDropBtn' Content='特效：关  ▾' Width='104' Style='{StaticResource Btn}'/>
@@ -271,7 +265,7 @@ namespace DshPet
           <Slider x:Name='BubbleShadowSlider' Width='86' Minimum='0' Maximum='0.6' Style='{StaticResource Flat}'/>
         </DockPanel>
         <StackPanel Orientation='Horizontal' Margin='1,2,0,0'>
-          <TextBlock Text='主题色' FontSize='11' Foreground='#8FA0C8' VerticalAlignment='Center' Margin='0,0,6,0'/>
+          <TextBlock Text='主题色' FontSize='11' Foreground='__MUTED__' VerticalAlignment='Center' Margin='0,0,6,0'/>
           <WrapPanel x:Name='Color1Panel'/>
         </StackPanel>
         <Grid Margin='0,9,0,0'>
@@ -290,6 +284,12 @@ namespace DshPet
           <Slider x:Name='OpacitySlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.4' Maximum='1'/>
           <TextBlock x:Name='OpacityVal' Grid.Column='2' Style='{StaticResource Val}' Text='100%'/>
         </Grid>
+        <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
+        <UniformGrid x:Name='ActionGrid' Columns='4'/>
+        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
+        <TextBlock Style='{StaticResource Sect}' Text='外观'/>
+        <WrapPanel x:Name='RolePanel'/>
+        <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
         <TextBlock Style='{StaticResource Sect}' Text='行为'/>
         <WrapPanel>
           <CheckBox x:Name='WalkChk' Style='{StaticResource Switch}' Content='散步'/>
@@ -321,7 +321,7 @@ namespace DshPet
         </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='数据源（余额 API）'/>
         <StackPanel x:Name='ProviderList'/>
-        <TextBlock Style='{StaticResource Sect}' Text='其他平台' Margin='1,4,0,6'/>
+        
         <WrapPanel x:Name='UnsupportedPanel'/>
         <DockPanel Margin='0,6,0,0'>
           <Button x:Name='RefreshBtn' DockPanel.Dock='Right' Content='刷新余额' Width='88' Style='{StaticResource Btn}' Margin='0'/>
@@ -331,7 +331,7 @@ namespace DshPet
           <TextBlock Style='{StaticResource Lbl}' Text='HTTPS 代理' Width='66'/>
           <TextBox x:Name='ProxyBox' Style='{StaticResource TxtBox}'/>
         </DockPanel>
-        <TextBlock FontSize='10' Foreground='#7D8BB0' TextWrapping='Wrap' Margin='1,3,0,0'
+        <TextBlock FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,3,0,0'
                    Text='留空 = 直连；填 http://127.0.0.1:7890 之类的地址可让查询走指定代理（网络出口被限制 HTTP 451 时很有用）。'/>
         <TextBlock Style='{StaticResource Sect}' Text='套餐用量（5 小时 / 7 天窗口）'/>
         <StackPanel x:Name='PlanList'/>
@@ -345,7 +345,7 @@ namespace DshPet
           <TextBox x:Name='AlertBelowBox' Style='{StaticResource TxtBox}' Width='66'/>
           <TextBlock Style='{StaticResource Lbl}' Text='今日预算' Width='56' Margin='12,0,0,0'/>
           <TextBox x:Name='BudgetBox' Style='{StaticResource TxtBox}' Width='66'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='0 或留空 = 关闭' Margin='10,0,0,0' FontSize='10' Foreground='#7D8BB0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='0 或留空 = 关闭' Margin='10,0,0,0' FontSize='10' Foreground='__MUTED__'/>
         </DockPanel>
         <TextBlock Style='{StaticResource Sect}' Text='分身'/>
         <DockPanel Margin='0,0,0,6'>
@@ -390,7 +390,7 @@ namespace DshPet
             // 主题色（bubble.color1）同时给设置卡片的高亮着色：一处设置，两处生效。
             string accent = cfg.GetStringAt("bubble.color1", "#4B6BFB");
             if (string.IsNullOrEmpty(accent) || !accent.StartsWith("#", StringComparison.Ordinal)) accent = "#4B6BFB";
-            root = (Window)XamlReader.Parse(Xaml.Replace("#4B6BFB", accent));
+            root = (Window)XamlReader.Parse(PanelXaml(accent));
             foreach (string name in new string[]
             {
                 "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
@@ -1267,6 +1267,12 @@ namespace DshPet
                         cfg.Save();
                         popup.IsOpen = false;
                         if (refresh) engine.Data.Refresh();
+                        if (path == "bubble.theme")
+                        {
+                            // 主题同时作用于设置卡片本身：重建一次面板让配色立即生效。
+                            RebuildForAccent(true);
+                            return;
+                        }
                         Update();
                     };
                     list.Children.Add(item);
@@ -1332,6 +1338,59 @@ namespace DshPet
         }
 
         /// <summary>主题色会注入卡片模板，改色后重建面板让高亮色立即生效。</summary>
+        /// <summary>
+        /// 面板的配色与气泡共用同一套主题：深色系/浅色系/莫奈都会替换掉 XAML 里的占位符，
+        /// 主题色则替换强调色，做到「一处设置，气泡与设置卡片同时跟随」。
+        /// </summary>
+        private string PanelXaml(string accent)
+        {
+            string theme = cfg.GetString("bubble", "theme", "");
+            if (string.IsNullOrEmpty(theme)) theme = cfg.GetString("bubble", "style", "light");
+            ThemePalette palette = BubbleTheme.Resolve(theme);
+            bool dark = palette.Dark;
+            string card = dark ? "#F2171C2B" : "#F7FFFFFF";
+            string cardBorder = dark ? "#2EFFFFFF" : "#1E2C3A6E";
+            if (theme == "glass") card = "#E0FFFFFF";
+            if (theme == "frost") card = "#F0F5FFFF";
+            if (theme == "monet") card = ToHex(palette.Card);
+            string row = dark ? "#1B2236" : "#F1F4FA";
+            string field = dark ? "#121828" : "#FFFFFF";
+            string track = dark ? "#2A3350" : "#E3E8F3";
+            string button = dark ? "#252D48" : "#EDF0F8";
+            string buttonHover = dark ? "#33406A" : "#E1E6F4";
+            string border = dark ? "#39456B" : "#D9DFEC";
+            string chip = dark ? "#202A42" : "#E9EDF7";
+            if (theme == "monet")
+            {
+                row = ToHex(dark ? palette.QuipBackground : palette.BarEmpty);
+                field = dark ? "#171D2B" : "#FFFFFF";
+                track = ToHex(dark ? palette.Bar : palette.BarEmpty);
+                button = ToHex(dark ? palette.QuipBackground : palette.QuipBackground);
+                buttonHover = ToHex(palette.Bar);
+                border = ToHex(palette.Border);
+                chip = ToHex(palette.BarEmpty);
+            }
+            return Xaml
+                .Replace("__CARD__", card)
+                .Replace("__CARD_BORDER__", cardBorder)
+                .Replace("__FG2__", ToHex(palette.Dark ? palette.RowValue : palette.Title))
+                .Replace("__FG__", ToHex(palette.Title))
+                .Replace("__MUTED__", ToHex(palette.Muted))
+                .Replace("__ROW__", row)
+                .Replace("__BTN__", button)
+                .Replace("__BTN_HOVER__", buttonHover)
+                .Replace("__FIELD__", field)
+                .Replace("__TRACK__", track)
+                .Replace("__CHIP__", chip)
+                .Replace("__BORDER__", border)
+                .Replace("#4B6BFB", accent);
+        }
+
+        private static string ToHex(Color color)
+        {
+            return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
+        }
+
         private void RebuildForAccent(bool rebuild)
         {
             if (!rebuild)
@@ -1440,13 +1499,13 @@ namespace DshPet
                     host.Children.Add(page);
                     Button item = new Button();
                     item.Style = (Style)root.Resources["Btn"];
-                    item.Width = 96;
-                    item.Height = 26;
+                    item.Width = 120;
+                    item.Height = 28;
                     item.Margin = new Thickness(0, 0, 0, 4);
                     item.Padding = new Thickness(8, 0, 8, 0);
                     item.FontSize = 11;
                     item.HorizontalContentAlignment = HorizontalAlignment.Left;
-                    item.Content = title.Length > 8 ? title.Substring(0, 8) : title;
+                    item.Content = title;
                     item.Tag = page;
                     item.BorderThickness = new Thickness(0);
                     item.BorderBrush = Brushes.Transparent;
