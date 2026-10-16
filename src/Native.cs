@@ -13,6 +13,7 @@ namespace DshPet
         public const uint SWP_NOSIZE = 0x0001;
         public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_NOACTIVATE = 0x0010;
+        public const int WS_EX_TRANSPARENT = 0x00000020;
         public const int ATTACH_PARENT_PROCESS = -1;
         public const int WM_NCLBUTTONDOWN = 0x00A1;
         public const int HTCAPTION = 2;

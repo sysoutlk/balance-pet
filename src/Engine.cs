@@ -1280,6 +1280,10 @@ namespace DshPet
                 case "dash": return "冲刺";
                 case "follow": return "跟随";
                 case "greet": return "打招呼";
+                case "fireworks": return "放烟花";
+                case "hearts": return "比心";
+                case "sparkles": return "闪光";
+                case "confetti": return "撒花";
                 default: return key;
             }
         }

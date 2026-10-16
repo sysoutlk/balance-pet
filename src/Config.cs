@@ -500,6 +500,11 @@ namespace DshPet
             SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（不叫 dsh：应用是多平台的）
             SetDefault("frames", "activePerSecond", 25.0);   // 动作/散步时的帧率（高性能可拉到 60~120）
             SetDefault("frames", "idlePerSecond", 4.0);      // 闲置时的帧率（省电）
+            SetDefault("fx", "enabled", true);               // 特效层（烟花/爱心/闪光/撒花）
+            SetDefault("props", "hat", "");                  // 装扮：帽子图片（props\ 目录下，留空 = 不戴）
+            SetDefault("props", "hatSize", 0.55);            // 帽子宽度 = 角色宽度 × 这个比例
+            SetDefault("props", "hatX", 0.5);                // 帽子中心在角色盒子里的相对位置（0~1）
+            SetDefault("props", "hatY", 0.04);
             SetDefault("", "role", "");
             SetDefault("roles", "random", true);
             SetDefault("", "scale", 1.0);
@@ -616,6 +621,18 @@ namespace DshPet
                 "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",
                 "stretch", "yawn", "shy", "startle", "look", "greet"
             });
+            // 动作池 v2：把特效动作（烟花/爱心/闪光/撒花）补进随机池，老配置一次性升级。
+            double poolVersion = GetNumberAt("actions.poolVersion", 1);
+            if (poolVersion < 2)
+            {
+                List<string> pool = GetStrings("actions", "pool");
+                foreach (string key in new string[] { "fireworks", "hearts", "sparkles", "confetti" })
+                {
+                    if (!pool.Contains(key)) pool.Add(key);
+                }
+                SetAt("actions.pool", pool.ToArray());
+                SetAt("actions.poolVersion", 2.0);
+            }
             // 台词库 v2：默认池统一放在 QuipLibrary()，顺便按版本号做一次平滑升级
             //（老配置里还是短池子的换成加量版，自己写长了的不动）。
             double quipVersion = GetNumberAt("quips.version", 1);
@@ -788,6 +805,17 @@ namespace DshPet
                     return "dash";
                 case "跟随":
                     return "follow";
+                case "烟花":
+                case "放烟花":
+                    return "fireworks";
+                case "爱心":
+                case "比心":
+                    return "hearts";
+                case "闪光":
+                case "闪亮":
+                    return "sparkles";
+                case "撒花":
+                    return "confetti";
                 default:
                     return "";
             }
@@ -822,6 +850,10 @@ namespace DshPet
                 case "stroll": return "溜达";
                 case "dash": return "冲刺";
                 case "follow": return "跟随";
+                case "fireworks": return "放烟花";
+                case "hearts": return "比心";
+                case "sparkles": return "闪光";
+                case "confetti": return "撒花";
                 default: return key;
             }
         }
@@ -882,6 +914,10 @@ namespace DshPet
             map["follow"] = new string[] { "跟着你～", "等等我！", "你去哪我去哪", "脚步跟上", "别走太快呀", "我贴着你走" };
             map["bump"] = new string[] { "哎哟！", "谁撞我！", "让一让～", "撞到啦…", "看着点路呀", "骨头都要散了", "你赔我发型", "别挤别挤" };
             map["greet"] = new string[] { "你好呀！", "我在这儿～", "报到！", "看见你啦", "来啦来啦", "今天也关照一下我" };
+            map["fireworks"] = new string[] { "看烟花！", "砰——啪！", "给今天放一发", "庆祝一下～", "新年快乐（提前的）" };
+            map["hearts"] = new string[] { "比心～", "爱心发射", "偷偷喜欢你", "送你一颗心" };
+            map["sparkles"] = new string[] { "闪亮登场！", "闪闪发光", "自带高光" };
+            map["confetti"] = new string[] { "撒花！", "庆祝一下～", "今天的额度达标啦" };
             return map;
         }
 

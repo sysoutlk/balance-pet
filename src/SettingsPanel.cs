@@ -363,6 +363,26 @@ namespace DshPet
           <TextBlock x:Name='AnimMakeStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='6,0,0,0'
                      TextTrimming='CharacterEllipsis' ToolTip='选一张 PNG，自动生成含全部动作的逐帧角色（存在 roles 目录，可再逐帧精修）'/>
         </DockPanel>
+        <DockPanel Margin='0,2,0,0'>
+          <Button x:Name='HatPickBtn' Content='戴帽子…' Width='92' Style='{StaticResource Btn}'/>
+          <Button x:Name='HatClearBtn' Content='摘掉' Width='62' Style='{StaticResource Btn}'/>
+          <TextBlock x:Name='HatStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='6,0,0,0'
+                     TextTrimming='CharacterEllipsis' ToolTip='挑一张透明底 PNG 当帽子（会复制到 props 目录），下面调大小和位置'/>
+        </DockPanel>
+        <WrapPanel Margin='0,2,0,0'>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='帽子大小' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='HatSizeVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='HatSizeSlider' Width='156' Minimum='0.1' Maximum='1.4' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='帽子左右' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='HatXVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='HatXSlider' Width='156' Minimum='0' Maximum='1' Style='{StaticResource Flat}'/>
+          </StackPanel>
+          <StackPanel Width='156' Margin='0,0,10,6'>
+            <DockPanel><TextBlock Text='帽子上下' FontSize='10' Foreground='__MUTED__'/><TextBlock x:Name='HatYVal' FontSize='10' Foreground='__FGLABEL__' HorizontalAlignment='Right'/></DockPanel>
+            <Slider x:Name='HatYSlider' Width='156' Minimum='-0.2' Maximum='1' Style='{StaticResource Flat}'/>
+          </StackPanel>
+        </WrapPanel>
         <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
         <TextBlock Style='{StaticResource Sect}' Text='行为'/>
         <WrapPanel>
@@ -513,6 +533,7 @@ namespace DshPet
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
+                "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
                 "ContentRoot","Main","Nav",
                 "ThemeDropBtn","EffectDropBtn","FontDropBtn","NumberFontDropBtn","BubbleTrendChk","BubbleTailChk","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
@@ -664,6 +685,38 @@ namespace DshPet
             ((Button)ui["QuipImportBtn"]).Click += delegate { ImportQuipsDialog(); };
             ((Button)ui["QuipExportBtn"]).Click += delegate { ExportQuipsDialog(); };
             ((Button)ui["AnimMakeBtn"]).Click += delegate { MakeAnimDialog(); };
+            ((Button)ui["HatPickBtn"]).Click += delegate { HatPickDialog(); };
+            ((Button)ui["HatClearBtn"]).Click += delegate
+            {
+                cfg.Set("props", "hat", "");
+                cfg.Save();
+                RefreshProps();
+                SetHatStatus("已摘掉");
+            };
+            ((Slider)ui["HatSizeSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("props.hatSize", Math.Round(e.NewValue, 2));
+                ((TextBlock)ui["HatSizeVal"]).Text = ((int)Math.Round(e.NewValue * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+                cfg.Save();
+                RefreshProps();
+            };
+            ((Slider)ui["HatXSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("props.hatX", Math.Round(e.NewValue, 2));
+                ((TextBlock)ui["HatXVal"]).Text = ((int)Math.Round(e.NewValue * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+                cfg.Save();
+                RefreshProps();
+            };
+            ((Slider)ui["HatYSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("props.hatY", Math.Round(e.NewValue, 2));
+                ((TextBlock)ui["HatYVal"]).Text = ((int)Math.Round(e.NewValue * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+                cfg.Save();
+                RefreshProps();
+            };
             BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
             previewTimer.Interval = TimeSpan.FromMilliseconds(110);
             previewTimer.Tick += delegate
@@ -751,6 +804,44 @@ namespace DshPet
         private void SetAnimStatus(string text)
         {
             TextBlock status = ui.ContainsKey("AnimMakeStatus") ? ui["AnimMakeStatus"] as TextBlock : null;
+            if (status == null) return;
+            status.Text = text;
+            status.ToolTip = text;
+        }
+
+        /// <summary>选一张图当帽子：复制到 props\ 目录再挂上（透明底 PNG 效果最好）。</summary>
+        private void HatPickDialog()
+        {
+            System.Windows.Forms.OpenFileDialog dialog = new System.Windows.Forms.OpenFileDialog();
+            dialog.Title = "选一张帽子（透明底 PNG 最好）";
+            dialog.Filter = "图片 (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|所有文件 (*.*)|*.*";
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            string name = System.IO.Path.GetFileName(dialog.FileName);
+            try
+            {
+                string target = System.IO.Path.Combine(AppPaths.PropsDir, name);
+                if (!string.Equals(dialog.FileName, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    System.IO.File.Copy(dialog.FileName, target, true);
+                }
+            }
+            catch
+            {
+            }
+            cfg.Set("props", "hat", name);
+            cfg.Save();
+            RefreshProps();
+            SetHatStatus("已戴上 " + name + "（下面调大小和位置）");
+        }
+
+        private void RefreshProps()
+        {
+            foreach (PetWindow pet in engine.Pets) pet.RefreshProp();
+        }
+
+        private void SetHatStatus(string text)
+        {
+            TextBlock status = ui.ContainsKey("HatStatus") ? ui["HatStatus"] as TextBlock : null;
             if (status == null) return;
             status.Text = text;
             status.ToolTip = text;
@@ -1610,6 +1701,9 @@ namespace DshPet
                     Math.Min(cfg.GetNumberAt("frames.activePerSecond", 25), fpsCap), "0 fps");
                 SyncBubbleSlider("IdleFpsSlider", "IdleFpsVal",
                     Math.Min(cfg.GetNumberAt("frames.idlePerSecond", 4), fpsCap), "0 fps");
+                SyncBubbleSlider("HatSizeSlider", "HatSizeVal", cfg.GetNumberAt("props.hatSize", 0.55), "0%");
+                SyncBubbleSlider("HatXSlider", "HatXVal", cfg.GetNumberAt("props.hatX", 0.5), "0%");
+                SyncBubbleSlider("HatYSlider", "HatYVal", cfg.GetNumberAt("props.hatY", 0.04), "0%");
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
                 UpdatePreview();

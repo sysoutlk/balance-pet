@@ -22,12 +22,18 @@ namespace DshPet
         {
             "hop", "bounce", "spin", "roll", "wobble", "nod", "shake", "wave",
             "clap", "stretch", "yawn", "shy", "startle", "look", "greet",
-            "lie", "sleep", "pace", "peek", "stroll", "dash", "follow"
+            "lie", "sleep", "pace", "peek", "stroll", "dash", "follow",
+            "fireworks", "hearts", "sparkles", "confetti"
         };
 
         private readonly Config cfg;
         private readonly TransformGroup group = new TransformGroup();
         private FrameworkElement visual;
+        private Grid host;
+        private Canvas propLayer;           // 装扮层（帽子等挂件，画在角色上面）
+        private Image propImage;            // 当前挂件
+        private string propLoaded = "";     // 已加载的挂件路径，避免反复解码
+        private FxLayer fx;                 // 特效层（烟花/爱心/闪光/撒花）
         private RoleAnim animation;
         private WhaleAnimator whale;
         private string animState = "idle";
@@ -134,7 +140,62 @@ namespace DshPet
             visual = element;
             visual.RenderTransform = group;
             visual.RenderTransformOrigin = new Point(0.5, 0.5);
-            Content = visual;
+            // 视觉树：角色 → 装扮层（帽子等）→ 特效层（烟花等，在独立窗口里）
+            host = new Grid();
+            host.Children.Add(visual);
+            propLayer = new Canvas();
+            propLayer.IsHitTestVisible = false;
+            host.Children.Add(propLayer);
+            Content = host;
+            RefreshProp();
+        }
+
+        /// <summary>装扮层：按角色盒子的相对坐标把帽子之类的挂件摆上去（留空 = 不戴）。</summary>
+        public void RefreshProp()
+        {
+            if (propLayer == null) return;
+            propLayer.Children.Clear();
+            propImage = null;
+            propLoaded = "";
+            string name = cfg.GetStringAt("props.hat", "");
+            if (string.IsNullOrEmpty(name)) return;
+            string path = AppPaths.ResolveProp(name);
+            if (string.IsNullOrEmpty(path)) return;
+            try
+            {
+                BitmapImage bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(path);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                propImage = new Image();
+                propImage.Source = bitmap;
+                propImage.Stretch = Stretch.Uniform;
+                propLoaded = path;
+                ApplyPropLayout();
+                propLayer.Children.Add(propImage);
+            }
+            catch
+            {
+                propImage = null;
+            }
+        }
+
+        private void ApplyPropLayout()
+        {
+            if (propImage == null) return;
+            BitmapSource source = propImage.Source as BitmapSource;
+            if (source == null || source.PixelWidth <= 0) return;
+            double size = Math.Max(0.05, Math.Min(1.6, cfg.GetNumberAt("props.hatSize", 0.55)));
+            double w = Width * size;
+            double h = w * source.PixelHeight / source.PixelWidth;
+            propImage.Width = w;
+            propImage.Height = h;
+            double px = Math.Max(-0.5, Math.Min(1.5, cfg.GetNumberAt("props.hatX", 0.5)));
+            double py = Math.Max(-0.5, Math.Min(1.5, cfg.GetNumberAt("props.hatY", 0.04)));
+            Canvas.SetLeft(propImage, Width * px - w / 2);
+            Canvas.SetTop(propImage, Height * py - h / 2);
         }
 
         private void UseMascot()
@@ -187,6 +248,27 @@ namespace DshPet
             }
         }
 
+        /// <summary>特效层：没有特效时什么都不做，有就推进粒子（烟花等）。</summary>
+        private void UpdateFx(double dt)
+        {
+            if (fx == null || !fx.Busy) return;
+            fx.Update(dt, Width, Height);
+        }
+
+        /// <summary>播一段特效（fireworks / hearts / sparkles / confetti）。</summary>
+        public void PlayFx(string kind, double seconds)
+        {
+            if (!cfg.GetFlagAt("fx.enabled", true)) return;
+            if (fx == null) fx = new FxLayer();
+            fx.Follow(X, Y, Width, Height);
+            fx.Start(kind, seconds);
+        }
+
+        public bool FxBusy
+        {
+            get { return fx != null && fx.Busy; }
+        }
+
         /// <summary>Selects the animation state (idle / walk / one action key / sleep ...).</summary>
         public void SetAnimState(string state)
         {
@@ -199,6 +281,7 @@ namespace DshPet
         public void Advance(double dt, double speed)
         {
             animTime += dt;
+            UpdateFx(dt);
             if (whale != null)
             {
                 whale.Update(animTime, speed);
@@ -222,6 +305,7 @@ namespace DshPet
             double scale = cfg.GetNumber("", "scale", 1.0);
             Width = Math.Max(40, Math.Round(BaseWidth * scale));
             Height = Math.Max(40, Math.Round(BaseHeight * scale));
+            ApplyPropLayout();
             Opacity = cfg.GetNumber("", "opacity", 1.0);
             ApplyTuck(Tuck);
             Left = Math.Round(X, 1);
@@ -265,6 +349,7 @@ namespace DshPet
         {
             int x = (int)Math.Round(X);
             int y = (int)Math.Round(Y);
+            if (fx != null && fx.Busy) fx.Follow(X, Y, Width, Height);   // 特效窗口跟着桌宠走
             if (Handle != IntPtr.Zero)
             {
                 if (x != appliedX || y != appliedY)
@@ -516,6 +601,11 @@ namespace DshPet
                     ActionUntil = DateTime.MinValue;
                     break;
                 case "follow": Action = "follow"; ActionUntil = now.AddSeconds(12); break;
+                // 特效动作：角色自己保持小幅度姿态，真正的"内容"在特效层（粒子）
+                case "fireworks": Action = "hop"; ActionUntil = now.AddMilliseconds(600); PlayFx("fireworks", 3.2); break;
+                case "hearts": Action = "shy"; ActionUntil = now.AddMilliseconds(900); PlayFx("hearts", 2.8); break;
+                case "sparkles": Action = "nod"; ActionUntil = now.AddMilliseconds(700); PlayFx("sparkles", 2.6); break;
+                case "confetti": Action = "bounce"; ActionUntil = now.AddMilliseconds(900); PlayFx("confetti", 3.0); break;
                 default: return;
             }
             ActionStart = now;
@@ -527,6 +617,7 @@ namespace DshPet
             int extended = Native.GetWindowLong(Handle, Native.GWL_EXSTYLE);
             extended = extended | Native.WS_EX_NOACTIVATE | Native.WS_EX_TOOLWINDOW;
             Native.SetWindowLong(Handle, Native.GWL_EXSTYLE, extended);
+            Closed += delegate { if (fx != null) fx.Close(); };   // 桌宠关了，特效窗也别留着
         }
 
         private void OnMouseDown(object sender, MouseButtonEventArgs e)

@@ -21,6 +21,37 @@ namespace DshPet
 
         /// <summary>Character images the user dropped into roles\. None are bundled with the
         /// repository; the built-in vector mascot covers the empty case.</summary>
+        /// <summary>装扮/挂件目录（帽子之类的小素材放这里）。</summary>
+        public static string PropsDir
+        {
+            get
+            {
+                string dir = Path.Combine(Root, "props");
+                try { Directory.CreateDirectory(dir); } catch { }
+                return dir;
+            }
+        }
+
+        /// <summary>
+        /// 解析挂件路径：`props\帽子.png` 这类相对路径按仓库根目录算，只写文件名则去 props\ 里找。
+        /// 找不到返回空串。
+        /// </summary>
+        public static string ResolveProp(string name)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(name)) return "";
+                string direct = Path.IsPathRooted(name) ? name : Path.Combine(Root, name);
+                if (File.Exists(direct)) return direct;
+                string inProps = Path.Combine(PropsDir, Path.GetFileName(name));
+                if (File.Exists(inProps)) return inProps;
+            }
+            catch
+            {
+            }
+            return "";
+        }
+
         /// <summary>
         /// 角色缩略图用的图片文件：文件角色就是它自己；文件夹角色（逐帧动画）取第一帧。
         /// 找不到时返回空串，调用方退回内置小鲸鱼缩略图。
