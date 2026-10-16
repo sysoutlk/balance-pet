@@ -229,6 +229,8 @@ namespace DshPet
         <TextBlock Style='{StaticResource Sect}' Text='气泡'/>
         <WrapPanel>
           <Button x:Name='BubbleStyleBtn' Content='浅色' Width='64' Style='{StaticResource Btn}'/>
+          <Button x:Name='BubbleFontBtn' Content='字体：系统' Width='96' Style='{StaticResource Btn}'/>
+          <Button x:Name='BubbleNumberFontBtn' Content='数字：跟随' Width='96' Style='{StaticResource Btn}'/>
           <CheckBox x:Name='BubbleTrendChk' Style='{StaticResource Switch}' Content='图表'/>
           <CheckBox x:Name='BubbleTailChk' Style='{StaticResource Switch}' Content='小尾巴'/>
         </WrapPanel>
@@ -394,7 +396,7 @@ namespace DshPet
                 "PlanList",
                 "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
                 "Main",
-                "BubbleStyleBtn","BubbleTrendChk","BubbleTailChk","BubbleEffectBtn","BubbleSpeedSlider","BubbleSpeedVal",
+                "BubbleStyleBtn","BubbleFontBtn","BubbleNumberFontBtn","BubbleTrendChk","BubbleTailChk","BubbleEffectBtn","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
                 "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel","Color2Panel",
@@ -476,6 +478,22 @@ namespace DshPet
                 string next = NextTheme(CurrentTheme());
                 cfg.Set("bubble", "theme", next);
                 cfg.Set("bubble", "style", "");
+                cfg.Save();
+                engine.Data.Refresh();
+                Update();
+            };
+            ((Button)ui["BubbleFontBtn"]).Click += delegate
+            {
+                string next = NextFont(cfg.GetString("bubble", "font", ""));
+                cfg.Set("bubble", "font", next);
+                cfg.Save();
+                engine.Data.Refresh();
+                Update();
+            };
+            ((Button)ui["BubbleNumberFontBtn"]).Click += delegate
+            {
+                string current = cfg.GetString("bubble", "numberFont", "");
+                cfg.Set("bubble", "numberFont", current.Length == 0 ? "Cascadia Mono, Consolas, Courier New" : "");
                 cfg.Save();
                 engine.Data.Refresh();
                 Update();
@@ -1154,6 +1172,13 @@ namespace DshPet
                 ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
                 ((CheckBox)ui["RandomRoleChk"]).IsChecked = cfg.GetFlagAt("roles.random", true);
                 ((Button)ui["BubbleStyleBtn"]).Content = ThemeLabel(CurrentTheme());
+                string fontNow = cfg.GetString("bubble", "font", "");
+                ((Button)ui["BubbleFontBtn"]).Content = FontLabel(fontNow);
+                ((Button)ui["BubbleNumberFontBtn"]).Content = cfg.GetString("bubble", "numberFont", "").Length == 0 ? "数字：跟随" : "数字：等宽";
+                // 设置卡片本身也跟随同一个字体，保证整卡观感一致。
+                root.FontFamily = string.IsNullOrEmpty(fontNow)
+                    ? System.Windows.SystemFonts.MessageFontFamily
+                    : new FontFamily(fontNow);
                 ((CheckBox)ui["BubbleTrendChk"]).IsChecked = cfg.GetFlag("bubble", "trend", true);
                 ((CheckBox)ui["BubbleTailChk"]).IsChecked = cfg.GetFlag("bubble", "tail", true);
                 ((Button)ui["BubbleEffectBtn"]).Content = EffectLabel(cfg.GetString("bubble", "effect", "off"));
@@ -1259,6 +1284,34 @@ namespace DshPet
             return "dark";
         }
 
+        // 字体：跟随系统 / 微软雅黑 / 等线 / 宋体 / 楷体
+        private static readonly string[][] Fonts = new string[][]
+        {
+            new string[] { "", "系统" },
+            new string[] { "Microsoft YaHei UI", "微软雅黑" },
+            new string[] { "DengXian", "等线" },
+            new string[] { "SimSun", "宋体" },
+            new string[] { "KaiTi", "楷体" }
+        };
+
+        private static string NextFont(string current)
+        {
+            for (int i = 0; i < Fonts.Length; i++)
+            {
+                if (Fonts[i][0] == current) return Fonts[(i + 1) % Fonts.Length][0];
+            }
+            return "";
+        }
+
+        private static string FontLabel(string current)
+        {
+            foreach (string[] font in Fonts)
+            {
+                if (font[0] == current) return "字体：" + font[1];
+            }
+            return "字体：自定义";
+        }
+
         private static string EffectLabel(string effect)
         {
             switch (effect)
@@ -1352,12 +1405,18 @@ namespace DshPet
                 bool open = cfg.GetFlagAt("ui." + id, DefaultSectionOpen(title));
                 header.Content = (open ? "▾  " : "▸  ") + title;
                 group.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                // Capture per-iteration copies: the loop variables themselves are shared, which
+                // made every header toggle the last group (the "extra group at the end" bug).
+                Button thisHeader = header;
+                StackPanel thisGroup = group;
+                string thisTitle = title;
+                string thisId = id;
                 header.Click += delegate
                 {
-                    bool nowOpen = group.Visibility != Visibility.Visible;
-                    group.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
-                    header.Content = (nowOpen ? "▾  " : "▸  ") + title;
-                    cfg.SetAt("ui." + id, nowOpen);
+                    bool nowOpen = thisGroup.Visibility != Visibility.Visible;
+                    thisGroup.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
+                    thisHeader.Content = (nowOpen ? "▾  " : "▸  ") + thisTitle;
+                    cfg.SetAt("ui." + thisId, nowOpen);
                     cfg.Save();
                 };
                 main.Children.Add(header);

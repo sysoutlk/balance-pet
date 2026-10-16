@@ -522,6 +522,8 @@ namespace DshPet
             SetDefault("bubble", "tailSize", 13.0);
             SetDefault("bubble", "cardColor", "");
             SetDefault("bubble", "textColor", "");
+            SetDefault("bubble", "font", "");         // "" = follow the system UI font
+            SetDefault("bubble", "numberFont", "");   // "" = follow the same font
             SetDefault("bubble", "trend", true);
             SetDefault("bubble", "tail", true);
 

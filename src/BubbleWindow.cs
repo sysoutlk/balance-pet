@@ -123,7 +123,7 @@ namespace DshPet
             ShowActivated = false;
             ResizeMode = ResizeMode.NoResize;
             SizeToContent = SizeToContent.WidthAndHeight;
-            FontFamily = new FontFamily("Microsoft YaHei UI, Segoe UI");
+            FontFamily = SystemFonts.MessageFontFamily;
 
             titleDot = new Ellipse();
             titleDot.Width = 7;
@@ -452,6 +452,21 @@ namespace DshPet
             return (Color)ColorConverter.ConvertFromString("#4B6BFB");
         }
 
+        /// <summary>Uses the requested family, or the system UI font when it is missing.</summary>
+        private static FontFamily SafeFont(string name)
+        {
+            try
+            {
+                FontFamily family = new FontFamily(name);
+                if (string.IsNullOrEmpty(family.Source)) return SystemFonts.MessageFontFamily;
+                return family;
+            }
+            catch
+            {
+                return SystemFonts.MessageFontFamily;
+            }
+        }
+
         /// <summary>Reads the look settings from pet-config.json (called on every refresh).</summary>
         public void ApplyStyle(Config cfg)
         {
@@ -530,6 +545,14 @@ namespace DshPet
             {
                 pair.Key.FontSize = Math.Round(pair.Value * fontScale, 1);
             }
+            // Font adaptation: follow the system UI font by default, or a chosen family;
+            // the big number can use a monospaced face for stable digit widths.
+            string fontName = cfg.GetString("bubble", "font", "");
+            FontFamily family = string.IsNullOrEmpty(fontName) ? SystemFonts.MessageFontFamily : SafeFont(fontName);
+            FontFamily = family;
+            string numberFont = cfg.GetString("bubble", "numberFont", "");
+            amount.FontFamily = string.IsNullOrEmpty(numberFont) ? family : SafeFont(numberFont);
+            titleDot.Fill = CurrentBrush();
             tailTopShape.Background = card.Background;
             tailTopShape.BorderBrush = card.BorderBrush;
             tailTopShape.BorderThickness = card.BorderThickness;
@@ -559,6 +582,7 @@ namespace DshPet
             amount.Foreground = string.IsNullOrEmpty(view.BigColor)
                 ? Brush(dark ? DarkBig : LightBig)
                 : Brush(view.BigColor);
+            if (string.IsNullOrEmpty(view.BigColor)) amount.Foreground = new SolidColorBrush(palette.Big);
             if (!string.IsNullOrEmpty(view.Sub))
             {
                 sub.Text = view.Sub;
@@ -610,7 +634,9 @@ namespace DshPet
             {
                 note.Text = view.Note;
                 note.Visibility = Visibility.Visible;
-                note.Foreground = Brush(view.NoteError ? "#E0433F" : (dark ? DarkMuted : LightMuted));
+                note.Foreground = new SolidColorBrush(view.NoteError
+                    ? (palette.Dark ? (Color)ColorConverter.ConvertFromString("#FF9C93") : (Color)ColorConverter.ConvertFromString("#E0433F"))
+                    : palette.Source);
             }
             else
             {
