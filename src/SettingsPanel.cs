@@ -376,6 +376,16 @@ namespace DshPet
         private readonly Dictionary<string, TextBlock> statusById = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, PasswordBox> keyBoxes = new Dictionary<string, PasswordBox>();
         private bool updating;
+        // 代码里生成的行（数据源、套餐用量、输入框等）也跟随主题配色。
+        private Color cRow;
+        private Color cField;
+        private Color cBorder;
+        private Color cFg;
+        private Color cFg2;
+        private Color cMuted;
+        private Color cOk;
+        private Color cErr;
+        private Color cChip;
 
         public PetWindow ActivePet;
         public bool Pinned;
@@ -601,7 +611,7 @@ namespace DshPet
                 TextBlock hint = new TextBlock();
                 hint.Text = "把角色 PNG 放进 roles\\ 目录即可在这里选用";
                 hint.FontSize = 10;
-                hint.Foreground = Brush("#8FA0C8");
+                hint.Foreground = new SolidColorBrush(cMuted);
                 hint.TextWrapping = TextWrapping.Wrap;
                 hint.Margin = new Thickness(2, 6, 0, 0);
                 panel.Children.Add(hint);
@@ -676,14 +686,14 @@ namespace DshPet
                 {
                     Border chip = new Border();
                     chip.CornerRadius = new CornerRadius(8);
-                    chip.Background = Brush("#202A42");
+                    chip.Background = new SolidColorBrush(cChip);
                     chip.Padding = new Thickness(8, 3, 8, 3);
                     chip.Margin = new Thickness(0, 0, 6, 6);
                     chip.ToolTip = def.Note;
                     TextBlock chipText = new TextBlock();
                     chipText.Text = def.Name;
                     chipText.FontSize = 10.5;
-                    chipText.Foreground = Brush("#8FA0C8");
+                    chipText.Foreground = new SolidColorBrush(cMuted);
                     chip.Child = chipText;
                     unsupported.Children.Add(chip);
                     continue;
@@ -696,7 +706,7 @@ namespace DshPet
         {
             Border row = new Border();
             row.CornerRadius = new CornerRadius(9);
-            row.Background = Brush("#1B2236");
+            row.Background = new SolidColorBrush(cRow);
             row.Padding = new Thickness(10, 7, 10, 9);
             row.Margin = new Thickness(0, 0, 0, 7);
             StackPanel stack = new StackPanel();
@@ -704,7 +714,7 @@ namespace DshPet
             DockPanel head = new DockPanel();
             TextBlock status = new TextBlock();
             status.FontSize = 10.5;
-            status.Foreground = Brush("#8FA0C8");
+            status.Foreground = new SolidColorBrush(cMuted);
             status.VerticalAlignment = VerticalAlignment.Center;
             status.Margin = new Thickness(8, 0, 0, 0);
             status.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -753,7 +763,7 @@ namespace DshPet
                 TextBlock authHint = new TextBlock();
                 authHint.Text = "URL 里可用 {key} 占位；路径留空表示响应体本身就是数字";
                 authHint.FontSize = 10;
-                authHint.Foreground = Brush("#8FA0C8");
+                authHint.Foreground = new SolidColorBrush(cMuted);
                 authHint.TextWrapping = TextWrapping.Wrap;
                 authHint.VerticalAlignment = VerticalAlignment.Center;
                 authRow.Children.Add(authHint);
@@ -810,7 +820,7 @@ namespace DshPet
             TextBlock prefix = new TextBlock();
             prefix.Text = label;
             prefix.FontSize = 11;
-            prefix.Foreground = Brush("#8FA0C8");
+            prefix.Foreground = new SolidColorBrush(cMuted);
             prefix.Width = labelWidth;
             prefix.VerticalAlignment = VerticalAlignment.Center;
             DockPanel.SetDock(prefix, Dock.Left);
@@ -903,12 +913,12 @@ namespace DshPet
                 {
                     string suffix = string.IsNullOrEmpty(state.KeySource) || state.KeySource == "pet-config.json" ? "" : " · " + state.KeySource;
                     text = Fmt.Money(state.Balance, state.Currency) + suffix;
-                    colour = "#6FD08C";
+                    colour = string.Format("#{0:X2}{1:X2}{2:X2}", cOk.R, cOk.G, cOk.B);
                 }
                 else
                 {
                     text = state.Error;
-                    colour = "#FF8B7A";
+                    colour = string.Format("#{0:X2}{1:X2}{2:X2}", cErr.R, cErr.G, cErr.B);
                 }
                 if (text != null && text.Length > 26) text = text.Substring(0, 26) + "…";
                 pair.Value.Text = text;
@@ -929,7 +939,7 @@ namespace DshPet
             {
                 Border row = new Border();
                 row.CornerRadius = new CornerRadius(9);
-                row.Background = Brush("#1B2236");
+                row.Background = new SolidColorBrush(cRow);
                 row.Padding = new Thickness(10, 7, 10, 9);
                 row.Margin = new Thickness(0, 0, 0, 7);
                 StackPanel stack = new StackPanel();
@@ -937,7 +947,7 @@ namespace DshPet
                 DockPanel head = new DockPanel();
                 TextBlock status = new TextBlock();
                 status.FontSize = 10.5;
-                status.Foreground = Brush("#8FA0C8");
+                status.Foreground = new SolidColorBrush(cMuted);
                 status.VerticalAlignment = VerticalAlignment.Center;
                 status.Margin = new Thickness(8, 0, 0, 0);
                 status.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -1061,7 +1071,7 @@ namespace DshPet
                 {
                     text = state.Summary();
                     if (!string.IsNullOrEmpty(state.KeySource)) text += " · " + state.KeySource;
-                    colour = "#6FD08C";
+                    colour = string.Format("#{0:X2}{1:X2}{2:X2}", cOk.R, cOk.G, cOk.B);
                 }
                 else if (state.Unsupported)
                 {
@@ -1071,7 +1081,7 @@ namespace DshPet
                 else
                 {
                     text = state.Error;
-                    colour = "#FF8B7A";
+                    colour = string.Format("#{0:X2}{1:X2}{2:X2}", cErr.R, cErr.G, cErr.B);
                 }
                 if (text != null && text.Length > 30) text = text.Substring(0, 30) + "…";
                 pair.Value.Text = text;
@@ -1244,7 +1254,7 @@ namespace DshPet
                 StackPanel list = new StackPanel();
                 list.Width = Math.Max(150, button.ActualWidth);
                 Border card = new Border();
-                card.Background = Brush("#1B2236");
+                card.Background = new SolidColorBrush(cRow);
                 card.BorderBrush = Brush("#39456B");
                 card.BorderThickness = new Thickness(1);
                 card.CornerRadius = new CornerRadius(10);
@@ -1376,6 +1386,15 @@ namespace DshPet
             }
             if (theme == "glass") nav = "#B3FFFFFF";
             if (theme == "frost") nav = "#D9FFFFFF";
+            cRow = Parse(nav);
+            cField = Parse(field);
+            cBorder = Parse(border);
+            cFg = Parse(ToHex(palette.Title));
+            cFg2 = Parse(ToHex(palette.RowValue));
+            cMuted = Parse(ToHex(palette.Muted));
+            cChip = Parse(chip);
+            cOk = Parse(dark ? "#7ADFA0" : "#1F8A4C");
+            cErr = Parse(dark ? "#FF9C93" : "#C93A34");
             return Xaml
                 .Replace("__NAV__", nav)
                 .Replace("__CARD__", card)
@@ -1396,6 +1415,18 @@ namespace DshPet
         private static string ToHex(Color color)
         {
             return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
+        }
+
+        private static Color Parse(string hex)
+        {
+            try
+            {
+                return (Color)ColorConverter.ConvertFromString(hex);
+            }
+            catch
+            {
+                return Colors.Gray;
+            }
         }
 
         private void RebuildForAccent(bool rebuild)

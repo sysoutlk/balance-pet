@@ -99,6 +99,9 @@ namespace DshPet
                 pet.Place(x, y);
                 // Snap on startup too, so a pet saved against an edge hides itself later.
                 pet.SetIdle();
+                // 启动时不沿用上次的贴边记录，避免"一打开就全部贴边"。
+                pet.EdgeSide = "";
+                pet.EdgeHideAt = DateTime.MaxValue;
                 WirePet(pet);
                 Pets.Add(pet);
                 pet.Show();

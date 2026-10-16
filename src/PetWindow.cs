@@ -332,6 +332,16 @@ namespace DshPet
             return false;
         }
 
+        /// <summary>立刻解除贴边并恢复原始姿态（拖拽开始时调用，不再播放收起动画）。</summary>
+        public void Untuck()
+        {
+            TargetTuck = 0;
+            ApplyTuck(0);
+            EdgeSide = "";
+            EdgeHideAt = DateTime.MaxValue;
+            EdgeHidden = false;
+        }
+
         public void Snap()
         {
             ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
@@ -493,6 +503,7 @@ namespace DshPet
             drag.LastY = Y;
             drag.LastAt = DateTime.UtcNow;
             Mode = "drag";
+            Untuck();   // 一拖动就立刻还原，不等松手
             Native.ReleaseCapture();
             Native.SendMessage(Handle, Native.WM_NCLBUTTONDOWN, (IntPtr)Native.HTCAPTION, IntPtr.Zero);
             FinishDrag(drag);
@@ -543,6 +554,7 @@ namespace DshPet
             }
             double speed = Math.Sqrt(state.VX * state.VX + state.VY * state.VY);
             Dropped = true;
+            if (Tuck > 0.01 || EdgeHidden) Untuck();
             if (speed > 320)
             {
                 VelocityX = Math.Max(-2400, Math.Min(2400, state.VX));
