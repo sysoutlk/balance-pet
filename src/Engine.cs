@@ -77,7 +77,8 @@ namespace DshPet
                 Dictionary<string, object> legacy = cfg.GetObject("", "lastPosition");
                 if (legacy.Count > 0) saved.Add(legacy);
             }
-            int count = Math.Max(1, saved.Count);
+            // 每次启动只保留一只，之后由"自动分裂"慢慢长出来（不再恢复上次的分身们）。
+            int count = 1;
             for (int i = 0; i < count; i++)
             {
                 PetWindow pet = new PetWindow(cfg);

@@ -1269,7 +1269,7 @@ namespace DshPet
         private static readonly string[] ThemeLabels = new string[] { "浅色", "深色", "跟随系统", "液体玻璃", "磨砂", "莫奈取色" };
         // 动效（独立维度，和"混合配色"任意组合）
         private static readonly string[] EffectValues = new string[] { "off", "flow", "swirl", "breathe", "shimmer", "shift", "rainbow" };
-        private static readonly string[] EffectLabels = new string[] { "关闭", "流动（颜色滑动）", "旋转（渐变转角度）", "呼吸（明暗起伏）", "闪动（快速高光）", "色相漂移", "彩虹（全色相）" };
+        private static readonly string[] EffectLabels = new string[] { "关闭", "流动", "旋转", "呼吸", "闪动", "漂移", "彩虹" };
         private static readonly string[] FontValues = new string[]
         {
             "", "Microsoft YaHei UI", "DengXian", "SimSun", "KaiTi", "Microsoft YaHei"

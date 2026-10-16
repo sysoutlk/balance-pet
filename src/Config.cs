@@ -576,8 +576,8 @@ namespace DshPet
             SetDefault("edgeHide", "peekPx", 14.0);
             SetDefault("clones", "auto", true);
             SetDefault("clones", "max", 6.0);
-            SetDefault("clones", "pauseMinSec", 240.0);
-            SetDefault("clones", "pauseMaxSec", 600.0);
+            SetDefault("clones", "pauseMinSec", 60.0);
+            SetDefault("clones", "pauseMaxSec", 180.0);
             SetDefault("alert", "balanceWarn", true);
             SetDefault("alert", "budgetWarn", true);
             SetDefault("alert", "quipsOn", true);
