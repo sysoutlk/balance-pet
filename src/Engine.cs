@@ -30,8 +30,9 @@ namespace DshPet
         private DateTime demoActionAt = DateTime.MinValue;
         private DateTime lastBumpQuipAt = DateTime.MinValue;
         private bool? lastPeak;
-        private bool balanceLatched;
-        private string budgetLatchedDay = "";
+        private readonly HashSet<string> balanceLatched = new HashSet<string>();
+        private readonly HashSet<string> budgetLatched = new HashSet<string>();
+        private readonly HashSet<string> quotaLatched = new HashSet<string>();
         private int bubblePage;
         private bool bubbleIsMessage;
         private bool bubbleIsAlert;
@@ -998,17 +999,20 @@ namespace DshPet
         {
             Snapshot data = Data.Current;
             ProviderState primary = data.Primary;
+            List<string> keys = PageKeys(data);
+            if (index < 0 || index >= keys.Count) index = 0;
+            string page = keys[index];
             BubbleView view = new BubbleView();
             view.PageIndex = index;
-            view.PageCount = PageCount();
+            view.PageCount = keys.Count;
             view.Quip = bubbleQuip;
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
             view.Source = SourceLine(data);
 
-            if (index == 0)
+            if (page == "balance")
             {
-                view.Title = primary == null ? "DeepSeek 余额" : primary.Name + " 余额";
+                view.Title = primary == null ? "余额" : primary.Name + " 余额";
                 view.Big = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
                 if (primary != null && primary.Details.Count > 0)
                 {
@@ -1026,7 +1030,7 @@ namespace DshPet
                 return view;
             }
 
-            if (index == 1)
+            if (page == "today")
             {
                 view.Title = "今日消耗";
                 view.Big = primary == null ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency);
@@ -1056,21 +1060,21 @@ namespace DshPet
                 return view;
             }
 
-            if (index == 2)
+            if (page == "peak")
             {
-                view.Title = "峰谷时段（北京时间）";
-                view.Big = data.IsPeak ? "高峰时段" : "空闲时段";
+                view.Title = "计价时段（北京时间）";
+                view.Big = data.IsPeak ? "标准时段" : "优惠时段（半价）";
                 view.BigSize = 21;
                 view.BigColor = data.IsPeak ? "#e0433f" : "#2fa24c";
-                view.Rows.Add(new KeyValuePair<string, string>("计价", data.IsPeak ? "高峰价格（空闲价 x2）" : "空闲价格（高峰价的一半）"));
-                view.Rows.Add(new KeyValuePair<string, string>("高峰时间", "工作日 09:00-12:00 / 14:00-18:00"));
-                view.Rows.Add(new KeyValuePair<string, string>("空闲时间", "其余时段（含周末与节假日）"));
+                view.Rows.Add(new KeyValuePair<string, string>("当前计价", data.IsPeak ? "标准价（原价，×2）" : "优惠价（半价）"));
+                view.Rows.Add(new KeyValuePair<string, string>("标准时段", DataService.PeakWindowText()));
+                view.Rows.Add(new KeyValuePair<string, string>("优惠时段", "其余时段（含周末与节假日）"));
                 view.Rows.Add(new KeyValuePair<string, string>("当前时间", DataService.BeijingNow().ToString("HH:mm:ss", CultureInfo.InvariantCulture)));
                 view.Rows.Add(new KeyValuePair<string, string>("距切换", CountdownText(data.NextChangeAtMs)));
                 return view;
             }
 
-            if (index == 3)
+            if (page == "providers")
             {
                 view.Title = "余额接口";
                 view.Big = data.OkCount + " / " + EnabledCount(data);
@@ -1116,9 +1120,24 @@ namespace DshPet
             return view;
         }
 
+        /// <summary>
+        /// 点击气泡循环的页签：计价时段页只在支持错峰计价的主接口（DeepSeek）时出现，
+        /// 套餐页有启用套餐时才有——页数随数据变化，索引用取模兜底。
+        /// </summary>
+        private static List<string> PageKeys(Snapshot data)
+        {
+            List<string> keys = new List<string>();
+            keys.Add("balance");
+            keys.Add("today");
+            if (data.HasPeak) keys.Add("peak");
+            keys.Add("providers");
+            if (data.Plans.Count > 0) keys.Add("plans");
+            return keys;
+        }
+
         private int PageCount()
         {
-            return Data.Current.Plans.Count > 0 ? 5 : 4;
+            return PageKeys(Data.Current).Count;
         }
 
         private static int EnabledCount(Snapshot data)
@@ -1160,31 +1179,35 @@ namespace DshPet
 
         public string PeakText()
         {
-            return Data.Current.IsPeak ? "高峰时段" : "谷时（半价）";
+            Snapshot data = Data.Current;
+            if (!data.HasPeak) return "";   // 非 DeepSeek 主接口：没有错峰计价，别硬套
+            return data.IsPeak ? "标准时段（原价）" : "优惠时段（半价）";
         }
 
         public string PeakLine()
         {
             Snapshot data = Data.Current;
+            if (!data.HasPeak) return "";
             long leftMs = data.NextChangeAtMs - DataService.NowMs();
             if (leftMs < 0) leftMs = 0;
             TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
             string countdown = left.TotalHours >= 1
                 ? ((int)left.TotalHours) + " 小时 " + left.Minutes + " 分"
                 : Math.Max(1, (int)Math.Ceiling(left.TotalMinutes)) + " 分钟";
-            return (data.IsPeak ? "高峰时段 · 距谷时 " : "谷时半价 · 距高峰 ") + countdown;
+            return (data.IsPeak ? "标准价 · " : "优惠价（半价）· ") + countdown + "后切换";
         }
 
         public string PeakBubbleText()
         {
             Snapshot data = Data.Current;
+            if (!data.HasPeak) return "";
             long leftMs = data.NextChangeAtMs - DataService.NowMs();
             if (leftMs < 0) leftMs = 0;
             TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
             string countdown = left.TotalHours >= 1
                 ? ((int)left.TotalHours) + ":" + left.Minutes.ToString("00") + ":" + left.Seconds.ToString("00")
                 : left.Minutes + ":" + left.Seconds.ToString("00");
-            return (data.IsPeak ? "高峰时段 · 价格 x2" : "谷时 · 半价") + "  还有 " + countdown;
+            return (data.IsPeak ? "标准计价 · 价格 ×2" : "优惠计价 · 半价") + "  还有 " + countdown;
         }
 
         public static string ActionName(string key)
@@ -1230,17 +1253,24 @@ namespace DshPet
         {
             if (Quitting) return;
             Snapshot data = Data.Current;
-            if (lastPeak.HasValue && lastPeak.Value != data.IsPeak && Pets.Count > 0)
+            if (!data.HasPeak)
             {
-                string text = data.IsPeak ? "进高峰了，价格 x2，悠着点烧" : "谷时到了，半价啦";
-                bubbleIsMessage = true;
-                bubbleIsAlert = false;
-                messageTitle = "";
-                messageText = text;
-                bubbleQuip = text;
-                ShowView(Pets[0], BuildMessageView(text), 6);
+                lastPeak = null;   // 主接口不分标准/优惠时段：不提示切换
             }
-            lastPeak = data.IsPeak;
+            else
+            {
+                if (lastPeak.HasValue && lastPeak.Value != data.IsPeak && Pets.Count > 0)
+                {
+                    string text = data.IsPeak ? "转标准价了，价格 ×2，悠着点烧" : "转优惠价啦，半价";
+                    bubbleIsMessage = true;
+                    bubbleIsAlert = false;
+                    messageTitle = "";
+                    messageText = text;
+                    bubbleQuip = text;
+                    ShowView(Pets[0], BuildMessageView(text), 6);
+                }
+                lastPeak = data.IsPeak;
+            }
             CheckAlerts(data);
             if (Bubble.Visibility == Visibility.Visible)
             {
@@ -1256,35 +1286,78 @@ namespace DshPet
 
         private void CheckAlerts(Snapshot data)
         {
-            ProviderState primary = data.Primary;
-            if (cfg.GetFlag("alert", "balanceWarn", true)
-                && data.Limits != null && data.Limits.AlertBelow.HasValue
-                && primary != null && primary.Ok && primary.Balance.HasValue && Pets.Count > 0)
+            Thresholds limits = data.Limits;
+            if (limits == null || Pets.Count == 0) return;
+            string day = DataService.TodayKey();
+            List<string> notes = new List<string>();
+            foreach (ProviderState provider in data.Providers)
             {
-                bool below = primary.Balance.Value < data.Limits.AlertBelow.Value;
-                if (below && !balanceLatched)
+                if (!provider.Enabled) continue;
+                double below;
+                if (limits.AlertOn && provider.Ok && provider.Balance.HasValue
+                    && limits.Below.TryGetValue(provider.Id, out below))
                 {
-                    balanceLatched = true;
-                    ShowAlert(Pets[0], "余额预警",
-                        "余额 " + Fmt.Money(primary.Balance, primary.Currency) + " 已低于 " + Fmt.Money(data.Limits.AlertBelow, primary.Currency));
+                    bool hit = provider.Balance.Value < below;
+                    bool latched = balanceLatched.Contains(provider.Id);
+                    if (hit && !latched)
+                    {
+                        balanceLatched.Add(provider.Id);
+                        notes.Add(provider.Name + " 余额 " + Fmt.Money(provider.Balance, provider.Currency)
+                            + "，已低于 " + Fmt.Money(below, provider.Currency));
+                    }
+                    else if (!hit && latched)
+                    {
+                        balanceLatched.Remove(provider.Id);   // 充钱回来了，下次还能再提醒
+                    }
                 }
-                else if (!below)
+                double budget;
+                if (limits.BudgetOn && provider.TodayUsage.HasValue
+                    && limits.Budget.TryGetValue(provider.Id, out budget))
                 {
-                    balanceLatched = false;
+                    string key = provider.Id + "|" + day;
+                    if (provider.TodayUsage.Value >= budget && !budgetLatched.Contains(key))
+                    {
+                        budgetLatched.Add(key);
+                        notes.Add(provider.Name + " 今日已用 " + Fmt.Money(provider.TodayUsage, provider.Currency)
+                            + "，超过预算 " + Fmt.Money(budget, provider.Currency));
+                    }
                 }
             }
-            if (cfg.GetFlag("alert", "budgetWarn", true)
-                && data.Limits != null && data.Limits.Budget.HasValue
-                && primary != null && primary.TodayUsage.HasValue && Pets.Count > 0)
+            // 套餐额度：5 小时 / 7 天窗口用量到阈值也提醒（窗口自己会重置，掉回阈值下就能再次提醒）
+            if (limits.QuotaOn)
             {
-                bool over = primary.TodayUsage.Value >= data.Limits.Budget.Value;
-                string day = DataService.TodayKey();
-                if (over && budgetLatchedDay != day)
+                foreach (PlanState plan in data.Plans)
                 {
-                    budgetLatchedDay = day;
-                    ShowAlert(Pets[0], "今日预算",
-                        "今日已用 " + Fmt.Money(primary.TodayUsage, primary.Currency) + "，超过预算 " + Fmt.Money(data.Limits.Budget, primary.Currency));
+                    if (!plan.Enabled || !plan.Ok) continue;
+                    foreach (PlanWindow window in plan.Windows)
+                    {
+                        int kind = window.Kind();
+                        double threshold;
+                        bool has = kind == 1
+                            ? limits.FiveHour.TryGetValue(plan.Id, out threshold)
+                            : limits.SevenDay.TryGetValue(plan.Id, out threshold);
+                        if (!has) continue;
+                        string key = plan.Id + "|" + kind;
+                        bool hit = window.Percent >= threshold;
+                        bool latched = quotaLatched.Contains(key);
+                        if (hit && !latched)
+                        {
+                            quotaLatched.Add(key);
+                            notes.Add(plan.Name + " " + window.Label + "用量 "
+                                + window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%，超过 "
+                                + threshold.ToString("0.#", CultureInfo.InvariantCulture) + "%");
+                        }
+                        else if (!hit && latched)
+                        {
+                            quotaLatched.Remove(key);
+                        }
+                    }
                 }
+            }
+            // 一次刷新可能同时踩中几个平台：合成一条提醒，别互相顶掉。
+            if (notes.Count > 0)
+            {
+                ShowAlert(Pets[0], notes.Count > 1 ? "多个平台提醒" : "余额提醒", string.Join("；", notes.ToArray()));
             }
         }
 

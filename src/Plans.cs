@@ -17,6 +17,12 @@ namespace DshPet
         public string Label = "";
         public double Percent;
         public string Detail = "";
+
+        /// <summary>窗口分两档：1 = 5 小时那档，2 = 7 天/每周/30 天那档（认不出的一律按长窗算）。</summary>
+        public int Kind()
+        {
+            return Label.IndexOf("小时", StringComparison.Ordinal) >= 0 ? 1 : 2;
+        }
     }
 
     internal sealed class PlanState

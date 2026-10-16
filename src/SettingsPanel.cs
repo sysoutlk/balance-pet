@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -227,7 +228,7 @@ namespace DshPet
         <DockPanel x:Name='Header' Background='Transparent'>
           <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='✕' Width='26' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}'/>
           <StackPanel Margin='0,2,0,0'>
-            <TextBlock Text='DSH 桌宠' FontSize='15' FontWeight='Bold' Foreground='__FG__'/>
+            <TextBlock x:Name='TitleText' Text='余额桌宠' FontSize='15' FontWeight='Bold' Foreground='__FG__'/>
             <TextBlock x:Name='SubText' Text='…' FontSize='10' Foreground='__MUTED__' Margin='0,3,0,0'/>
           </StackPanel>
         </DockPanel>
@@ -392,14 +393,11 @@ namespace DshPet
         <WrapPanel>
           <CheckBox x:Name='AlertChk' Style='{StaticResource Switch}' Content='余额预警'/>
           <CheckBox x:Name='BudgetChk' Style='{StaticResource Switch}' Content='预算提醒'/>
+          <CheckBox x:Name='QuotaChk' Style='{StaticResource Switch}' Content='套餐额度提醒'/>
         </WrapPanel>
-        <DockPanel Margin='0,4,0,0'>
-          <TextBlock Style='{StaticResource Lbl}' Text='余额低于' Width='56'/>
-          <TextBox x:Name='AlertBelowBox' Style='{StaticResource TxtBox}' Width='66'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='今日预算' Width='56' Margin='12,0,0,0'/>
-          <TextBox x:Name='BudgetBox' Style='{StaticResource TxtBox}' Width='66'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='0 或留空 = 关闭' Margin='10,0,0,0' FontSize='10' Foreground='__MUTED__'/>
-        </DockPanel>
+        <StackPanel x:Name='AlertList' Margin='0,4,0,0'/>
+        <TextBlock FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,3,0,0'
+                   Text='按平台分别设：余额低于这个数就预警、今日消耗到这个数就提醒；留空 = 该平台不提醒。'/>
         <TextBlock Style='{StaticResource Sect}' Text='分身'/>
         <DockPanel Margin='0,0,0,6'>
           <CheckBox x:Name='CloneAutoChk' Style='{StaticResource Switch}' Content='自动分裂' Margin='0,0,10,0'/>
@@ -474,11 +472,11 @@ namespace DshPet
             root = (Window)XamlReader.Parse(PanelXaml(accent));
             foreach (string name in new string[]
             {
-                "Header","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
+                "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
-                "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertBelowBox","BudgetBox","AlertChk","BudgetChk",
+                "RandomRoleChk","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "ContentRoot","Main","Nav",
                 "ThemeDropBtn","EffectDropBtn","FontDropBtn","NumberFontDropBtn","BubbleTrendChk","BubbleTailChk","BubbleSpeedSlider","BubbleSpeedVal",
                 "BubbleReverseChk","BubbleDepthSlider","BubbleDepthVal","BubbleFontSlider","BubbleFontVal",
@@ -558,6 +556,7 @@ namespace DshPet
             BindSwitch("CollideChk", "pets", "collide");
             BindSwitch("AlertChk", "alert", "balanceWarn");
             BindSwitch("BudgetChk", "alert", "budgetWarn");
+            BindSwitch("QuotaChk", "alert", "quotaWarn");
             BindSwitch("EdgeHideChk", "edgeHide", "enabled");
             BindSwitch("CloneAutoChk", "clones", "auto");
             BindSwitch("RandomRoleChk", "roles", "random");
@@ -614,8 +613,6 @@ namespace DshPet
                 ApplyPreviewBrush();
             };
             previewTimer.Start();
-            BindNumberBox("AlertBelowBox", "alert.below");
-            BindNumberBox("BudgetBox", "alert.budget");
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
             BindNumberBox("CloneMaxBox", "clones.max");
             BindNumberBox("ClonePauseBox", "clones.pauseMinSec");
@@ -1040,6 +1037,155 @@ namespace DshPet
             }
         }
 
+        // ------------------------------------------------------------ 提醒（按平台）
+        private string alertRowKey = "";
+
+        /// <summary>
+        /// 提醒页按平台生成一行「余额低于 / 今日预算」：各家的币种与量级差太多，一个全局
+        /// 数字没有意义。留空 = 该平台不提醒；只在启用的平台集合变化时重建（别打断打字）。
+        /// </summary>
+        private void BuildAlertRows()
+        {
+            StackPanel list = (StackPanel)ui["AlertList"];
+            StringBuilder key = new StringBuilder();
+            foreach (ProviderDef def in Providers.Effective(cfg))
+            {
+                if (cfg.GetFlagAt("providers." + def.Id + ".on", false)) key.Append(def.Id).Append(',');
+            }
+            key.Append('|');
+            foreach (PlanDef plan in Plans.Catalog())
+            {
+                if (cfg.GetFlagAt("plans." + plan.Id + ".on", false)) key.Append(plan.Id).Append(',');
+            }
+            string signature = key.ToString();
+            if (signature == alertRowKey && list.Children.Count > 0) return;
+            alertRowKey = signature;
+            list.Children.Clear();
+            int count = 0;
+            foreach (ProviderDef def in Providers.Effective(cfg))
+            {
+                if (!cfg.GetFlagAt("providers." + def.Id + ".on", false)) continue;
+                list.Children.Add(BuildAlertRow(def));
+                count++;
+            }
+            foreach (PlanDef plan in Plans.Catalog())
+            {
+                if (!cfg.GetFlagAt("plans." + plan.Id + ".on", false)) continue;
+                list.Children.Add(BuildPlanAlertRow(plan));
+                count++;
+            }
+            if (count == 0)
+            {
+                TextBlock hint = new TextBlock();
+                hint.Text = "先在「余额接口」或「套餐额度」里启用平台，它们的阈值就会出现在这里。";
+                hint.FontSize = 10;
+                hint.Foreground = new SolidColorBrush(cMuted);
+                hint.Margin = new Thickness(1, 2, 0, 2);
+                list.Children.Add(hint);
+            }
+        }
+
+        private FrameworkElement BuildAlertRow(ProviderDef def)
+        {
+            Border row = new Border();
+            row.CornerRadius = new CornerRadius(9);
+            row.Background = new SolidColorBrush(cRow);
+            row.Padding = new Thickness(10, 6, 10, 6);
+            row.Margin = new Thickness(0, 0, 0, 6);
+            DockPanel line = new DockPanel();
+
+            TextBlock name = new TextBlock();
+            name.Text = def.Name;
+            name.FontSize = 11;
+            name.Foreground = new SolidColorBrush(cFg2);
+            name.VerticalAlignment = VerticalAlignment.Center;
+            name.Width = 118;
+            name.TextTrimming = TextTrimming.CharacterEllipsis;
+            name.ToolTip = def.Name;
+            line.Children.Add(name);
+
+            line.Children.Add(AlertCaption("余额低于"));
+            TextBox belowBox = AlertBox("alerts." + def.Id + ".below");
+            line.Children.Add(belowBox);
+            line.Children.Add(AlertCaption("今日预算"));
+            TextBox budgetBox = AlertBox("alerts." + def.Id + ".budget");
+            line.Children.Add(budgetBox);
+            row.Child = line;
+            return row;
+        }
+
+        /// <summary>套餐额度提醒：每个启用的套餐一行，「5 小时 ≥ x%」「7 天（含每周/30 天）≥ y%」。</summary>
+        private FrameworkElement BuildPlanAlertRow(PlanDef plan)
+        {
+            Border row = new Border();
+            row.CornerRadius = new CornerRadius(9);
+            row.Background = new SolidColorBrush(cRow);
+            row.Padding = new Thickness(10, 6, 10, 6);
+            row.Margin = new Thickness(0, 0, 0, 6);
+            DockPanel line = new DockPanel();
+
+            TextBlock name = new TextBlock();
+            name.Text = plan.Name;
+            name.FontSize = 11;
+            name.Foreground = new SolidColorBrush(cFg2);
+            name.VerticalAlignment = VerticalAlignment.Center;
+            name.Width = 118;
+            name.TextTrimming = TextTrimming.CharacterEllipsis;
+            name.ToolTip = plan.Name;
+            line.Children.Add(name);
+
+            line.Children.Add(AlertCaption("5 小时 ≥"));
+            line.Children.Add(AlertBox("alerts." + plan.Id + ".fiveHour"));
+            line.Children.Add(AlertCaption("%"));
+            line.Children.Add(AlertCaption("7 天 ≥"));
+            line.Children.Add(AlertBox("alerts." + plan.Id + ".sevenDay"));
+            line.Children.Add(AlertCaption("%"));
+            row.Child = line;
+            return row;
+        }
+
+        private TextBlock AlertCaption(string text)
+        {
+            TextBlock caption = new TextBlock();
+            caption.Text = text;
+            caption.FontSize = 10;
+            caption.Foreground = new SolidColorBrush(cMuted);
+            caption.VerticalAlignment = VerticalAlignment.Center;
+            caption.Margin = new Thickness(6, 0, 6, 0);
+            return caption;
+        }
+
+        private TextBox AlertBox(string path)
+        {
+            TextBox box = new TextBox();
+            box.Style = (Style)root.Resources["TxtBox"];
+            box.Width = 58;
+            box.ToolTip = "留空 = 该平台不提醒";
+            double value = cfg.GetNumberAt(path, 0);
+            box.Text = value > 0 ? value.ToString("0.##", CultureInfo.InvariantCulture) : "";
+            box.LostFocus += delegate { SaveAlertBox(box, path); };
+            box.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter) SaveAlertBox(box, path);
+            };
+            return box;
+        }
+
+        private void SaveAlertBox(TextBox box, string path)
+        {
+            double value;
+            if (!double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value < 0) value = 0;
+            // 套餐窗口阈值是百分比：100% 封顶（到顶=用满，再高没意义）。
+            if (value > 100 && (path.EndsWith(".fiveHour", StringComparison.Ordinal) || path.EndsWith(".sevenDay", StringComparison.Ordinal)))
+            {
+                value = 100;
+            }
+            cfg.SetAt(path, value);
+            box.Text = value > 0 ? value.ToString("0.##", CultureInfo.InvariantCulture) : "";
+            cfg.Save();
+            engine.Data.Refresh();
+        }
+
         // ------------------------------------------------------------ 套餐用量
         private readonly Dictionary<string, TextBlock> planStatus = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, PasswordBox> planBoxes = new Dictionary<string, PasswordBox>();
@@ -1267,6 +1413,7 @@ namespace DshPet
                 ((CheckBox)ui["CollideChk"]).IsChecked = cfg.GetFlagAt("pets.collide", true);
                 ((CheckBox)ui["AlertChk"]).IsChecked = cfg.GetFlag("alert", "balanceWarn", true);
                 ((CheckBox)ui["BudgetChk"]).IsChecked = cfg.GetFlag("alert", "budgetWarn", true);
+                ((CheckBox)ui["QuotaChk"]).IsChecked = cfg.GetFlag("alert", "quotaWarn", true);
                 ((CheckBox)ui["EdgeHideChk"]).IsChecked = cfg.GetFlag("edgeHide", "enabled", true);
                 ((CheckBox)ui["CloneAutoChk"]).IsChecked = cfg.GetFlagAt("clones.auto", true);
                 ((CheckBox)ui["RandomRoleChk"]).IsChecked = cfg.GetFlagAt("roles.random", true);
@@ -1295,10 +1442,7 @@ namespace DshPet
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
                 UpdatePreview();
-                double below = cfg.GetNumberAt("alert.below", 0);
-                ((TextBox)ui["AlertBelowBox"]).Text = below > 0 ? below.ToString("0.##", CultureInfo.InvariantCulture) : "";
-                double budgetValue = cfg.GetNumberAt("alert.budget", 0);
-                ((TextBox)ui["BudgetBox"]).Text = budgetValue > 0 ? budgetValue.ToString("0.##", CultureInfo.InvariantCulture) : "";
+                BuildAlertRows();
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ClonePauseBox"]).Text = ((int)cfg.GetNumberAt("clones.pauseMinSec", 60)).ToString(CultureInfo.InvariantCulture);
@@ -1326,12 +1470,21 @@ namespace DshPet
         public void UpdateDataText()
         {
             if (root == null) return;
+            // 面板标题可自定义（ui.title）；默认不再用 dsh 这种平台专属名。
+            string title = cfg.GetStringAt("ui.title", "余额桌宠");
+            if (string.IsNullOrEmpty(title)) title = "余额桌宠";
+            ((TextBlock)ui["TitleText"]).Text = title;
+            root.Title = title;
             Snapshot data = engine.Data.Current;
             ProviderState primary = data.Primary;
+            string peakText = engine.PeakText();
             ((TextBlock)ui["DataText"]).Text = primary == null
                 ? "无接口"
-                : primary.Name + " · " + Fmt.Money(primary.Balance, primary.Currency) + " · " + engine.PeakText();
-            ((TextBlock)ui["SubText"]).Text = engine.PeakLine() + "　" + data.OkCount + " 个接口在线";
+                : primary.Name + " · " + Fmt.Money(primary.Balance, primary.Currency)
+                    + (peakText.Length > 0 ? " · " + peakText : "");
+            string peakLine = engine.PeakLine();
+            ((TextBlock)ui["SubText"]).Text = (peakLine.Length > 0 ? peakLine + "　" : "")
+                + data.OkCount + " 个接口在线";
             UpdateProviderStatus();
             UpdatePlanStatus();
         }

@@ -132,7 +132,10 @@ namespace DshPet
                 + "  source=" + (primary == null ? "none" : primary.Name + "（" + primary.SourceText + "）")
                 + "  balance=" + (primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency))
                 + "  today=" + (primary == null || !primary.TodayUsage.HasValue ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency)));
-            sb.AppendLine("peak=" + (s.IsPeak ? "高峰时段" : "谷时（半价）") + "  next=" + FormatStamp(s.NextChangeAtMs));
+            if (s.HasPeak)
+            {
+                sb.AppendLine("peak=" + (s.IsPeak ? "标准时段（原价）" : "优惠时段（半价）") + "  next=" + FormatStamp(s.NextChangeAtMs));
+            }
             sb.AppendLine("providers:");
             foreach (ProviderState p in s.Providers)
             {

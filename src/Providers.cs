@@ -40,6 +40,7 @@ namespace DshPet
         public string Currency = "CNY";
         public string Auth = "bearer";      // bearer | x-api-key | none
         public bool HasBalance = true;      // false = no documented public balance endpoint
+        public bool PeakPricing;            // 该平台有高峰/优惠时段计价（错峰优惠，目前只有 DeepSeek）
         public bool IsCustom;
         public string Note = "";
     }
@@ -87,6 +88,17 @@ namespace DshPet
     {
         public static string Version = "1.0.0";
 
+        /// <summary>这个平台的计价是否分标准/优惠时段（错峰优惠）：只有 DeepSeek 是。</summary>
+        public static bool HasPeakPricing(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            foreach (ProviderDef def in Builtin())
+            {
+                if (def.Id == id) return def.PeakPricing;
+            }
+            return false;
+        }
+
         public static List<ProviderDef> Builtin()
         {
             List<ProviderDef> list = new List<ProviderDef>();
@@ -96,6 +108,7 @@ namespace DshPet
             deepseek.Name = "DeepSeek";
             deepseek.Currency = "CNY";
             deepseek.Note = "官方 /用户余额接口，含赠金与充值拆分。";
+            deepseek.PeakPricing = true;   // 错峰优惠：只有它区分标准/优惠时段
             list.Add(deepseek);
 
             ProviderDef moonshot = new ProviderDef();

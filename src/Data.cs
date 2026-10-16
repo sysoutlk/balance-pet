@@ -9,6 +9,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,9 +24,14 @@ namespace DshPet
     internal sealed class Thresholds
     {
         public bool AlertOn;
-        public double? AlertBelow;
         public bool BudgetOn;
-        public double? Budget;
+        public bool QuotaOn;                 // 套餐额度提醒总开关
+        // 按平台分别设：alerts.<providerId>.below / .budget（> 0 才算数）
+        public Dictionary<string, double> Below = new Dictionary<string, double>();
+        public Dictionary<string, double> Budget = new Dictionary<string, double>();
+        // 套餐窗口用量阈值（百分比）：alerts.<planId>.fiveHour / .sevenDay
+        public Dictionary<string, double> FiveHour = new Dictionary<string, double>();
+        public Dictionary<string, double> SevenDay = new Dictionary<string, double>();
     }
 
     internal sealed class Snapshot
@@ -34,6 +40,7 @@ namespace DshPet
         public List<PlanState> Plans = new List<PlanState>();
         public string PrimaryId = "deepseek";
         public long AtMs;
+        public bool HasPeak;                 // 主接口的计价分标准/优惠时段（DeepSeek 的错峰优惠）
         public bool IsPeak;
         public long NextChangeAtMs;
         public List<DayUsage> History = new List<DayUsage>();
@@ -314,8 +321,15 @@ namespace DshPet
             snapshot.History = BuildHistory(stateRoot, primary);
 
             DateTime bj = BeijingNow();
-            snapshot.IsPeak = IsPeak(bj, cfg);
-            snapshot.NextChangeAtMs = NextChangeAt(bj, cfg);
+            // 标准/优惠时段的计价是 DeepSeek 的错峰优惠：看当前真正当主力的接口（还没配 Key 时
+            // 按配置里的主接口算），换成别家就不再显示这些字。
+            string peakId = primary != null ? primary.Id : snapshot.PrimaryId;
+            snapshot.HasPeak = Providers.HasPeakPricing(peakId);
+            if (snapshot.HasPeak)
+            {
+                snapshot.IsPeak = IsPeak(bj, cfg);
+                snapshot.NextChangeAtMs = NextChangeAt(bj, cfg);
+            }
             return snapshot;
         }
 
@@ -346,12 +360,25 @@ namespace DshPet
         private Thresholds ReadLimits()
         {
             Thresholds limits = new Thresholds();
-            double below = cfg.GetNumberAt("alert.below", 0);
-            limits.AlertOn = cfg.GetFlagAt("alert.balanceWarn", true) && below > 0;
-            limits.AlertBelow = below > 0 ? (double?)below : null;
-            double budget = cfg.GetNumberAt("alert.budget", 0);
-            limits.BudgetOn = cfg.GetFlagAt("alert.budgetWarn", true) && budget > 0;
-            limits.Budget = budget > 0 ? (double?)budget : null;
+            limits.AlertOn = cfg.GetFlagAt("alert.balanceWarn", true);
+            limits.BudgetOn = cfg.GetFlagAt("alert.budgetWarn", true);
+            limits.QuotaOn = cfg.GetFlagAt("alert.quotaWarn", true);
+            // 阈值挂在每个平台自己名下：各家币种/量级差太多，一个全局数字没有意义。
+            foreach (ProviderDef def in Providers.Builtin())
+            {
+                double below = cfg.GetNumberAt("alerts." + def.Id + ".below", 0);
+                if (below > 0) limits.Below[def.Id] = below;
+                double budget = cfg.GetNumberAt("alerts." + def.Id + ".budget", 0);
+                if (budget > 0) limits.Budget[def.Id] = budget;
+            }
+            // 套餐窗口同理：按套餐分别设「5 小时 ≥ x%」「7 天 ≥ y%」。
+            foreach (PlanDef plan in Plans.Catalog())
+            {
+                double five = cfg.GetNumberAt("alerts." + plan.Id + ".fiveHour", 0);
+                if (five > 0) limits.FiveHour[plan.Id] = Math.Min(100, five);
+                double seven = cfg.GetNumberAt("alerts." + plan.Id + ".sevenDay", 0);
+                if (seven > 0) limits.SevenDay[plan.Id] = Math.Min(100, seven);
+            }
             return limits;
         }
 
@@ -475,6 +502,21 @@ namespace DshPet
             List<string> custom = cfg.GetStrings("", "peakHolidays");
             if (custom.Count > 0) return custom.ToArray();
             return Holidays2026;
+        }
+
+        /// <summary>标准计价时段的可读文本（由 PeakStart/PeakEnd 生成，不再两处手写）。</summary>
+        public static string PeakWindowText()
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < PeakStart.Length; i++)
+            {
+                if (i > 0) sb.Append(" / ");
+                sb.Append(PeakStart[i].ToString("00", CultureInfo.InvariantCulture));
+                sb.Append(":00-");
+                sb.Append(PeakEnd[i].ToString("00", CultureInfo.InvariantCulture));
+                sb.Append(":00");
+            }
+            return "工作日 " + sb.ToString();
         }
 
         public static bool IsPeak(DateTime beijing, Config cfg)

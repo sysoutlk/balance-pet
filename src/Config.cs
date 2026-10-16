@@ -495,6 +495,7 @@ namespace DshPet
             SetDefault("", "statePath", "");
             SetDefault("", "apiKey", "");
             SetDefault("network", "proxy", "");
+            SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（不叫 dsh：应用是多平台的）
             SetDefault("", "role", "");
             SetDefault("roles", "random", true);
             SetDefault("", "scale", 1.0);
@@ -585,9 +586,24 @@ namespace DshPet
             SetDefault("clones", "pauseMaxSec", 180.0);
             SetDefault("alert", "balanceWarn", true);
             SetDefault("alert", "budgetWarn", true);
+            SetDefault("alert", "quotaWarn", true);
             SetDefault("alert", "quipsOn", true);
             SetDefault("alert", "below", 0.0);
             SetDefault("alert", "budget", 0.0);
+            // 老版本只有一个全局阈值：迁到 DeepSeek 那一行（现在按平台分别设），
+            // 迁完把旧键清零，免得下次启动把用户改过的值又搬回去。
+            double legacyBelow = GetNumberAt("alert.below", 0);
+            if (legacyBelow > 0)
+            {
+                if (GetNumberAt("alerts.deepseek.below", 0) <= 0) SetAt("alerts.deepseek.below", legacyBelow);
+                SetAt("alert.below", 0.0);
+            }
+            double legacyBudget = GetNumberAt("alert.budget", 0);
+            if (legacyBudget > 0)
+            {
+                if (GetNumberAt("alerts.deepseek.budget", 0) <= 0) SetAt("alerts.deepseek.budget", legacyBudget);
+                SetAt("alert.budget", 0.0);
+            }
             SetDefault("actions", "enabled", true);
             SetDefault("actions", "pauseMinSec", 14.0);
             SetDefault("actions", "pauseMaxSec", 45.0);
@@ -599,7 +615,7 @@ namespace DshPet
             SetDefault("quips", "greeting", new string[]
             {
                 "今天也一起省点 token 吧～",
-                "谷时半价，冲就完了",
+                "省着点花，余额我盯着呢",
                 "余额我盯着的，你放心",
                 "别熬夜了，熬夜真的很贵",
                 "摸鱼可以，烧钱不行",
