@@ -11,6 +11,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
@@ -186,12 +187,13 @@ namespace DshPet
     <ScrollViewer VerticalScrollBarVisibility='Auto' HorizontalScrollBarVisibility='Disabled' MaxHeight='640'>
       <ScrollViewer.Resources>
         <Style TargetType='ScrollBar'>
-          <Setter Property='Width' Value='6'/>
+          <Setter Property='Width' Value='10'/>
           <Setter Property='Background' Value='Transparent'/>
+          <Setter Property='Margin' Value='2,2,1,2'/>
           <Setter Property='Template'>
             <Setter.Value>
               <ControlTemplate TargetType='ScrollBar'>
-                <Grid Background='Transparent'>
+                <Grid Background='Transparent' Width='8'>
                   <Track x:Name='PART_Track' IsDirectionReversed='True'>
                     <Track.DecreaseRepeatButton>
                       <RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0' Focusable='False'/>
@@ -200,8 +202,11 @@ namespace DshPet
                       <Thumb>
                         <Thumb.Template>
                           <ControlTemplate TargetType='Thumb'>
-                            <Border Background='#3A4565' CornerRadius='3'/>
+                            <Border x:Name='t' Background='__BORDER__' CornerRadius='4' MinHeight='36' Margin='2,0' Opacity='0.85'/>
                           </ControlTemplate>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='t' Property='Opacity' Value='1'/></Trigger>
+                        </ControlTemplate.Triggers>
                         </Thumb.Template>
                       </Thumb>
                     </Track.Thumb>
@@ -245,11 +250,9 @@ namespace DshPet
               <TextBlock Text='实时预览' FontSize='10' Foreground='__MUTED__' DockPanel.Dock='Left'/>
               <TextBlock x:Name='FxHint' FontSize='10' Foreground='__MUTED__' HorizontalAlignment='Right'/>
             </DockPanel>
-            <Grid Margin='0,8,0,0' Height='92'>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width='*'/><ColumnDefinition Width='Auto'/>
-              </Grid.ColumnDefinitions>
-              <Canvas x:Name='FxCanvas' Grid.Column='0' Height='92' ClipToBounds='False'>
+            <Border Margin='0,8,0,0' Height='150' CornerRadius='8' Background='__DESK__'>
+            <Grid>
+              <Canvas x:Name='FxCanvas' Height='150' ClipToBounds='False'>
                 <Border x:Name='FxCard' CornerRadius='12' Background='__CARD__' BorderBrush='__BORDER__' BorderThickness='1' Padding='10,8'>
                   <StackPanel>
                     <StackPanel Orientation='Horizontal'>
@@ -266,11 +269,8 @@ namespace DshPet
                   </Border.RenderTransform>
                 </Border>
               </Canvas>
-              <StackPanel Grid.Column='1' Margin='12,0,0,0' VerticalAlignment='Top'>
-                <TextBlock x:Name='FxSwatchLabel' Text='主题色 / 混合配色' FontSize='10' Foreground='__MUTED__'/>
-                <WrapPanel x:Name='FxColors' Margin='0,4,0,0'/>
-              </StackPanel>
             </Grid>
+            </Border>
           </StackPanel>
         </Border>
         <WrapPanel Margin='0,8,0,0'>
@@ -403,6 +403,11 @@ namespace DshPet
           <TextBox x:Name='CloneMaxBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='只（0 = 不限）' Margin='5,0,0,0'/>
         </DockPanel>
+        <DockPanel Margin='0,0,0,6'>
+          <TextBlock Style='{StaticResource Lbl}' Text='分裂间隔'/>
+          <TextBox x:Name='ClonePauseBox' Style='{StaticResource TxtBox}' Width='56' Margin='8,0,0,0'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='秒起（实际为 1~2.5 倍之间的随机）' Margin='5,0,0,0' FontSize='10'/>
+        </DockPanel>
         <DockPanel>
           <StackPanel DockPanel.Dock='Right' Orientation='Horizontal'>
             <Button x:Name='CloneAddBtn' Content='来一个' Width='72' Style='{StaticResource Btn}'/>
@@ -465,9 +470,10 @@ namespace DshPet
                 "BubbleWidthSlider","BubbleWidthVal","BubbleRadiusSlider","BubbleRadiusVal","BubbleTailSlider",
                 "BubbleOpacitySlider","BubbleOpacityVal","BubbleShadowSlider","Color1Panel",
                 "MixPanel",
-                "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","FxColors","FxSwatchLabel","BubbleShadowVal",
+                "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","BubbleShadowVal",
                 "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
+                ,"ClonePauseBox"
             })
             {
                 ui[name] = (FrameworkElement)root.FindName(name);
@@ -605,6 +611,7 @@ namespace DshPet
             BindNumberBox("BudgetBox", "alert.budget");
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
             BindNumberBox("CloneMaxBox", "clones.max");
+            BindNumberBox("ClonePauseBox", "clones.pauseMinSec");
             BindField("ProxyBox", "network.proxy");
             ((Button)ui["RefreshBtn"]).Click += delegate { engine.Data.Refresh(); };
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
@@ -682,6 +689,11 @@ namespace DshPet
             double value;
             if (!double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value < 0) value = 0;
             cfg.SetAt(path, value);
+            if (path == "clones.pauseMinSec")
+            {
+                // 分裂间隔：填的是最小值，实际在 1~2.5 倍之间随机。
+                cfg.SetAt("clones.pauseMaxSec", Math.Round(value * 2.5));
+            }
             cfg.Save();
             engine.Data.Refresh();
             Update();
@@ -1279,6 +1291,7 @@ namespace DshPet
                 ((TextBox)ui["BudgetBox"]).Text = budgetValue > 0 ? budgetValue.ToString("0.##", CultureInfo.InvariantCulture) : "";
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
+                ((TextBox)ui["ClonePauseBox"]).Text = ((int)cfg.GetNumberAt("clones.pauseMinSec", 60)).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ProxyBox"]).Text = cfg.GetStringAt("network.proxy", "");
                 ((TextBlock)ui["CloneCount"]).Text = engine.Pets.Count.ToString(CultureInfo.InvariantCulture) + " 只";
                 string role = cfg.GetString("", "role", "");
@@ -1469,6 +1482,7 @@ namespace DshPet
             string border = dark ? "#39456B" : "#D9DFEC";
             string chip = dark ? "#202A42" : "#E9EDF7";
             string nav = dark ? "#171D2B" : "#F1F4FA";
+            string desk = dark ? "#0F1421" : "#E7EBF5";
             if (theme == "monet")
             {
                 row = ToHex(dark ? palette.QuipBackground : palette.BarEmpty);
@@ -1479,9 +1493,12 @@ namespace DshPet
                 border = ToHex(palette.Border);
                 chip = ToHex(palette.BarEmpty);
                 nav = ToHex(dark ? palette.Card : palette.BarEmpty);
+                desk = ToHex(dark ? palette.Card : palette.BarEmpty);
             }
             if (theme == "glass") nav = "#B3FFFFFF";
             if (theme == "frost") nav = "#D9FFFFFF";
+            if (theme == "glass") desk = "#33708AB0";
+            if (theme == "frost") desk = "#66D9E2F5";
             cRow = Parse(nav);
             cField = Parse(field);
             cBorder = Parse(border);
@@ -1499,6 +1516,7 @@ namespace DshPet
             cErr = ParseOr("ui.colors.err", cErr);
             return Xaml
                 .Replace("__NAV__", nav)
+                .Replace("__DESK__", desk)
                 .Replace("__CARD__", card)
                 .Replace("__CARD_BORDER__", cardBorder)
                 .Replace("__FG2__", ToHex(palette.Dark ? palette.RowValue : palette.Title))
@@ -1922,32 +1940,28 @@ namespace DshPet
             double radius = cfg.GetNumber("bubble", "radius", 16);
             card.CornerRadius = new CornerRadius(Math.Max(2, radius * 0.7));
             double width = cfg.GetNumber("bubble", "width", 196);
-            card.Width = 120 + (Math.Max(150, Math.Min(320, width)) - 150) / 170.0 * 130;
+            card.Width = 110 + (Math.Max(150, Math.Min(320, width)) - 150) / 170.0 * 180;
             card.Opacity = cfg.GetNumber("bubble", "opacity", 1.0);
-            double tailSize = Math.Max(8, Math.Min(24, cfg.GetNumber("bubble", "tailSize", 13))) * 0.7;
+            // 预览要真的"看得出"：宽度映射更宽、圆角/尾巴/阴影/字号/透明度都放大呈现。
+            card.UpdateLayout();
+            double tailSize = Math.Max(6, Math.Min(26, cfg.GetNumber("bubble", "tailSize", 13)));
+            DropShadowEffect previewShadow = card.Effect as DropShadowEffect;
+            if (previewShadow == null)
+            {
+                previewShadow = new DropShadowEffect();
+                previewShadow.ShadowDepth = 3;
+                previewShadow.BlurRadius = 18;
+                previewShadow.Color = Colors.Black;
+                card.Effect = previewShadow;
+            }
+            previewShadow.Opacity = cfg.GetNumber("bubble", "shadow", 0.28);
+
             tail.Width = tailSize;
             tail.Height = tailSize;
             tail.Background = card.Background;
             tail.BorderBrush = card.BorderBrush;
             ((TextBlock)ui["FxHint"]).Text = DropLabel(EffectValues, EffectLabels, "bubble.effect", "关闭")
                 + " · " + DropLabel(ThemeValues, ThemeLabels, "bubble.theme", "浅色");
-            // 混合配方做成色块展示（点一下移除）。
-            WrapPanel colors = (WrapPanel)ui["FxColors"];
-            colors.Children.Clear();
-            foreach (string hex in cfg.GetStrings("bubble", "colors"))
-            {
-                Border swatch = new Border();
-                swatch.Width = 18;
-                swatch.Height = 18;
-                swatch.CornerRadius = new CornerRadius(5);
-                swatch.Margin = new Thickness(0, 0, 5, 4);
-                swatch.Cursor = System.Windows.Input.Cursors.Hand;
-                swatch.Background = Brush(hex);
-                swatch.ToolTip = hex + "（点击移除）";
-                string chosen = hex;
-                swatch.MouseLeftButtonUp += delegate { ToggleMixColor(chosen); };
-                colors.Children.Add(swatch);
-            }
             ApplyPreviewBrush();
         }
 
@@ -2004,11 +2018,14 @@ namespace DshPet
             // 尾巴贴在卡片底部中间。
             Border card = (Border)ui["FxCard"];
             Border tail = (Border)ui["FxTail"];
-            Canvas.SetLeft(card, 4);
-            Canvas.SetTop(card, 2);
+            Canvas.SetLeft(card, 6);
+            Canvas.SetTop(card, 6);
             double cardWidth = card.Width;
-            Canvas.SetLeft(tail, 4 + cardWidth / 2 - tail.Width / 2);
-            Canvas.SetTop(tail, 60);
+            double cardHeight = card.ActualHeight > 0 ? card.ActualHeight : 66;
+            Canvas.SetLeft(tail, 6 + cardWidth / 2 - tail.Width / 2);
+            Canvas.SetTop(tail, 6 + cardHeight - tail.Height / 2 - 2);
+            bool showTail = cfg.GetFlag("bubble", "tail", true);
+            tail.Visibility = showTail ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static string ToHexString(System.Drawing.Color color)
