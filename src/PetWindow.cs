@@ -46,6 +46,11 @@ namespace DshPet
         public double Y;
         public double TargetX;
         public double TargetY;
+        public double FinalX;                // 这次散步的最终目的地（折线一段段绕过去）
+        public double FinalY;
+        public int WalkLegs;                 // 还剩几段折线
+        public double WobbleSeed = Program.Rng.NextDouble() * Math.PI * 2;   // 蛇形摆动的相位种子
+        private double walkMinX, walkMaxX, walkMinY, walkMaxY;
         public double SpeedFactor = 1.0;
         public double VelocityX;
         public double VelocityY;
@@ -418,14 +423,52 @@ namespace DshPet
             double maxX = Math.Max(minX, area.Right - Width - margin);
             double minY = area.Top + margin;
             double maxY = Math.Max(minY, area.Bottom - Height - margin);
-            TargetX = minX + Program.Rng.NextDouble() * (maxX - minX);
-            TargetY = minY + Program.Rng.NextDouble() * (maxY - minY);
-            if (Math.Abs(TargetX - X) < 40)
+            walkMinX = minX;
+            walkMaxX = maxX;
+            walkMinY = minY;
+            walkMaxY = maxY;
+            FinalX = minX + Program.Rng.NextDouble() * (maxX - minX);
+            FinalY = minY + Program.Rng.NextDouble() * (maxY - minY);
+            if (Math.Abs(FinalX - X) < 40)
             {
-                TargetX = TargetX > X ? Math.Min(maxX, X + 160) : Math.Max(minX, X - 160);
+                FinalX = FinalX > X ? Math.Min(maxX, X + 160) : Math.Max(minX, X - 160);
             }
-            SpeedFactor = 1.0;
+            // 折线散步：一段一段绕过去（每段带侧向偏移）+ 行进时蛇形摆动，不再是直线冲终点。
+            WalkLegs = 2 + Program.Rng.Next(0, 3);
+            NextWaypoint();
+            SpeedFactor = 0.9 + Program.Rng.NextDouble() * 0.35;
             Mode = "walk";
+        }
+
+        /// <summary>下一段路点：落在"当前位置 → 终点"的 30%~75% 处，再叠一点垂直方向的偏移。</summary>
+        private void NextWaypoint()
+        {
+            double dx = FinalX - X;
+            double dy = FinalY - Y;
+            double distance = Math.Sqrt(dx * dx + dy * dy);
+            if (distance < 10)
+            {
+                TargetX = FinalX;
+                TargetY = FinalY;
+                return;
+            }
+            double fraction = 0.3 + Program.Rng.NextDouble() * 0.45;
+            double px = X + dx * fraction;
+            double py = Y + dy * fraction;
+            double side = (Program.Rng.NextDouble() * 2 - 1) * Math.Min(130, distance * 0.55);
+            px += -dy / distance * side;
+            py += dx / distance * side;
+            TargetX = Math.Max(walkMinX, Math.Min(walkMaxX, px));
+            TargetY = Math.Max(walkMinY, Math.Min(walkMaxY, py));
+        }
+
+        /// <summary>走完一段：还有剩的就接着绕（返回 true），路走完了返回 false = 本次散步结束。</summary>
+        public bool NextLeg()
+        {
+            if (WalkLegs <= 0) return false;
+            WalkLegs--;
+            NextWaypoint();
+            return true;
         }
 
         public void StartAction(string action)

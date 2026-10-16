@@ -305,7 +305,7 @@ namespace DshPet
             ProviderState primary = snapshot.Primary;
             if (primary == null)
             {
-                snapshot.Error = "没有启用任何余额数据源";
+                snapshot.Error = "没有启用任何余额接口";
             }
             else if (!primary.Ok)
             {

@@ -339,7 +339,10 @@ namespace DshPet
             // 特效要"看得见"：标题、大数字（未指定专属色时）和卡片描边一起跟着走。
             title.Foreground = brush;
             if (lastView == null || string.IsNullOrEmpty(lastView.BigColor)) amount.Foreground = brush;
-            card.BorderBrush = new SolidColorBrush(WithAlpha(accent, 150));
+            // 描边也跟动效走，尾巴随即同步（尾巴本身是卡片描边的复制品）。
+            card.BorderBrush = new SolidColorBrush(WithAlpha(DynamicColor(), 150));
+            tailTopShape.BorderBrush = card.BorderBrush;
+            tailBottomShape.BorderBrush = card.BorderBrush;
             foreach (object child in dockDots.Children)
             {
                 Border dot = child as Border;
@@ -385,15 +388,15 @@ namespace DshPet
                     return HueColor(phase * 260);
                 case "breathe":
                     {
-                        double k = 1 - effectDepth * (0.5 + 0.5 * Math.Sin(Direction() * phase * 1.4));
+                        double k = 1 - effectDepth * 0.5 * (0.5 + 0.5 * Math.Sin(Direction() * phase * 3.2));
                         return Modulate(BlendCenter(), k);
                     }
                 case "shift":
-                    return HueColor(Hue(BlendCenter()) + effectDepth * 90 * Math.Sin(Direction() * phase * 0.8));
+                    return BubbleEffects.RotateHue(BlendCenter(), phase * 90 * effectDepth * Direction());
                 case "shimmer":
                     {
-                        double k = 0.75 + 0.5 * (0.5 + 0.5 * Math.Sin(Direction() * phase * 3.2)) * effectDepth;
-                        return Modulate(BlendCenter(), k);
+                        double k = 0.15 + 0.75 * (0.5 + 0.5 * Math.Sin(Direction() * phase * 2.4)) * effectDepth;
+                        return BubbleEffects.Mix(BlendCenter(), Colors.White, Math.Min(0.8, k));
                     }
                 case "flow":
                 case "swirl":
@@ -434,73 +437,11 @@ namespace DshPet
             return effectReverse ? -1 : 1;
         }
 
-        /// <summary>Solid colour for most modes; "flow" uses a sliding gradient.</summary>
+        /// <summary>当前动效的画刷：算法与设置里的实时预览共用（BubbleEffects）。</summary>
         private Brush CurrentBrush()
         {
             if (dynamicMode.Length == 0) return FromColor(accent);
-            if (dynamicMode == "flow") return BlendBrush(0.32, true);
-            if (dynamicMode == "swirl") return BlendBrush(0.12, false);
-            if (dynamicMode == "rainbow") return RainbowBrush();
-            if (dynamicMode == "breathe" || dynamicMode == "shimmer" || dynamicMode == "shift")
-            {
-                return BlendBrush(0.05, true, true);   // 静止混色，由 DynamicColor 做明暗/色相动效
-            }
-            if (dynamicMode != "flow") return FromColor(DynamicColor());
-            Color a = DynamicColor();
-            Color b = secondColor;
-            LinearGradientBrush brush = new LinearGradientBrush();
-            double t = (phase * 0.35) % 1.0;
-            brush.StartPoint = new Point(t, 0);
-            brush.EndPoint = new Point(t + 1, 1);
-            brush.GradientStops.Add(new GradientStop(a, 0));
-            brush.GradientStops.Add(new GradientStop(b, 0.5));
-            brush.GradientStops.Add(new GradientStop(a, 1));
-            return brush;
-        }
-
-        /// <summary>
-        /// 多色混搭：把用户选的颜色做成渐变。slide = 颜色沿轴滑动（流动），
-        /// 否则只缓慢旋转角度（旋转）；calm = 色标基本不动，交给明暗/色相动效。
-        /// </summary>
-        private Brush BlendBrush(double speed, bool slide)
-        {
-            return BlendBrush(speed, slide, false);
-        }
-
-        private Brush BlendBrush(double speed, bool slide, bool calm)
-        {
-            List<Color> colors = blendColors.Count > 1
-                ? blendColors
-                : new List<Color> { baseAccent, secondColor };
-            LinearGradientBrush brush = new LinearGradientBrush();
-            double angle = phase * 0.35 * speed;
-            double cx = 0.5 + 0.5 * Math.Cos(angle);
-            double cy = 0.5 + 0.5 * Math.Sin(angle);
-            brush.StartPoint = new Point(cx - 0.6, cy - 0.6);
-            brush.EndPoint = new Point(cx + 0.6, cy + 0.6);
-            int count = colors.Count;
-            for (int i = 0; i < count; i++)
-            {
-                double offset = calm
-                    ? i / (double)count
-                    : (i / (double)count + (slide ? phase * speed : 0)) % 1.0;
-                brush.GradientStops.Add(new GradientStop(colors[i], offset));
-            }
-            if (!calm) brush.GradientStops.Add(new GradientStop(colors[0], 1.0));
-            return brush;
-        }
-
-        private Brush RainbowBrush()
-        {
-            LinearGradientBrush brush = new LinearGradientBrush();
-            double angle = phase * 0.2;
-            brush.StartPoint = new Point(0.5 + 0.6 * Math.Cos(angle), 0.5 + 0.6 * Math.Sin(angle));
-            brush.EndPoint = new Point(0.5 - 0.6 * Math.Cos(angle), 0.5 - 0.6 * Math.Sin(angle));
-            for (int i = 0; i <= 5; i++)
-            {
-                brush.GradientStops.Add(new GradientStop(HueColor(phase * 260 + i * 72), i / 5.0));
-            }
-            return brush;
+            return BubbleEffects.Brush(dynamicMode, blendColors, baseAccent, secondColor, phase, effectDepth, effectReverse);
         }
 
         private static double Hue(Color color)

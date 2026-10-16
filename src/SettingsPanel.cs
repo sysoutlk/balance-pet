@@ -372,7 +372,7 @@ namespace DshPet
           <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
           <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
         </Grid>
-        <TextBlock Style='{StaticResource Sect}' Text='数据源（余额 API）'/>
+        <TextBlock Style='{StaticResource Sect}' Text='余额接口'/>
         <StackPanel x:Name='ProviderList'/>
         
         <WrapPanel x:Name='UnsupportedPanel'/>
@@ -386,7 +386,7 @@ namespace DshPet
         </DockPanel>
         <TextBlock FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,3,0,0'
                    Text='留空 = 直连；填 http://127.0.0.1:7890 之类的地址可让查询走指定代理（网络出口被限制 HTTP 451 时很有用）。'/>
-        <TextBlock Style='{StaticResource Sect}' Text='套餐用量（5 小时 / 7 天窗口）'/>
+        <TextBlock Style='{StaticResource Sect}' Text='套餐额度'/>
         <StackPanel x:Name='PlanList'/>
         <TextBlock Style='{StaticResource Sect}' Text='提醒'/>
         <WrapPanel>
@@ -1329,9 +1329,9 @@ namespace DshPet
             Snapshot data = engine.Data.Current;
             ProviderState primary = data.Primary;
             ((TextBlock)ui["DataText"]).Text = primary == null
-                ? "无数据源"
+                ? "无接口"
                 : primary.Name + " · " + Fmt.Money(primary.Balance, primary.Currency) + " · " + engine.PeakText();
-            ((TextBlock)ui["SubText"]).Text = engine.PeakLine() + "　" + data.OkCount + " 个数据源在线";
+            ((TextBlock)ui["SubText"]).Text = engine.PeakLine() + "　" + data.OkCount + " 个接口在线";
             UpdateProviderStatus();
             UpdatePlanStatus();
         }
@@ -2185,41 +2185,9 @@ namespace DshPet
             string motion = cfg.GetString("bubble", "effect", "off");
             double depth = cfg.GetNumber("bubble", "effectDepth", 1.0);
             bool reverse = cfg.GetFlag("bubble", "effectReverse", false);
-            double direction = reverse ? -1 : 1;
-            Brush brush;
-            if (motion == "rainbow")
-            {
-                LinearGradientBrush rainbow = new LinearGradientBrush();
-                rainbow.StartPoint = new Point(0, 0);
-                rainbow.EndPoint = new Point(1, 1);
-                for (int i = 0; i <= 4; i++) rainbow.GradientStops.Add(new GradientStop(HueColor(previewPhase * 260 + i * 90), i / 4.0));
-                brush = rainbow;
-            }
-            else if (list.Count > 1)
-            {
-                LinearGradientBrush gradient = new LinearGradientBrush();
-                double angle = previewPhase * 0.35 * (motion == "swirl" ? 0.4 : 1.0);
-                gradient.StartPoint = new Point(0.5 - 0.6 * Math.Cos(angle), 0.5 - 0.6 * Math.Sin(angle));
-                gradient.EndPoint = new Point(0.5 + 0.6 * Math.Cos(angle), 0.5 + 0.6 * Math.Sin(angle));
-                bool move = motion == "flow";
-                for (int i = 0; i < list.Count; i++)
-                {
-                    double offset = move ? (i / (double)list.Count + previewPhase * 0.3 * direction) % 1.0 : i / (double)list.Count;
-                    gradient.GradientStops.Add(new GradientStop(list[i], (offset % 1 + 1) % 1));
-                }
-                if (move) gradient.GradientStops.Add(new GradientStop(list[0], 1.0));
-                brush = gradient;
-            }
-            else
-            {
-                Color baseColor = list[0];
-                if (motion == "breathe" || motion == "shimmer")
-                {
-                    double k = 1 - depth * (0.5 + 0.5 * Math.Sin(direction * previewPhase * (motion == "shimmer" ? 3.2 : 1.4)));
-                    baseColor = Color.FromRgb((byte)(baseColor.R * k), (byte)(baseColor.G * k), (byte)(baseColor.B * k));
-                }
-                brush = new SolidColorBrush(baseColor);
-            }
+            // 和气泡本体共用同一套动效算法：预览里看到的节奏 = 桌宠气泡的节奏。
+            Color second = Parse(cfg.GetStringAt("bubble.color2", "#A855F7"));
+            Brush brush = BubbleEffects.Brush(motion, list, list[0], second, previewPhase, depth, reverse);
             ((Ellipse)ui["FxDot"]).Fill = brush;
             ((TextBlock)ui["FxTitle"]).Foreground = brush;
             ((TextBlock)ui["FxAmount"]).Foreground = brush;

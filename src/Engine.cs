@@ -230,14 +230,19 @@ namespace DshPet
                 double distance = Math.Sqrt(dx * dx + dy * dy);
                 if (distance < 4)
                 {
+                    if (pet.NextLeg()) return;   // 折线散步：接着走下一段，别直接收工
                     pet.SetIdle();
                     ScheduleEdgeHide(pet, now);
                     return;
                 }
                 double step = speed * pet.SpeedFactor * dt;
                 if (step > distance) step = distance;
-                pet.X += dx / distance * step;
-                pet.Y += dy / distance * step;
+                // 蛇形摆动：朝路点的方向再叠一点左右摆幅（越接近路点收得越紧），路径弯弯扭扭。
+                double wobble = 0.32 * Math.Min(1, distance / 70.0)
+                    * Math.Sin(now.TimeOfDay.TotalSeconds * 2.1 + pet.WobbleSeed);
+                double heading = Math.Atan2(dy, dx) + wobble;
+                pet.X += Math.Cos(heading) * step;
+                pet.Y += Math.Sin(heading) * step;
                 if (Math.Abs(dx) > 6) pet.SetFacing(dx > 0 ? 1 : -1);
                 double rate = pet.SpeedFactor >= 2 ? 16 : 9;
                 pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
@@ -983,8 +988,8 @@ namespace DshPet
                 ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(data.AtMs).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)
                 : "--";
             ProviderState primary = data.Primary;
-            string sourceText = primary == null ? "无数据源" : primary.SourceText;
-            if (data.OkCount > 1) sourceText = data.OkCount + " 个数据源";
+            string sourceText = primary == null ? "无接口" : primary.SourceText;
+            if (data.OkCount > 1) sourceText = data.OkCount + " 个接口";
             return sourceText + " · " + stamp + " 更新";
         }
 
@@ -1067,7 +1072,7 @@ namespace DshPet
 
             if (index == 3)
             {
-                view.Title = "数据源";
+                view.Title = "余额接口";
                 view.Big = data.OkCount + " / " + EnabledCount(data);
                 view.BigSize = 22;
                 foreach (ProviderState provider in data.Providers)
@@ -1086,7 +1091,7 @@ namespace DshPet
             }
 
             // Page 4: coding-plan usage windows (5-hour / weekly).
-            view.Title = "套餐用量（5 小时 / 7 天）";
+            view.Title = "套餐额度";
             view.BigSize = 20;
             int okPlans = 0;
             foreach (PlanState plan in data.Plans)

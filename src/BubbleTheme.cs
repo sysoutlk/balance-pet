@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
@@ -251,6 +252,194 @@ namespace DshPet
             else if (h < 5) { r = x; b = c; }
             else { r = c; b = x; }
             return Color.FromArgb(alpha,
+                (byte)Math.Round((r + m) * 255),
+                (byte)Math.Round((g + m) * 255),
+                (byte)Math.Round((b + m) * 255));
+        }
+    }
+
+    /// <summary>
+    /// 气泡动效的画刷工厂：气泡本体与设置里的实时预览共用同一套算法，两边速度、幅度一致。
+    /// 每一档都调到"一眼看得出来"：旋转 = 转轴快速旋转，呼吸 = 明暗 + 透明起伏，
+    /// 闪动 = 一道高光来回扫过，漂移 = 色相持续平移；流动 / 彩虹沿用滑移与全色环。
+    /// </summary>
+    internal static class BubbleEffects
+    {
+        public static Brush Brush(string mode, List<Color> colors, Color colorA, Color colorB, double phase, double depth, bool reverse)
+        {
+            double direction = reverse ? -1 : 1;
+            List<Color> list = new List<Color>();
+            if (colors != null) list.AddRange(colors);
+            if (list.Count == 0)
+            {
+                list.Add(colorA);
+                list.Add(colorB);
+            }
+            else if (list.Count == 1)
+            {
+                list.Add(colorB);
+            }
+            switch (mode)
+            {
+                case "rainbow":
+                    {
+                        LinearGradientBrush brush = Axis(phase * 0.2, 0.6);
+                        for (int i = 0; i <= 5; i++)
+                        {
+                            brush.GradientStops.Add(new GradientStop(HueColor(phase * 260 + i * 72), i / 5.0));
+                        }
+                        return brush;
+                    }
+                case "flow":
+                    {
+                        LinearGradientBrush brush = Axis(phase * 0.35, 0.6);
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            double offset = ((i / (double)list.Count) + phase * 0.32 * direction) % 1.0;
+                            brush.GradientStops.Add(new GradientStop(list[i], (offset % 1 + 1) % 1));
+                        }
+                        brush.GradientStops.Add(new GradientStop(list[0], 1.0));
+                        return brush;
+                    }
+                case "swirl":
+                    {
+                        // 约 4 秒转一整圈的转轴 + 色标轻微错位，看着就是在打转。
+                        LinearGradientBrush brush = Axis(phase * 1.9 * direction, 0.65);
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            double offset = ((i / (double)list.Count) + phase * 0.07 * direction) % 1.0;
+                            brush.GradientStops.Add(new GradientStop(list[i], (offset % 1 + 1) % 1));
+                        }
+                        brush.GradientStops.Add(new GradientStop(list[0], 1.0));
+                        return brush;
+                    }
+                case "breathe":
+                    {
+                        // 亮度和透明度一起起伏（约 5 秒一个来回），像在呼吸。
+                        double wave = 0.5 + 0.5 * Math.Sin(direction * phase * 3.2);
+                        double factor = 1 - depth * 0.5 * wave;
+                        byte alpha = (byte)Math.Round(255 - 130 * depth * wave);
+                        LinearGradientBrush brush = Axis(phase * 0.2, 0.6);
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            Color c = Scale(list[i], factor);
+                            brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), i / (double)list.Count));
+                        }
+                        Color last = Scale(list[0], factor);
+                        brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, last.R, last.G, last.B), 1.0));
+                        return brush;
+                    }
+                case "shimmer":
+                    {
+                        // 一道加白的高光沿轴来回扫，带宽足够才看得见。
+                        double band = 0.08 + 0.84 * (0.5 + 0.5 * Math.Sin(direction * phase * 2.4));
+                        LinearGradientBrush brush = Axis(phase * 0.35, 0.65);
+                        List<GradientStop> stops = new List<GradientStop>();
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            stops.Add(new GradientStop(list[i], i / (double)list.Count));
+                        }
+                        stops.Add(new GradientStop(list[0], 1.0));
+                        stops.Add(new GradientStop(Mix(list[0], Colors.White, 0.6), Math.Max(0.02, band - 0.24)));
+                        stops.Add(new GradientStop(Mix(list[0], Colors.White, 0.92), band));
+                        stops.Add(new GradientStop(Mix(list[0], Colors.White, 0.6), Math.Min(0.98, band + 0.24)));
+                        stops.Sort(delegate(GradientStop x, GradientStop y) { return x.Offset.CompareTo(y.Offset); });
+                        foreach (GradientStop stop in stops) brush.GradientStops.Add(stop);
+                        return brush;
+                    }
+                case "shift":
+                    {
+                        // 色相持续平移（约 10 秒转一圈），不会停在原地。
+                        double degrees = phase * 90 * depth * direction;
+                        LinearGradientBrush brush = Axis(phase * 0.25, 0.6);
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            brush.GradientStops.Add(new GradientStop(RotateHue(list[i], degrees), i / (double)list.Count));
+                        }
+                        brush.GradientStops.Add(new GradientStop(RotateHue(list[0], degrees), 1.0));
+                        return brush;
+                    }
+                default:
+                    return new SolidColorBrush(colorA);
+            }
+        }
+
+        private static LinearGradientBrush Axis(double angle, double radius)
+        {
+            LinearGradientBrush brush = new LinearGradientBrush();
+            brush.StartPoint = new Point(0.5 - radius * Math.Cos(angle), 0.5 - radius * Math.Sin(angle));
+            brush.EndPoint = new Point(0.5 + radius * Math.Cos(angle), 0.5 + radius * Math.Sin(angle));
+            return brush;
+        }
+
+        public static Color Mix(Color a, Color b, double t)
+        {
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            return Color.FromRgb(
+                (byte)Math.Round(a.R + (b.R - a.R) * t),
+                (byte)Math.Round(a.G + (b.G - a.G) * t),
+                (byte)Math.Round(a.B + (b.B - a.B) * t));
+        }
+
+        public static Color Scale(Color color, double factor)
+        {
+            return Color.FromRgb(
+                (byte)Math.Min(255, Math.Max(0, color.R * factor)),
+                (byte)Math.Min(255, Math.Max(0, color.G * factor)),
+                (byte)Math.Min(255, Math.Max(0, color.B * factor)));
+        }
+
+        public static Color RotateHue(Color color, double degrees)
+        {
+            double hue, saturation, value;
+            ToHsv(color, out hue, out saturation, out value);
+            return FromHsv(hue + degrees, saturation, value);
+        }
+
+        private static Color HueColor(double degrees)
+        {
+            double h = (degrees % 360 + 360) % 360 / 60.0;
+            double x = 1 - Math.Abs(h % 2 - 1);
+            double r = 0, g = 0, b = 0;
+            if (h < 1) { r = 1; g = x; }
+            else if (h < 2) { r = x; g = 1; }
+            else if (h < 3) { g = 1; b = x; }
+            else if (h < 4) { g = x; b = 1; }
+            else if (h < 5) { r = x; b = 1; }
+            else { r = 1; b = x; }
+            return Color.FromRgb((byte)(r * 235), (byte)(g * 235), (byte)(b * 255));
+        }
+
+        private static void ToHsv(Color color, out double hue, out double saturation, out double value)
+        {
+            double r = color.R / 255.0, g = color.G / 255.0, b = color.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b));
+            double min = Math.Min(r, Math.Min(g, b));
+            double d = max - min;
+            value = max;
+            saturation = max <= 0 ? 0 : d / max;
+            if (d < 0.0001) { hue = 210; return; }
+            if (max == r) hue = 60 * (((g - b) / d) % 6);
+            else if (max == g) hue = 60 * ((b - r) / d + 2);
+            else hue = 60 * ((r - g) / d + 4);
+            if (hue < 0) hue += 360;
+        }
+
+        private static Color FromHsv(double hue, double saturation, double value)
+        {
+            double c = value * saturation;
+            double h = (hue % 360 + 360) % 360 / 60.0;
+            double x = c * (1 - Math.Abs(h % 2 - 1));
+            double m = value - c;
+            double r = 0, g = 0, b = 0;
+            if (h < 1) { r = c; g = x; }
+            else if (h < 2) { r = x; g = c; }
+            else if (h < 3) { g = c; b = x; }
+            else if (h < 4) { g = x; b = c; }
+            else if (h < 5) { r = x; b = c; }
+            else { r = c; b = x; }
+            return Color.FromRgb(
                 (byte)Math.Round((r + m) * 255),
                 (byte)Math.Round((g + m) * 255),
                 (byte)Math.Round((b + m) * 255));
