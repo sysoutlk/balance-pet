@@ -28,7 +28,20 @@
 
 状态名：`idle`、`walk`、`sleep`、`edge`（贴边收进去）、`peek`（收起后探头），
 以及动作 `hop bounce spin roll wobble nod shake wave clap stretch yawn shy startle look greet
-lie pace peek`。
+lie pace peek`。子目录里没有的状态会自动退回用根目录那套帧。
+
+## 不想自己画？一键生成逐帧动画
+
+设置卡片「外观」页点「图片转动图…」，或命令行：
+
+```powershell
+.\balance-pet.exe --make-anim roles\你的角色.png --name 我的动图 --width 256
+```
+
+会按 24 个状态生成一套逐帧动画写进 `roles\<名字>-动图\`：空闲帧放在角色目录**根下**
+（`frame_00.png ...`，即上面说的一套通用帧），其余状态各自一个子目录
+（`walk\`、`wave\`、`hop\`…）。生成的是普通 PNG，可以逐帧精修，或整目录替换成
+自己/AI 生成的动作帧。帧率取 `pet-config.json` 的 `roles.fps`（默认 8）。
 
 ## 命名
 

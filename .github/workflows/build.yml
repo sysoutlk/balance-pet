@@ -17,14 +17,14 @@ jobs:
       - name: Self-test
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath ./dsh-pet.exe -ArgumentList '--self-test' -Wait -PassThru
+          $process = Start-Process -FilePath ./balance-pet.exe -ArgumentList '--self-test' -Wait -PassThru
           Get-Content ./self-test-report.txt
           if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-pet-csc
-          path: dsh-pet.exe
+          name: balance-pet-csc
+          path: balance-pet.exe
 
   dotnet:
     name: .NET SDK (DshPet.csproj)
