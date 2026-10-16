@@ -1,0 +1,22 @@
+# build output
+/dsh-pet.exe
+/dist/
+*.rsp
+
+# local runtime files
+/pet-config.json
+/pet-state.json
+/self-test-report.txt
+/smoke-report.txt
+
+# user-supplied character art (copyright)
+/roles/*
+!/roles/README.md
+
+# IDE / tooling
+.vs/
+.idea/
+*.user
+*.suo
+src/bin/
+src/obj/

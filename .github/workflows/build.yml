@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  csc:
+    name: In-box csc (build.ps1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ./dsh-pet.exe -ArgumentList '--self-test' -Wait -PassThru
+          Get-Content ./self-test-report.txt
+          if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-pet-csc
+          path: dsh-pet.exe
+
+  dotnet:
+    name: .NET SDK (DshPet.csproj)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        run: dotnet build src/DshPet.csproj -c Release
