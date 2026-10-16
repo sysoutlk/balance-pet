@@ -367,6 +367,12 @@ namespace DshPet
           <CheckBox x:Name='QuipsChk' Style='{StaticResource Switch}' Content='台词'/>
           <CheckBox x:Name='CollideChk' Style='{StaticResource Switch}' Content='碰撞带动'/>
         </WrapPanel>
+        <DockPanel Margin='0,2,0,0'>
+          <Button x:Name='QuipImportBtn' Content='导入台词…' Width='92' Style='{StaticResource Btn}'/>
+          <Button x:Name='QuipExportBtn' Content='导出台词…' Width='92' Style='{StaticResource Btn}'/>
+          <TextBlock x:Name='QuipStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='6,0,0,0'
+                     TextTrimming='CharacterEllipsis' ToolTip='JSON：{ 「打招呼」: [「…」], 「蹦一下」: [「…」] }；也认英文动作名，导入后自动去重合并'/>
+        </DockPanel>
         <DockPanel Margin='0,4,0,0'>
           <CheckBox x:Name='EdgeHideChk' Style='{StaticResource Switch}' Content='边缘隐藏' Margin='0,0,10,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='收起前等待'/>
@@ -491,6 +497,7 @@ namespace DshPet
             {
                 "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
+                "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
@@ -643,6 +650,8 @@ namespace DshPet
             BindBubbleSlider("BubbleOpacitySlider", "bubble.opacity", "BubbleOpacityVal", "0%");
             BindBubbleSlider("BubbleShadowSlider", "bubble.shadow", "BubbleShadowSliderVal", "0.00");
             ((Button)ui["MixAddBtn"]).ToolTip = "从调色盘取色；超过上限会自动顶掉最早设置的颜色";
+            ((Button)ui["QuipImportBtn"]).Click += delegate { ImportQuipsDialog(); };
+            ((Button)ui["QuipExportBtn"]).Click += delegate { ExportQuipsDialog(); };
             BindSwitch("BubbleReverseChk", "bubble", "effectReverse");
             previewTimer.Interval = TimeSpan.FromMilliseconds(110);
             previewTimer.Tick += delegate
@@ -664,6 +673,40 @@ namespace DshPet
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
             ((Button)ui["CloneRemoveBtn"]).Click += delegate { engine.RemoveClone(); Update(); };
             ((Button)ui["QuitBtn"]).Click += delegate { engine.Quit(); };
+        }
+
+        /// <summary>选一个 JSON 文件导入台词：合并去重，不动已有台词。</summary>
+        private void ImportQuipsDialog()
+        {
+            System.Windows.Forms.OpenFileDialog dialog = new System.Windows.Forms.OpenFileDialog();
+            dialog.Title = "导入台词（JSON）";
+            dialog.Filter = "台词文件 (*.json)|*.json|所有文件 (*.*)|*.*";
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            int added = cfg.ImportQuips(dialog.FileName);
+            cfg.Save();
+            SetQuipStatus(added >= 0
+                ? "已导入 " + added + " 句台词"
+                : "导入失败：没读到台词（看下 JSON 格式）");
+        }
+
+        /// <summary>把当前台词导出成 JSON，改完可以再导入回来。</summary>
+        private void ExportQuipsDialog()
+        {
+            System.Windows.Forms.SaveFileDialog dialog = new System.Windows.Forms.SaveFileDialog();
+            dialog.Title = "导出台词";
+            dialog.Filter = "台词文件 (*.json)|*.json";
+            dialog.FileName = "quips.json";
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            bool ok = cfg.ExportQuips(dialog.FileName);
+            SetQuipStatus(ok ? "已导出到 " + System.IO.Path.GetFileName(dialog.FileName) : "导出失败：文件写不出去");
+        }
+
+        private void SetQuipStatus(string text)
+        {
+            TextBlock status = ui.ContainsKey("QuipStatus") ? ui["QuipStatus"] as TextBlock : null;
+            if (status == null) return;
+            status.Text = text;
+            status.ToolTip = text;
         }
 
         private void BindSwitch(string name, string section, string key)

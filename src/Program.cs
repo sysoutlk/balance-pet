@@ -58,6 +58,12 @@ namespace DshPet
 
             Config cfg = Config.Load(AppPaths.ConfigPath);
             CurrentConfig = cfg;
+            // 同目录放一个 quips.json 就能自带一套台词：启动时合并进来（随时可删，删了就没了）。
+            string quipPack = System.IO.Path.Combine(AppPaths.Root, "quips.json");
+            if (System.IO.File.Exists(quipPack) && cfg.ImportQuips(quipPack) > 0)
+            {
+                cfg.Save();
+            }
             if (Has(flags, "--self-test")) return SelfTest(cfg);
 
             bool createdNew;

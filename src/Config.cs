@@ -45,17 +45,19 @@ namespace DshPet
             }
         }
 
-        public static void WriteObject(string path, object value)
+        public static bool WriteObject(string path, object value)
         {
             try
             {
                 string directory = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
                 File.WriteAllText(path, Serializer.Serialize(value), new UTF8Encoding(false));
+                return true;
             }
             catch
             {
                 // Saving is best effort: a locked or read-only config must not kill the pet.
+                return false;
             }
         }
 
@@ -632,6 +634,195 @@ namespace DshPet
                     }
                 }
                 SetAt("quips.version", 2.0);
+            }
+        }
+
+        /// <summary>全部台词键（导出时按这个顺序写）。</summary>
+        public static string[] QuipKeys()
+        {
+            List<string> keys = new List<string>();
+            foreach (KeyValuePair<string, string[]> pair in QuipLibrary()) keys.Add(pair.Key);
+            return keys.ToArray();
+        }
+
+        /// <summary>
+        /// 导入台词文件（JSON）：{ "打招呼": ["…"], "hop": ["…"] } 或直接一个字符串数组
+        /// （按「点击时说的话」处理）。键可以是动作英文名，也可以是面板上的中文名。
+        /// 合并去重、不动已有台词，导入过就把 quips.version 钉到 999（不再被内置库升级覆盖）。
+        /// 返回导入的行数；-1 = 文件读不出台词。
+        /// </summary>
+        public int ImportQuips(string path)
+        {
+            try
+            {
+                object raw = Json.ReadAny(File.ReadAllText(path, Encoding.UTF8));
+                Dictionary<string, object> map = raw as Dictionary<string, object>;
+                if (map == null)
+                {
+                    List<string> direct = new List<string>();
+                    foreach (object item in Json.AsArray(raw))
+                    {
+                        string line = Convert.ToString(item, CultureInfo.InvariantCulture);
+                        if (!string.IsNullOrEmpty(line)) direct.Add(line.Trim());
+                    }
+                    return direct.Count == 0 ? -1 : MergeQuips("greeting", direct);
+                }
+                int total = 0;
+                foreach (KeyValuePair<string, object> pair in map)
+                {
+                    string key = QuipKey(pair.Key);
+                    if (string.IsNullOrEmpty(key)) continue;
+                    List<string> lines = new List<string>();
+                    foreach (object item in Json.AsArray(pair.Value))
+                    {
+                        string line = Convert.ToString(item, CultureInfo.InvariantCulture);
+                        if (!string.IsNullOrEmpty(line)) lines.Add(line.Trim());
+                    }
+                    if (lines.Count > 0) total += MergeQuips(key, lines);
+                }
+                return total == 0 ? -1 : total;
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        /// <summary>把当前全部台词导出成可编辑的 JSON（中文动作名 → 台词数组）。</summary>
+        public bool ExportQuips(string path)
+        {
+            Dictionary<string, object> map = new Dictionary<string, object>();
+            foreach (string key in QuipKeys())
+            {
+                List<string> pool = GetStrings("quips", key);
+                if (pool.Count == 0) continue;
+                map[QuipLabel(key)] = pool.ToArray();
+            }
+            return Json.WriteObject(path, map);
+        }
+
+        private int MergeQuips(string key, List<string> lines)
+        {
+            List<string> pool = GetStrings("quips", key);
+            int added = 0;
+            foreach (string line in lines)
+            {
+                if (string.IsNullOrEmpty(line) || pool.Contains(line)) continue;
+                pool.Add(line);
+                added++;
+            }
+            if (added > 0) SetAt("quips." + key, pool.ToArray());
+            SetAt("quips.version", 999.0);   // 导入过的台词不再被内置库升级覆盖
+            return added;
+        }
+
+        /// <summary>导入时允许的键名：英文动作键或中文动作名，都能对上。</summary>
+        private static string QuipKey(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            string text = name.Trim();
+            foreach (string key in QuipKeys())
+            {
+                if (string.Equals(key, text, StringComparison.OrdinalIgnoreCase)) return key;
+            }
+            switch (text)
+            {
+                case "点击":
+                case "摸头":
+                case "待机":
+                case "默认":
+                    return "greeting";
+                case "睡觉":
+                case "睡了":
+                    return "sleep";
+                case "撞人":
+                case "被撞":
+                case "碰撞":
+                    return "bump";
+                case "打招呼":
+                case "问好":
+                    return "greet";
+                case "蹦一下":
+                case "跳":
+                    return "hop";
+                case "连蹦":
+                    return "bounce";
+                case "转圈":
+                    return "spin";
+                case "打滚":
+                    return "roll";
+                case "摇摆":
+                    return "wobble";
+                case "点头":
+                    return "nod";
+                case "摇头":
+                    return "shake";
+                case "招手":
+                case "挥手":
+                    return "wave";
+                case "鼓掌":
+                    return "clap";
+                case "伸懒腰":
+                    return "stretch";
+                case "打哈欠":
+                    return "yawn";
+                case "害羞":
+                    return "shy";
+                case "吓一跳":
+                    return "startle";
+                case "趴一会":
+                case "趴下":
+                    return "lie";
+                case "左看右看":
+                case "张望":
+                    return "look";
+                case "踱步":
+                case "走来走去":
+                    return "pace";
+                case "探头":
+                    return "peek";
+                case "溜达":
+                case "散步":
+                    return "stroll";
+                case "冲刺":
+                    return "dash";
+                case "跟随":
+                    return "follow";
+                default:
+                    return "";
+            }
+        }
+
+        /// <summary>导出时的中文名（导入也认这些名字）。</summary>
+        private static string QuipLabel(string key)
+        {
+            switch (key)
+            {
+                case "greeting": return "点击";
+                case "sleep": return "睡觉";
+                case "bump": return "撞人";
+                case "greet": return "打招呼";
+                case "hop": return "蹦一下";
+                case "bounce": return "连蹦";
+                case "spin": return "转圈";
+                case "roll": return "打滚";
+                case "wobble": return "摇摆";
+                case "nod": return "点头";
+                case "shake": return "摇头";
+                case "wave": return "招手";
+                case "clap": return "鼓掌";
+                case "stretch": return "伸懒腰";
+                case "yawn": return "打哈欠";
+                case "shy": return "害羞";
+                case "startle": return "吓一跳";
+                case "lie": return "趴一会";
+                case "look": return "左看右看";
+                case "pace": return "踱步";
+                case "peek": return "探头";
+                case "stroll": return "溜达";
+                case "dash": return "冲刺";
+                case "follow": return "跟随";
+                default: return key;
             }
         }
 
