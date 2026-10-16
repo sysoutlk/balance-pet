@@ -103,6 +103,9 @@ namespace DshPet
         private readonly List<KeyValuePair<TextBlock, double>> scalable = new List<KeyValuePair<TextBlock, double>>();
         private StackPanel body;
         private DropShadowEffect shadow;
+        private Border shadowShape;          // 阴影本体：和卡片同形状，放在卡片下面
+        private Grid shadowLayer;            // 裁剪层：把卡片形状挖掉，只让阴影露在卡片外面
+        private const double ShadowPad = 60; // 阴影层四周留的余量（够 blur + 偏移用）
         private bool tracking = true;
         private string dynamicMode = "";
         private double phase;
@@ -247,9 +250,20 @@ namespace DshPet
             shadow.ShadowDepth = 5;
             shadow.Opacity = 0.28;
             shadow.Color = Colors.Black;
-            card.Effect = shadow;
+            // 阴影不直接挂在卡片上：那样圆角一大，卡片四角的缺口里就会透出阴影色，看着割裂。
+            // 改成单独一层，用「整块减掉卡片圆角矩形」的裁剪，阴影只出现在卡片轮廓之外。
+            shadowShape = new Border();
+            shadowShape.CornerRadius = new CornerRadius(16);
+            shadowShape.Background = Brushes.Black;   // 只有轮廓参与投影，本体被裁掉看不见
+            shadowShape.Margin = new Thickness(ShadowPad);
+            shadowShape.Effect = shadow;
+            shadowLayer = new Grid();
+            shadowLayer.Margin = new Thickness(-ShadowPad);
+            shadowLayer.IsHitTestVisible = false;
+            shadowLayer.Children.Add(shadowShape);
             card.Child = panel;
             body = panel;
+            card.SizeChanged += delegate { UpdateShadowClip(); };
 
             tailTopShape = MakeTail();
             tailTop = new Grid();
@@ -268,7 +282,9 @@ namespace DshPet
             Grid.SetRow(tailTop, 0);
             Grid.SetRow(card, 1);
             Grid.SetRow(tailBottom, 1);   // corrected in Position(): tail sits under or above the card
+            Grid.SetRow(shadowLayer, 1);
             root.Children.Add(tailTop);
+            root.Children.Add(shadowLayer);
             root.Children.Add(card);
             root.Children.Add(tailBottom);
             Content = root;
@@ -330,6 +346,27 @@ namespace DshPet
             else if (h < 5) { r = x; b = c; }
             else { r = c; b = x; }
             return Color.FromRgb((byte)Math.Round(r * 235), (byte)Math.Round(g * 235), (byte)Math.Round(b * 255));
+        }
+
+        /// <summary>
+        /// 阴影层裁剪：整块区域减去卡片的圆角矩形，只留卡片外面那一圈给阴影。
+        /// 不这样做的话，圆角越大、卡片四角缺口越大，阴影色就会从缺口里透出来。
+        /// </summary>
+        private void UpdateShadowClip()
+        {
+            if (shadowLayer == null || card == null) return;
+            double w = card.ActualWidth;
+            double h = card.ActualHeight;
+            if (w <= 0 || h <= 0)
+            {
+                shadowLayer.Clip = null;
+                return;
+            }
+            double radius = card.CornerRadius.TopLeft;
+            shadowShape.CornerRadius = new CornerRadius(radius);
+            RectangleGeometry outer = new RectangleGeometry(new Rect(0, 0, w + ShadowPad * 2, h + ShadowPad * 2));
+            RectangleGeometry inner = new RectangleGeometry(new Rect(ShadowPad, ShadowPad, w, h), radius, radius);
+            shadowLayer.Clip = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
         }
 
         private void ApplyAccentBrushes()
@@ -587,6 +624,7 @@ namespace DshPet
             double shadowRadius = Math.Max(0, Math.Min(40, radius));
             shadow.BlurRadius = 14 + shadowRadius * 0.5;
             shadow.ShadowDepth = 3 + shadowRadius * 0.15;
+            UpdateShadowClip();
             double tailSize = cfg.GetNumber("bubble", "tailSize", 13);
             if (tailSize < 6) tailSize = 6;
             if (tailSize > 26) tailSize = 26;

@@ -461,6 +461,12 @@ namespace DshPet
         private double previewPhase;
         private bool updating;
         private int deviceHz = 60;          // 当前显示器刷新率：帧率滑杆的上限就是它
+        private Border previewShadowShape;  // 预览的阴影本体（挖掉卡片形状，只露外面一圈）
+        private Grid previewShadowLayer;
+        private const double PreviewShadowPad = 40;
+        private double previewShadowW = -1;
+        private double previewShadowH = -1;
+        private double previewShadowRadius = -1;
         // 代码里生成的行（数据源、套餐用量、输入框等）也跟随主题配色。
         private Color cRow;
         private Color cField;
@@ -1918,6 +1924,9 @@ namespace DshPet
             themeSwatch = null;
             themeSwatchCheck = null;
             themeSwatchHex = null;
+            previewShadowShape = null;
+            previewShadowLayer = null;
+            previewShadowW = -1;
             Build();
             if (!visible) return;
             // Stay where the user put the card: re-showing through ShowFor() would snap it back
@@ -2432,17 +2441,7 @@ namespace DshPet
             // 预览要真的"看得出"：宽度映射更宽、圆角/尾巴/阴影/字号/透明度都放大呈现。
             card.UpdateLayout();
             double tailSize = Math.Max(6, Math.Min(26, cfg.GetNumber("bubble", "tailSize", 13)));
-            DropShadowEffect previewShadow = card.Effect as DropShadowEffect;
-            if (previewShadow == null)
-            {
-                previewShadow = new DropShadowEffect();
-                previewShadow.Color = Colors.Black;
-                card.Effect = previewShadow;
-            }
-            double previewRadius = Math.Max(0, Math.Min(40, radius));
-            previewShadow.BlurRadius = (14 + previewRadius * 0.5) * 0.7;
-            previewShadow.ShadowDepth = (3 + previewRadius * 0.15) * 0.6;
-            previewShadow.Opacity = cfg.GetNumber("bubble", "shadow", 0.28);
+            previewShadowW = -1;   // 尺寸/圆角标记失效，下一帧重算阴影层
 
             tail.Width = tailSize;
             tail.Height = tailSize;
@@ -2479,6 +2478,52 @@ namespace DshPet
             Canvas.SetTop(tail, 6 + cardHeight - tail.Height / 2 - 2);
             bool showTail = cfg.GetFlag("bubble", "tail", true);
             tail.Visibility = showTail ? Visibility.Visible : Visibility.Collapsed;
+            UpdatePreviewShadow(6, 6, cardWidth, cardHeight);
+        }
+
+        /// <summary>
+        /// 预览的阴影与气泡同款：单独一层 + 挖掉卡片形状的裁剪，
+        /// 不然圆角拉大时四角会透出阴影色。只在尺寸/圆角变化时重算。
+        /// </summary>
+        private void UpdatePreviewShadow(double cardLeft, double cardTop, double cardWidth, double cardHeight)
+        {
+            if (previewShadowLayer == null)
+            {
+                previewShadowShape = new Border();
+                previewShadowShape.Background = Brushes.Black;
+                DropShadowEffect effect = new DropShadowEffect();
+                effect.Color = Colors.Black;
+                previewShadowShape.Effect = effect;
+                previewShadowShape.Margin = new Thickness(PreviewShadowPad);
+                previewShadowLayer = new Grid();
+                previewShadowLayer.IsHitTestVisible = false;
+                previewShadowLayer.Children.Add(previewShadowShape);
+                ((Canvas)ui["FxCanvas"]).Children.Insert(0, previewShadowLayer);
+                ((Border)ui["FxCard"]).Effect = null;   // 阴影不再挂在卡片上
+            }
+            double radius = Math.Max(0, Math.Min(40, cfg.GetNumberAt("bubble.radius", 16)));
+            if (Math.Abs(previewShadowW - cardWidth) < 0.5 && Math.Abs(previewShadowH - cardHeight) < 0.5
+                && Math.Abs(previewShadowRadius - radius) < 0.01)
+            {
+                return;
+            }
+            previewShadowW = cardWidth;
+            previewShadowH = cardHeight;
+            previewShadowRadius = radius;
+            DropShadowEffect shadow = (DropShadowEffect)previewShadowShape.Effect;
+            shadow.BlurRadius = (14 + radius * 0.5) * 0.7;
+            shadow.ShadowDepth = (3 + radius * 0.15) * 0.6;
+            shadow.Opacity = cfg.GetNumberAt("bubble.shadow", 0.28);
+            previewShadowShape.CornerRadius = new CornerRadius(radius);
+            Canvas.SetLeft(previewShadowLayer, cardLeft - PreviewShadowPad);
+            Canvas.SetTop(previewShadowLayer, cardTop - PreviewShadowPad);
+            previewShadowLayer.Width = cardWidth + PreviewShadowPad * 2;
+            previewShadowLayer.Height = cardHeight + PreviewShadowPad * 2;
+            RectangleGeometry outer = new RectangleGeometry(
+                new Rect(0, 0, cardWidth + PreviewShadowPad * 2, cardHeight + PreviewShadowPad * 2));
+            RectangleGeometry inner = new RectangleGeometry(
+                new Rect(PreviewShadowPad, PreviewShadowPad, cardWidth, cardHeight), radius, radius);
+            previewShadowLayer.Clip = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
         }
 
         private static string ToHexString(System.Drawing.Color color)
