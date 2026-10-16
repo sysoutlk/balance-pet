@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace DshPet
+namespace BalancePet
 {
     internal static class AppPaths
     {

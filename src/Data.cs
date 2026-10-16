@@ -13,7 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class DayUsage
     {

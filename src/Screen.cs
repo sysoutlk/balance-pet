@@ -3,7 +3,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class ScreenArea
     {

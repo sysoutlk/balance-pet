@@ -15,7 +15,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace DshPet
+namespace BalancePet
 {
     internal static class Program
     {

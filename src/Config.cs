@@ -11,7 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Web.Script.Serialization;
 
-namespace DshPet
+namespace BalancePet
 {
     internal static class Json
     {
@@ -497,7 +497,7 @@ namespace DshPet
             SetDefault("", "statePath", "");
             SetDefault("", "apiKey", "");
             SetDefault("network", "proxy", "");
-            SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（不叫 dsh：应用是多平台的）
+            SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（应用是多平台的，默认用通用名）
             SetDefault("frames", "activePerSecond", 25.0);   // 动作/散步时的帧率（高性能可拉到 60~120）
             SetDefault("frames", "idlePerSecond", 4.0);      // 闲置时的帧率（省电）
             SetDefault("fx", "enabled", true);               // 特效层（烟花/爱心/闪光/撒花）
@@ -635,15 +635,15 @@ namespace DshPet
                 SetAt("actions.pool", pool.ToArray());
                 SetAt("actions.poolVersion", 2.0);
             }
-            // 台词库 v2：默认池统一放在 QuipLibrary()，顺便按版本号做一次平滑升级
+            // 台词库 v3：默认池统一放在 QuipLibrary()，顺便按版本号做一次平滑升级
             //（老配置里还是短池子的换成加量版，自己写长了的不动）。
             double quipVersion = GetNumberAt("quips.version", 1);
             foreach (KeyValuePair<string, string[]> pair in QuipLibrary())
             {
                 SetDefault("quips", pair.Key, pair.Value);
             }
-            SetDefault("quips", "version", 2);
-            if (quipVersion < 2)
+            SetDefault("quips", "version", 3);
+            if (quipVersion < 3)
             {
                 foreach (KeyValuePair<string, string[]> pair in QuipLibrary())
                 {
@@ -652,7 +652,7 @@ namespace DshPet
                         SetAt("quips." + pair.Key, pair.Value);
                     }
                 }
-                SetAt("quips.version", 2.0);
+                SetAt("quips.version", 3.0);
             }
         }
 
@@ -917,9 +917,9 @@ namespace DshPet
             map["bump"] = new string[] { "哎哟！", "谁撞我！", "让一让～", "撞到啦…", "看着点路呀", "骨头都要散了", "你赔我发型", "别挤别挤" };
             map["greet"] = new string[] { "你好呀！", "我在这儿～", "报到！", "看见你啦", "来啦来啦", "今天也关照一下我" };
             map["fireworks"] = new string[] { "看烟花！", "砰——啪！", "给今天放一发", "庆祝一下～", "新年快乐（提前的）" };
-            map["hearts"] = new string[] { "比心～", "爱心发射", "偷偷喜欢你", "送你一颗心" };
-            map["sparkles"] = new string[] { "闪亮登场！", "闪闪发光", "自带高光" };
-            map["confetti"] = new string[] { "撒花！", "庆祝一下～", "今天的额度达标啦" };
+            map["hearts"] = new string[] { "比心～", "爱心发射", "偷偷喜欢你", "送你一颗心", "心都给你了", "满眼都是你" };
+            map["sparkles"] = new string[] { "闪亮登场！", "闪闪发光", "自带高光", "闪闪惹人爱", "从头闪到脚" };
+            map["confetti"] = new string[] { "撒花！", "庆祝一下～", "今天的额度达标啦", "彩带飘飘", "花都开好了" };
             return map;
         }
 

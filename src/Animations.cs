@@ -17,7 +17,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class FrameSet
     {
@@ -80,7 +80,7 @@ namespace DshPet
                 if (!File.Exists(path)) return null;
                 string extension = Path.GetExtension(path).ToLowerInvariant();
                 if (extension == ".gif") return LoadGif(path);
-                RoleAnim sheet = LoadSheet(cfg, role, path);
+                RoleAnim sheet = LoadSprite(cfg, role, path);
                 if (sheet != null) return sheet;
                 return LoadStatic(path);
             }
@@ -198,7 +198,7 @@ namespace DshPet
         ///       "states": { "idle": [0, 0, 3], "walk": [1, 0, 3], "wave": [2, 0, 3] } } } }
         /// where each state is [row, firstColumn, lastColumn].
         /// </summary>
-        private static RoleAnim LoadSheet(Config cfg, string role, string path)
+        private static RoleAnim LoadSprite(Config cfg, string role, string path)
         {
             Dictionary<string, object> sheets = cfg.GetObject("roles", "sheets");
             string key = role;

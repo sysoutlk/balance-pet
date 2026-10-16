@@ -14,7 +14,7 @@
   - 个人配置与密钥：`pet-config.json`、`pet-state.json`、`quips.json`；
   - 第三方素材：`roles\`、`props\` 里的任何图片（版权原因，仓库不附带任何立绘）；
   - 构建产物与诊断输出：`*.exe`、`dist\`、`pet-log.txt`、`*-report.txt`。
-- CI（GitHub Actions）会跑 `build.ps1` + `--self-test` + `dotnet build src/DshPet.csproj`，
+- CI（GitHub Actions）会跑 `build.ps1` + `--self-test` + `dotnet build src/BalancePet.csproj`，
   本地至少先跑 `.\build.ps1` 与 `.\balance-pet.exe --self-test` 再提交。
 - 提交前请跑一遍：
 
@@ -25,4 +25,3 @@
   ```
 
   并确认控制台输出与 `self-test-report.txt` / `smoke-report.txt` 正常。
-- 不要提交个人配置：`pet-config.json`、`pet-state.json`、`roles\` 内的图片都已在 `.gitignore` 中。

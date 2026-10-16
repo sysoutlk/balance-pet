@@ -9,7 +9,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class Particle
     {
@@ -184,8 +184,6 @@ namespace DshPet
                 Spawn(petW, petH);
                 if (left <= 0) mode = "";
             }
-            double cx = WindowSize / 2;
-            double cy = WindowSize / 2;
             for (int i = particles.Count - 1; i >= 0; i--)
             {
                 Particle p = particles[i];

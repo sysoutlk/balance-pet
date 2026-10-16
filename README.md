@@ -12,7 +12,7 @@
 - **编译版，不是脚本**：C# + WPF 单文件 exe（约 360 KB），无 Node / Python / PowerShell 依赖；
   帧率可调（默认空闲 4 fps、动作 25 fps），上限自动取当前显示器刷新率。
 - **零构建依赖**：`build.cmd` 使用 Windows 自带的 C# 编译器直接出包，不需要安装 .NET SDK；
-  仓库同时提供 `src/DshPet.csproj` 供 IDE / `dotnet build` 使用。
+  仓库同时提供 `src/BalancePet.csproj` 供 IDE / `dotnet build` 使用。
 - **计价时段对齐官方口径**：标准时段为北京时间周一至周五（不含中国法定节假日）9:00-12:00、14:00-18:00，
   其余时段（含周末、节假日、调休上班的周末）均为优惠时段，价格是标准价的一半。
 - **多数据源**：同时查询多个平台，气泡里主平台大号显示、其他平台小字列出；主平台可以切换。
@@ -260,7 +260,7 @@
 也可以使用 .NET SDK（CI 同时验证两条路径）：
 
 ```powershell
-dotnet build src\DshPet.csproj -c Release
+dotnet build src\BalancePet.csproj -c Release
 ```
 
 想换图标：运行 `scripts\make-icon.ps1 -Source roles\你的图.png` 生成 `assets\app.ico`，

@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>balance-pet</AssemblyName>
-    <RootNamespace>DshPet</RootNamespace>
+    <RootNamespace>BalancePet</RootNamespace>
     <LangVersion>7.3</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ApplicationIcon>..\assets\app.ico</ApplicationIcon>

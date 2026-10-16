@@ -15,7 +15,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class BubbleView
     {
@@ -86,7 +86,6 @@ namespace DshPet
         private readonly TextBlock quip;
         private readonly TextBlock note;
         private readonly TextBlock source;
-        private readonly StackPanel dots;
 
         private bool dark;
         private ThemePalette palette = BubbleTheme.Resolve("light");

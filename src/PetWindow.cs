@@ -14,7 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class PetWindow : Window
     {
@@ -86,8 +86,6 @@ namespace DshPet
         public DateTime EdgeHideAt = DateTime.MaxValue;
         public double EdgeShownX;
         public double EdgeShownY;
-        public double EdgeHiddenX;
-        public double EdgeHiddenY;
         public double Tuck;                 // 0 = fully out, 1 = squeezed against the edge
         public double TargetTuck;
         public bool Dropped;                // the user just let go of the pet

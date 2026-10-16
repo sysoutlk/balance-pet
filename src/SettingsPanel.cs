@@ -19,7 +19,7 @@ using Rectangle = System.Windows.Shapes.Rectangle;
 using Ellipse = System.Windows.Shapes.Ellipse;
 using Path = System.Windows.Shapes.Path;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class SettingsPanel : Window
     {
@@ -1757,7 +1757,7 @@ namespace DshPet
         public void UpdateDataText()
         {
             if (root == null) return;
-            // 面板标题可自定义（ui.title）；默认不再用 dsh 这种平台专属名。
+            // 面板标题可自定义（ui.title）；默认用通用名，不绑定具体平台。
             string title = cfg.GetStringAt("ui.title", "余额桌宠");
             if (string.IsNullOrEmpty(title)) title = "余额桌宠";
             ((TextBlock)ui["TitleText"]).Text = title;

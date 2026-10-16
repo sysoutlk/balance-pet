@@ -10,7 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class ThemePalette
     {

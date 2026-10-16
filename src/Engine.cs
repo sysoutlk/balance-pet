@@ -13,7 +13,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class Engine
     {

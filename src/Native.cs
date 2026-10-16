@@ -3,7 +3,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace DshPet
+namespace BalancePet
 {
     internal static class Native
     {

@@ -15,7 +15,7 @@ using System.Globalization;
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace DshPet
+namespace BalancePet
 {
     internal static class Fmt
     {

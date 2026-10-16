@@ -10,7 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 
-namespace DshPet
+namespace BalancePet
 {
     internal sealed class PlanWindow
     {

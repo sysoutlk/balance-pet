@@ -15,7 +15,7 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
   PowerShell runtime; frame rate is configurable (default 4 fps idle / 25 fps active) and
   capped at the monitor refresh rate.
 - **Zero build dependencies**: `build.cmd` uses the C# compiler that ships with Windows.
-  No .NET SDK needed; an SDK-style `src/DshPet.csproj` is provided for IDEs and CI.
+  No .NET SDK needed; an SDK-style `src/BalancePet.csproj` is provided for IDEs and CI.
 - **Pricing window aligned with the official DeepSeek schedule**: standard hours are Mon-Fri
   (excluding Chinese public holidays) 09:00-12:00 and 14:00-18:00 Beijing time; everything
   else, including weekends, holidays and weekend make-up workdays, is discounted to half price.
@@ -57,7 +57,7 @@ at the vendor console (or use OpenRouter / a custom endpoint).
 
 ```powershell
 .\build.ps1            # in-box csc, no SDK, no network
-dotnet build src\DshPet.csproj -c Release   # optional, for SDK users
+dotnet build src\BalancePet.csproj -c Release   # optional, for SDK users
 ```
 
 ## License

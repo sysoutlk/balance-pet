@@ -27,7 +27,7 @@ jobs:
           path: balance-pet.exe
 
   dotnet:
-    name: .NET SDK (DshPet.csproj)
+    name: .NET SDK (BalancePet.csproj)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,4 +35,4 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Build
-        run: dotnet build src/DshPet.csproj -c Release
+        run: dotnet build src/BalancePet.csproj -c Release

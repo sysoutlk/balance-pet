@@ -1,6 +1,5 @@
 # 构建产物（全部不入库：可执行文件、压缩包、编译器响应文件）
 /balance-pet.exe
-/dsh-pet.exe
 /dist/
 *.rsp
 *.zip
