@@ -258,10 +258,17 @@ namespace DshPet
             pet.Spin.Angle = 0;
             pet.Bob.Y = Math.Sin(now.TimeOfDay.TotalSeconds * 1.4 + pet.Phase) * (sleeping ? 0.8 : 1.6);
             if (pet.EdgeHidden) return;
-            if (now >= pet.EdgeHideAt && EdgeHideEnabled(pet))
+            if (EdgeHideEnabled(pet))
             {
-                pet.StartEdgeSlide(true);
-                return;
+                if (pet.EdgeHideAt == DateTime.MaxValue)
+                {
+                    ScheduleEdgeHide(pet, now);
+                }
+                else if (now >= pet.EdgeHideAt)
+                {
+                    pet.StartEdgeSlide(true);
+                    return;
+                }
             }
             if (sleeping) return;
             if (now >= pet.NextWalkAt && cfg.GetFlag("walk", "enabled", true))
