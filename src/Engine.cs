@@ -99,6 +99,8 @@ namespace DshPet
                     y = area.Bottom - pet.Height - 20;
                 }
                 pet.Place(x, y);
+                // Snap on startup too, so a pet saved against an edge hides itself later.
+                pet.SetIdle();
                 WirePet(pet);
                 Pets.Add(pet);
                 pet.Show();
@@ -201,24 +203,7 @@ namespace DshPet
 
             if (pet.Mode == "edge")
             {
-                double dx = pet.TargetX - pet.X;
-                double dy = pet.TargetY - pet.Y;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-                double step = 300 * dt;
-                if (distance <= step)
-                {
-                    pet.X = pet.TargetX;
-                    pet.Y = pet.TargetY;
-                    pet.ApplyPosition();
-                    pet.Mode = "idle";
-                    pet.EdgeHidden = Math.Abs(pet.X - pet.EdgeHiddenX) < 1 && Math.Abs(pet.Y - pet.EdgeHiddenY) < 1;
-                    ScheduleEdgeHide(pet, now);
-                    return;
-                }
-                pet.X += dx / distance * step;
-                pet.Y += dy / distance * step;
-                pet.Bob.Y = -2 * Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * 12));
-                pet.ApplyPosition();
+                UpdateEdgeSlide(pet, now, dt);
                 return;
             }
 
@@ -257,7 +242,21 @@ namespace DshPet
             // idle
             pet.Spin.Angle = 0;
             pet.Bob.Y = Math.Sin(now.TimeOfDay.TotalSeconds * 1.4 + pet.Phase) * (sleeping ? 0.8 : 1.6);
-            if (pet.EdgeHidden) return;
+            if (pet.EdgeHidden)
+            {
+                if (!EdgeHideEnabled(pet))
+                {
+                    pet.StartEdgeSlide(false);
+                    return;
+                }
+                if (now >= pet.PeekAt)
+                {
+                    pet.PeekAt = now.AddSeconds(6 + Program.Rng.NextDouble() * 8);
+                    pet.PeekUntil = now.AddMilliseconds(900);
+                    pet.StartPeek();
+                }
+                return;
+            }
             if (EdgeHideEnabled(pet))
             {
                 if (pet.EdgeHideAt == DateTime.MaxValue)
@@ -303,7 +302,7 @@ namespace DshPet
             }
             else if (pet.Mode == "edge")
             {
-                state = "walk";
+                state = pet.Tuck >= 0.5 ? "peek" : "walk";
                 rate = 1.3;
             }
             else if (pet.Mode == "thrown")
@@ -321,8 +320,51 @@ namespace DshPet
                 state = "sleep";
                 rate = 0.35;
             }
+            else if (pet.EdgeHidden)
+            {
+                state = "peek";
+                rate = 0.7;
+            }
             pet.SetAnimState(state);
             pet.Advance(dt, rate);
+        }
+
+        /// <summary>
+        /// Edge-hide transition: the pet squeezes itself against the screen edge (narrower
+        /// window, whole sprite compressed) instead of being clipped by the screen border.
+        /// </summary>
+        private void UpdateEdgeSlide(PetWindow pet, DateTime now, double dt)
+        {
+            double step = dt / 0.45;
+            if (pet.Tuck < pet.TargetTuck) pet.Tuck = Math.Min(pet.TargetTuck, pet.Tuck + step);
+            else if (pet.Tuck > pet.TargetTuck) pet.Tuck = Math.Max(pet.TargetTuck, pet.Tuck - step);
+            pet.ApplyTuck(pet.Tuck);
+
+            ScreenArea area = ScreenArea.ForPoint(pet.EdgeShownX + pet.BaseWidth / 2, pet.EdgeShownY + pet.BaseHeight / 2);
+            double tuckX = pet.EdgeShownX;
+            double tuckY = pet.EdgeShownY;
+            if (pet.EdgeSide == "left") tuckX = area.Left + 1;
+            else if (pet.EdgeSide == "right") tuckX = area.Right - pet.Width - 1;
+            else if (pet.EdgeSide == "top") tuckY = area.Top + 1;
+            else if (pet.EdgeSide == "bottom") tuckY = area.Bottom - pet.Height - 1;
+            pet.X = pet.EdgeShownX + (tuckX - pet.EdgeShownX) * pet.Tuck;
+            pet.Y = pet.EdgeShownY + (tuckY - pet.EdgeShownY) * pet.Tuck;
+            pet.ApplyPosition();
+
+            if (Math.Abs(pet.Tuck - pet.TargetTuck) > 0.001) return;
+
+            // A peek stays poked out for a moment before squeezing back in.
+            if (pet.PeekUntil != DateTime.MinValue)
+            {
+                if (now < pet.PeekUntil) return;
+                pet.PeekUntil = DateTime.MinValue;
+                pet.TargetTuck = 1;
+                return;
+            }
+            if (pet.TargetTuck >= 0.999) pet.EdgeHidden = true;
+            else if (pet.TargetTuck <= 0.001) pet.EdgeHidden = false;
+            pet.Mode = "idle";
+            ScheduleEdgeHide(pet, now);
         }
 
         // ------------------------------------------------------------ 动作动画

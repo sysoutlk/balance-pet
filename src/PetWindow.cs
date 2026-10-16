@@ -67,6 +67,10 @@ namespace DshPet
         public double EdgeShownY;
         public double EdgeHiddenX;
         public double EdgeHiddenY;
+        public double Tuck;                 // 0 = fully out, 1 = squeezed against the edge
+        public double TargetTuck;
+        public DateTime PeekAt = DateTime.MinValue;
+        public DateTime PeekUntil = DateTime.MinValue;
         public IntPtr Handle = IntPtr.Zero;
 
         private int appliedX = int.MinValue;
@@ -215,6 +219,28 @@ namespace DshPet
             Width = Math.Max(40, Math.Round(BaseWidth * scale));
             Height = Math.Max(40, Math.Round(BaseHeight * scale));
             Opacity = cfg.GetNumber("", "opacity", 1.0);
+            ApplyTuck(Tuck);
+            Left = Math.Round(X, 1);
+            Top = Math.Round(Y, 1);
+            appliedX = (int)Math.Round(X);
+            appliedY = (int)Math.Round(Y);
+        }
+
+        /// <summary>
+        /// Squeezes the sprite toward the screen edge instead of clipping it: the window
+        /// gets narrower (and a touch taller) so the whole pet squeezes flat, like pressing
+        /// itself into the edge. t = 0 fully visible, t = 1 fully tucked in.
+        /// </summary>
+        public void ApplyTuck(double t)
+        {
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            Tuck = t;
+            double scale = cfg.GetNumber("", "scale", 1.0);
+            double widthFactor = 1 - 0.82 * t;
+            double heightFactor = 1 + 0.10 * t;
+            Width = Math.Max(14, Math.Round(BaseWidth * scale * widthFactor));
+            Height = Math.Max(24, Math.Round(BaseHeight * scale * heightFactor));
             Left = Math.Round(X, 1);
             Top = Math.Round(Y, 1);
             appliedX = (int)Math.Round(X);
@@ -275,6 +301,11 @@ namespace DshPet
         public void SetIdle()
         {
             Mode = "idle";
+            if (Tuck != 0)
+            {
+                TargetTuck = 0;
+                ApplyTuck(0);
+            }
             Bob.Y = 0;
             int min = (int)cfg.GetNumber("walk", "pauseMinSec", 8);
             int max = (int)cfg.GetNumber("walk", "pauseMaxSec", 26);
@@ -317,27 +348,26 @@ namespace DshPet
         public void StartEdgeSlide(bool hide)
         {
             if (string.IsNullOrEmpty(EdgeSide)) return;
-            ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
-            double peek = cfg.GetNumber("edgeHide", "peekPx", 14);
             if (hide)
             {
                 EdgeShownX = X;
                 EdgeShownY = Y;
-                EdgeHiddenX = X;
-                EdgeHiddenY = Y;
-                if (EdgeSide == "left") EdgeHiddenX = area.Left - Width + peek;
-                else if (EdgeSide == "right") EdgeHiddenX = area.Right - peek;
-                else if (EdgeSide == "top") EdgeHiddenY = area.Top - Height + peek;
-                else if (EdgeSide == "bottom") EdgeHiddenY = area.Bottom - peek;
-                TargetX = EdgeHiddenX;
-                TargetY = EdgeHiddenY;
+                TargetTuck = 1;
             }
             else
             {
-                TargetX = EdgeShownX;
-                TargetY = EdgeShownY;
+                TargetTuck = 0;
+                PeekUntil = DateTime.MinValue;
             }
             SpeedFactor = 1.0;
+            Mode = "edge";
+        }
+
+        /// <summary>Briefly pokes out of the edge while hidden.</summary>
+        public void StartPeek()
+        {
+            if (!EdgeHidden) return;
+            TargetTuck = 0.55;
             Mode = "edge";
         }
 

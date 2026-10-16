@@ -26,8 +26,9 @@
    每个状态是 `[行号, 起始列, 结束列]`（从 0 开始）。
 4. **单张 PNG / JPG / BMP**：静态立绘，只会整体移动与形变。
 
-状态名：`idle`、`walk`、`sleep`，以及动作 `hop bounce spin roll wobble nod shake wave clap
-stretch yawn shy startle look greet lie pace peek`。
+状态名：`idle`、`walk`、`sleep`、`edge`（贴边收进去）、`peek`（收起后探头），
+以及动作 `hop bounce spin roll wobble nod shake wave clap stretch yawn shy startle look greet
+lie pace peek`。
 
 ## 命名
 

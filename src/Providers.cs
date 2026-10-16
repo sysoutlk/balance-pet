@@ -44,6 +44,18 @@ namespace DshPet
         public string Note = "";
     }
 
+    /// <summary>Carries the raw response body so error messages can quote the server.</summary>
+    internal sealed class ProviderException : Exception
+    {
+        public string Body;
+
+        public ProviderException(string message, string body)
+            : base(message)
+        {
+            Body = body;
+        }
+    }
+
     internal sealed class ProviderState
     {
         public string Id = "";
@@ -105,7 +117,8 @@ namespace DshPet
             moonshot.Id = "moonshot";
             moonshot.Name = "Kimi月之暗面";
             moonshot.Currency = "CNY";
-            moonshot.Note = "官方余额接口（现金 + 代金券）。国际站可改 baseUrl 为 https://api.moonshot.ai。";
+            moonshot.Note = "官方余额接口（现金 + 代金券）。请用 Kimi 开放平台 platform.moonshot.cn 的 API Key；"
+                + "国内站/国际站会自动互相重试，也可手动改 providers.moonshot.baseUrl。";
             list.Add(moonshot);
 
             ProviderDef siliconflow = new ProviderDef();
@@ -247,6 +260,7 @@ namespace DshPet
                 }
                 string keySource;
                 string key = ResolveKey(cfg, def, out keySource);
+                key = NormalizeKey(key);
                 state.KeySource = keySource;
                 string url;
                 string auth = def.Auth;
@@ -267,12 +281,41 @@ namespace DshPet
                 }
                 else
                 {
-                    url = EndpointFor(cfg, def);
                     if (string.IsNullOrEmpty(key))
                     {
                         state.Error = "未配置 API Key";
                         return state;
                     }
+                    if (def.Id == "moonshot")
+                    {
+                        // The key may belong to the international site; try both hosts before giving up.
+                        string moonshotBody = null;
+                        string first = null;
+                        foreach (string baseUrl in MoonshotHosts(cfg))
+                        {
+                            try
+                            {
+                                moonshotBody = Get(baseUrl + "/v1/users/me/balance", def.Auth, key);
+                                break;
+                            }
+                            catch (Exception ex)
+                            {
+                                if (first == null) first = ex.Message;
+                            }
+                        }
+                        if (moonshotBody == null)
+                        {
+                            state.Error = first;
+                            state.ErrorDetail = first;
+                            return state;
+                        }
+                        Parse(def, cfg, moonshotBody, state);
+                        state.Ok = state.Balance.HasValue;
+                        if (!state.Ok && string.IsNullOrEmpty(state.Error)) state.Error = "响应里没有余额字段";
+                        if (!state.Ok) Log.Write("provider " + def.Id + " parse failed: " + Snippet(moonshotBody));
+                        return state;
+                    }
+                    url = EndpointFor(cfg, def);
                 }
                 string body = Get(url, auth, key);
                 Parse(def, cfg, body, state);
@@ -282,11 +325,37 @@ namespace DshPet
             }
             catch (Exception ex)
             {
+                ProviderException providerError = ex as ProviderException;
+                if (providerError != null) state.ErrorDetail = Snippet(providerError.Body);
                 Exception inner = ex.InnerException;
                 state.Error = inner != null && !string.IsNullOrEmpty(inner.Message) ? inner.Message : ex.Message;
+                if (string.IsNullOrEmpty(state.ErrorDetail)) state.ErrorDetail = state.Error;
                 Log.Write("provider " + def.Id + " failed: " + state.Error);
             }
             return state;
+        }
+
+        private static List<string> MoonshotHosts(Config cfg)
+        {
+            List<string> hosts = new List<string>();
+            string configured = cfg.GetString("providers.moonshot", "baseUrl", "https://api.moonshot.cn");
+            if (string.IsNullOrEmpty(configured)) configured = "https://api.moonshot.cn";
+            configured = configured.TrimEnd('/');
+            hosts.Add(configured);
+            string alternate = configured.IndexOf("moonshot.ai", StringComparison.OrdinalIgnoreCase) >= 0
+                ? "https://api.moonshot.cn"
+                : "https://api.moonshot.ai";
+            if (alternate != configured) hosts.Add(alternate);
+            return hosts;
+        }
+
+        /// <summary>Pasted keys often carry quotes, spaces or a "Bearer " prefix.</summary>
+        private static string NormalizeKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return key;
+            key = key.Trim().Trim('"', '\'').Trim();
+            if (key.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) key = key.Substring(7).Trim();
+            return key;
         }
 
         private static string Snippet(string text)
@@ -322,15 +391,40 @@ namespace DshPet
                 request.Headers.TryAddWithoutValidation("x-api-key", key);
             }
             HttpResponseMessage response = Client.SendAsync(request).Result;
+            string body = response.Content.ReadAsStringAsync().Result;
             if (!response.IsSuccessStatusCode)
             {
                 int code = (int)response.StatusCode;
-                if (code == 401 || code == 403) throw new Exception("密钥无效或权限不足");
-                if (code == 404) throw new Exception("接口不存在（HTTP 404）");
-                if (code == 429) throw new Exception("请求过于频繁，稍后再试");
-                throw new Exception("HTTP " + code);
+                string message;
+                if (code == 401 || code == 403) message = "密钥无效或权限不足";
+                else if (code == 404) message = "接口不存在";
+                else if (code == 429) message = "请求过于频繁，稍后再试";
+                else message = "请求失败";
+                string detail = ErrorMessageOf(body);
+                string text = "HTTP " + code + " · " + message;
+                if (!string.IsNullOrEmpty(detail)) text += "（" + detail + "）";
+                throw new ProviderException(text, body);
             }
-            return response.Content.ReadAsStringAsync().Result;
+            return body;
+        }
+
+        /// <summary>Pulls error.message out of the provider's JSON error envelope.</summary>
+        private static string ErrorMessageOf(string body)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(body)) return "";
+                Dictionary<string, object> data = Json.ReadText(body);
+                Dictionary<string, object> error = Json.AsObject(Json.Get(data, "error"));
+                string message = Convert.ToString(Json.Get(error, "message"), CultureInfo.InvariantCulture);
+                if (string.IsNullOrEmpty(message)) message = Convert.ToString(Json.Get(data, "message"), CultureInfo.InvariantCulture);
+                if (string.IsNullOrEmpty(message)) return "";
+                return message.Length <= 80 ? message : message.Substring(0, 80) + "…";
+            }
+            catch
+            {
+                return "";
+            }
         }
 
         private static void Parse(ProviderDef def, Config cfg, string body, ProviderState state)
