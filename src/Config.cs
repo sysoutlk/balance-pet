@@ -573,8 +573,15 @@ namespace BalancePet
             SetDefault("walk", "marginPx", 12.0);
             SetDefault("walk", "flip", true);
             SetDefault("snap", "enabled", true);
-            SetDefault("snap", "distancePx", 140.0);
+            SetDefault("snap", "distancePx", 56.0);
             SetDefault("snap", "marginPx", 6.0);
+            // 旧默认吸附距离 140px 太灵敏：没手动改过的一并迁到 56px。
+            if (GetNumberAt("snap.version", 1) < 2)
+            {
+                if (Math.Abs(GetNumberAt("snap.distancePx", 140) - 140) < 0.5) SetAt("snap.distancePx", 56.0);
+                SetAt("snap.version", 2.0);
+                Save();   // 迁移结果落盘，下次启动不再重复迁移
+            }
             SetDefault("throw", "frictionPerSec", 0.35);
             SetDefault("throw", "bounce", 0.55);
             SetDefault("throw", "stopSpeedPxPerSec", 40.0);
