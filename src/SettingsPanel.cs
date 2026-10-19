@@ -329,11 +329,15 @@ namespace BalancePet
         </StackPanel>
         <Grid Margin='0,9,0,0'>
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/><ColumnDefinition Width='60'/>
           </Grid.ColumnDefinitions>
           <TextBlock Style='{StaticResource Lbl}' Text='大小'/>
-          <Slider x:Name='ScaleSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.4' Maximum='2.6'/>
+          <Slider x:Name='ScaleSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.4' Maximum='2.6'
+                  ToolTip='只调整当前这只桌宠；也可以对任意一只直接 Ctrl+滚轮。点「全部」同步给所有桌宠。'/>
           <TextBlock x:Name='ScaleVal' Grid.Column='2' Style='{StaticResource Val}' Text='1.00x'/>
+          <Button x:Name='ScaleAllBtn' Grid.Column='3' Content='全部' Width='52' Height='22'
+                  HorizontalAlignment='Right' VerticalAlignment='Center' Style='{StaticResource Btn}'
+                  ToolTip='把当前大小同步给所有桌宠，并作为之后新分身的默认大小'/>
         </Grid>
         <Grid Margin='0,4,0,0'>
           <Grid.ColumnDefinitions>
@@ -654,7 +658,7 @@ namespace BalancePet
             if (panelCard != null) panelCard.SizeChanged += delegate { UpdatePanelShadowClip(); };
             foreach (string name in new string[]
             {
-                "Header","TitleText","SubText","ActionGrid","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","ScaleSlider","ScaleVal",
+                "Header","TitleText","SubText","ActionGrid","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","ScaleSlider","ScaleVal","ScaleAllBtn",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
@@ -742,10 +746,22 @@ namespace BalancePet
             ((Slider)ui["ScaleSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
-                cfg.Set("", "scale", Math.Round(e.NewValue, 3));
-                foreach (PetWindow pet in engine.Pets) pet.ResizePet();
+                PetWindow target = ActivePet;
+                if (target == null && engine.Pets.Count > 0) target = engine.Pets[0];
+                if (target != null) target.SetScale(e.NewValue, true);
+                else cfg.Set("", "scale", Math.Round(e.NewValue, 3));
                 ((TextBlock)ui["ScaleVal"]).Text = e.NewValue.ToString("0.00", CultureInfo.InvariantCulture) + "x";
                 cfg.Save();
+                engine.Bubble.Position(true);
+            };
+            ((Button)ui["ScaleAllBtn"]).Click += delegate
+            {
+                double value = PetWindow.ClampScale(((Slider)ui["ScaleSlider"]).Value);
+                foreach (PetWindow pet in engine.Pets) pet.SetScale(value, true);
+                cfg.Set("", "scale", value);
+                ((TextBlock)ui["ScaleVal"]).Text = value.ToString("0.00", CultureInfo.InvariantCulture) + "x";
+                cfg.Save();
+                engine.Bubble.Position(true);
             };
             ((Slider)ui["OpacitySlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
@@ -2359,8 +2375,9 @@ namespace BalancePet
             updating = true;
             try
             {
-                ((Slider)ui["ScaleSlider"]).Value = cfg.GetNumber("", "scale", 1.0);
-                ((TextBlock)ui["ScaleVal"]).Text = cfg.GetNumber("", "scale", 1.0).ToString("0.00", CultureInfo.InvariantCulture) + "x";
+                double shownScale = ActivePet != null ? ActivePet.Scale : cfg.GetNumber("", "scale", 1.0);
+                ((Slider)ui["ScaleSlider"]).Value = Math.Max(0.4, Math.Min(2.6, shownScale));
+                ((TextBlock)ui["ScaleVal"]).Text = shownScale.ToString("0.00", CultureInfo.InvariantCulture) + "x";
                 ((Slider)ui["OpacitySlider"]).Value = cfg.GetNumber("", "opacity", 1.0);
                 ((TextBlock)ui["OpacityVal"]).Text = ((int)Math.Round(cfg.GetNumber("", "opacity", 1.0) * 100)).ToString(CultureInfo.InvariantCulture) + "%";
                 ((Slider)ui["SpeedSlider"]).Value = cfg.GetNumber("walk", "speedPxPerSec", 72);

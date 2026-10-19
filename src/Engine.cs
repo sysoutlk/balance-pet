@@ -805,13 +805,15 @@ namespace BalancePet
 
         private void OnPetWheelZoomed(object sender, bool up)
         {
-            double scale = cfg.GetNumber("", "scale", 1.0);
+            PetWindow pet = sender as PetWindow;
+            if (pet == null && Pets.Count > 0) pet = Pets[0];
+            if (pet == null) return;
+            double scale = pet.Scale;
             scale = up ? scale * 1.07 : scale / 1.07;
-            scale = Math.Max(0.4, Math.Min(2.6, Math.Round(scale, 3)));
-            cfg.Set("", "scale", scale);
+            pet.SetScale(scale, true);
             cfg.Save();
-            foreach (PetWindow pet in Pets) pet.ResizePet();
-            panel.Update();
+            Bubble.Position(true);
+            if (panel.IsVisible) panel.Update();
         }
 
         public void ShowPanel()
