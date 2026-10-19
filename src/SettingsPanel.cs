@@ -365,8 +365,8 @@ namespace BalancePet
           <StackPanel>
             <DockPanel>
               <StackPanel Orientation='Horizontal' DockPanel.Dock='Right' VerticalAlignment='Center'>
-                <Button x:Name='ActionPoolAllBtn' Content='全选' Width='42' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
-                <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='42' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
+                <Button x:Name='ActionPoolAllBtn' Content='全选' Width='56' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
+                <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='56' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
               </StackPanel>
               <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
                 <TextBlock Text='闲时动作池' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
@@ -531,12 +531,12 @@ namespace BalancePet
           <TextBox x:Name='ClonePauseBox' Style='{StaticResource TxtBox}' Width='56' Margin='8,0,0,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='秒起（实际为 1~2.5 倍之间的随机）' Margin='5,0,0,0' FontSize='10'/>
         </DockPanel>
-        <DockPanel>
-          <StackPanel DockPanel.Dock='Right' Orientation='Horizontal'>
-            <Button x:Name='CloneAddBtn' Content='来一个' Width='72' Style='{StaticResource Btn}'/>
-            <Button x:Name='CloneRemoveBtn' Content='收一个' Width='72' Margin='0' Style='{StaticResource Btn}'/>
+        <DockPanel Margin='2,4,0,0'>
+          <StackPanel DockPanel.Dock='Right' Orientation='Horizontal' VerticalAlignment='Center'>
+            <Button x:Name='CloneAddBtn' Content='来一个' Width='72' Height='28' Margin='0,0,6,0' Style='{StaticResource Btn}'/>
+            <Button x:Name='CloneRemoveBtn' Content='收一个' Width='72' Height='28' Margin='0' Style='{StaticResource Btn}'/>
           </StackPanel>
-          <TextBlock x:Name='CloneCount' Style='{StaticResource Lbl}' Text='1 只'/>
+          <TextBlock x:Name='CloneCount' Style='{StaticResource Lbl}' Text='1 只' VerticalAlignment='Center'/>
         </DockPanel>
 
       </StackPanel>
