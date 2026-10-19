@@ -56,6 +56,7 @@ namespace BalancePet
         public double TuckOffset;           // 贴边时的位移小动作（正值 = 更深地缩进边缘）
 
         public string Role = "";
+        public double Scale = 1.0;
         public double BaseWidth = Mascot.BaseWidth;
         public double BaseHeight = Mascot.BaseHeight;
         public double X;
@@ -211,6 +212,7 @@ namespace BalancePet
         private void UseMascot()
         {
             Role = "";
+            Scale = RoleScale("");
             BaseWidth = Mascot.BaseWidth;
             BaseHeight = Mascot.BaseHeight;
             animation = null;
@@ -241,6 +243,7 @@ namespace BalancePet
                 image.Stretch = Stretch.Fill;
                 image.Source = first;
                 Role = role;
+                Scale = RoleScale(role);
                 BaseWidth = first.PixelWidth;
                 BaseHeight = first.PixelHeight;
                 animation = loaded;
@@ -319,9 +322,8 @@ namespace BalancePet
 
         public void ResizePet()
         {
-            double scale = cfg.GetNumber("", "scale", 1.0);
-            Width = Math.Max(40, Math.Round(BaseWidth * scale));
-            Height = Math.Max(40, Math.Round(BaseHeight * scale));
+            Width = Math.Max(40, Math.Round(BaseWidth * Scale));
+            Height = Math.Max(40, Math.Round(BaseHeight * Scale));
             ApplyPropLayout();
             Opacity = cfg.GetNumber("", "opacity", 1.0);
             ApplyTuck(Tuck);
@@ -329,6 +331,28 @@ namespace BalancePet
             Top = Math.Round(Y, 1);
             appliedX = (int)Math.Round(X);
             appliedY = (int)Math.Round(Y);
+        }
+
+        public static double ClampScale(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value)) value = 1.0;
+            return Math.Max(0.4, Math.Min(2.6, Math.Round(value, 3)));
+        }
+
+        private double RoleScale(string role)
+        {
+            string key = string.IsNullOrEmpty(role) ? "__mascot" : role;
+            double fallback = cfg.GetNumber("", "scale", 1.0);
+            return ClampScale(cfg.GetNumber("roleScales", key, fallback));
+        }
+
+        /// <summary>Changes only this pet's size. remember=true keeps the size for the same role
+        /// so later clones of that look start at the size you chose.</summary>
+        public void SetScale(double value, bool remember)
+        {
+            Scale = ClampScale(value);
+            if (remember) cfg.Set("roleScales", string.IsNullOrEmpty(Role) ? "__mascot" : Role, Scale);
+            ResizePet();
         }
 
         /// <summary>
@@ -343,9 +367,8 @@ namespace BalancePet
             if (t < 0) t = 0;
             if (t > 1) t = 1;
             Tuck = t;
-            double scale = cfg.GetNumber("", "scale", 1.0);
-            double baseW = Math.Max(40, Math.Round(BaseWidth * scale));
-            double baseH = Math.Max(40, Math.Round(BaseHeight * scale));
+            double baseW = Math.Max(40, Math.Round(BaseWidth * Scale));
+            double baseH = Math.Max(40, Math.Round(BaseHeight * Scale));
             // 头朝向屏幕里：左边 +90°（头朝右）、右边 -90°（头朝左）、上边 180°（头朝下）
             if (EdgeSide == "left") tuckTurn = 90;
             else if (EdgeSide == "right") tuckTurn = -90;
