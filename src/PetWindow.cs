@@ -515,7 +515,7 @@ namespace BalancePet
             SetIdle(false);
         }
 
-        private void SetIdle(bool snapToEdge)
+        private void SetIdle(bool allowSnap)
         {
             Mode = "idle";
             // 拖离边缘后彻底解除贴边并恢复姿态；仍贴在边缘时保持收起状态。
@@ -539,7 +539,16 @@ namespace BalancePet
             double actionWait = actionBase * (1 + Program.Rng.NextDouble() * actionJitter);
             if (actionWait < 3) actionWait = 3;
             NextActionAt = DateTime.UtcNow.AddSeconds(actionWait);
-            if (snapToEdge && cfg.GetFlag("snap", "enabled", true)) Snap();
+            // 手动拖拽由 SetIdleAfterDrag() 强制执行吸附；其它路径只有打开
+            // 「自动贴边」时才会在靠近边缘后吸附。
+            if (allowSnap && cfg.GetFlag("snap", "enabled", true) && cfg.GetFlag("snap", "auto", false)) Snap();
+        }
+
+        /// <summary>用户手动把桌宠拖到边缘后松手：无论「自动贴边」开关如何，都执行吸附。</summary>
+        public void SetIdleAfterDrag()
+        {
+            SetIdle(false);
+            if (cfg.GetFlag("snap", "enabled", true)) Snap();
         }
 
         /// <summary>是否仍然紧贴着自己记录的那条边。</summary>
@@ -844,7 +853,7 @@ namespace BalancePet
                 Mode = "thrown";
                 return;
             }
-            SetIdle();
+            SetIdleAfterDrag();
         }
 
         private void OnMouseEnter(object sender, MouseEventArgs e)

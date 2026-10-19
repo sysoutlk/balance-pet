@@ -568,11 +568,25 @@ namespace BalancePet
             SetDefault("custom", "path", "");
             SetDefault("walk", "enabled", true);
             SetDefault("walk", "speedPxPerSec", 72.0);
-            SetDefault("walk", "pauseMinSec", 8.0);
-            SetDefault("walk", "pauseMaxSec", 26.0);
+            SetDefault("walk", "pauseMinSec", 1.5);
+            SetDefault("walk", "pauseMaxSec", 4.0);
+            // 散步从"偶尔溜达"改为持续模式：老配置里的 8~26 秒长站桩迁成 1~4 秒短歇。
+            if (GetNumberAt("walk.continuousVersion", 1) < 2)
+            {
+                double wMin = GetNumberAt("walk.pauseMinSec", 8);
+                double wMax = GetNumberAt("walk.pauseMaxSec", 26);
+                if (Math.Abs(wMin - 8) < 0.01 && Math.Abs(wMax - 26) < 0.01)
+                {
+                    SetAt("walk.pauseMinSec", 1.5);
+                    SetAt("walk.pauseMaxSec", 4.0);
+                }
+                SetAt("walk.continuousVersion", 2.0);
+                Save();
+            }
             SetDefault("walk", "marginPx", 12.0);
             SetDefault("walk", "flip", true);
             SetDefault("snap", "enabled", true);
+            SetDefault("snap", "auto", false);   // 默认只有手动拖到边缘才贴边
             SetDefault("snap", "distancePx", 56.0);
             SetDefault("snap", "marginPx", 6.0);
             // 旧默认吸附距离 140px 太灵敏：没手动改过的一并迁到 56px。

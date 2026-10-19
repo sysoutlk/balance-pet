@@ -364,7 +364,7 @@ namespace BalancePet
           <TextBlock x:Name='IdleFpsVal' Grid.Column='2' Style='{StaticResource Val}' Text='4 fps'/>
         </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
-        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='闲时自动动作' Margin='0,0,0,0'/>
+        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='自动动作' Margin='0,0,0,0'/>
         <Border Background='__ROW__' CornerRadius='12' Padding='12,10,12,8' Margin='0,6,0,0'>
           <StackPanel>
             <DockPanel>
@@ -373,7 +373,7 @@ namespace BalancePet
                 <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='56' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
               </StackPanel>
               <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
-                <TextBlock Text='闲时动作池' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
+                <TextBlock Text='自动动作池' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
                 <TextBlock x:Name='ActionPoolCount' Text='已选 0 / 26' FontSize='10' Foreground='__MUTED__' Margin='8,0,0,0' VerticalAlignment='Center'/>
               </StackPanel>
             </DockPanel>
@@ -466,12 +466,17 @@ namespace BalancePet
         <CheckBox x:Name='RandomRoleChk' Style='{StaticResource Switch}' Content='随机外观（每次启动与分裂随机挑一个角色）' Margin='0,7,0,0' FontSize='11'/>
         <TextBlock Style='{StaticResource Sect}' Text='行为'/>
         <WrapPanel>
-          <CheckBox x:Name='WalkChk' Style='{StaticResource Switch}' Content='散步'/>
+          <CheckBox x:Name='WalkChk' Style='{StaticResource Switch}' Content='持续散步'
+                    ToolTip='开启后会一直溜达（短歇后继续）；关闭后原地待着'/>
           <CheckBox x:Name='SnapChk' Style='{StaticResource Switch}' Content='贴边'/>
+          <CheckBox x:Name='SnapAutoChk' Style='{StaticResource Switch}' Content='自动贴边'
+                    ToolTip='关闭后只有手动把桌宠拖到屏幕边缘才会贴边'/>
           <CheckBox x:Name='SleepChk' Style='{StaticResource Switch}' Content='作息'/>
           <CheckBox x:Name='QuipsChk' Style='{StaticResource Switch}' Content='台词'/>
           <CheckBox x:Name='CollideChk' Style='{StaticResource Switch}' Content='碰撞带动'/>
         </WrapPanel>
+        <TextBlock FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,3,0,0'
+                   Text='「持续散步」开启后会一直溜达，途中也会随机做动作；关闭后停在原地。'/>
         <DockPanel Margin='0,2,0,0'>
           <Button x:Name='QuipImportBtn' Content='导入台词…' Width='92' Style='{StaticResource Btn}'/>
           <Button x:Name='QuipExportBtn' Content='导出台词…' Width='92' Style='{StaticResource Btn}'/>
@@ -500,6 +505,8 @@ namespace BalancePet
           <Slider x:Name='SnapDistanceSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='8' Maximum='200'/>
           <TextBlock x:Name='SnapDistanceVal' Grid.Column='2' Style='{StaticResource Val}' Text='56 px'/>
         </Grid>
+        <TextBlock FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,3,0,0'
+                   Text='「自动贴边」关闭时，散步、动作和启动都不会吸边；只有手动拖到边缘松手才会贴边。'/>
         <Grid Margin='0,6,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -541,10 +548,11 @@ namespace BalancePet
           <TextBlock Style='{StaticResource Lbl}' Text='只（0 = 不限）' Margin='5,0,0,0'/>
         </DockPanel>
         <DockPanel Margin='0,0,0,6'>
-          <CheckBox x:Name='CloneCycleChk' Style='{StaticResource Switch}' Content='循环涨落' Margin='0,0,10,0'/>
+          <CheckBox x:Name='CloneCycleChk' Style='{StaticResource Switch}' Content='循环涨落' Margin='0,0,10,0'
+                    ToolTip='到上限后逐只回落到下限，停一下再逐只涨回上限'/>
           <TextBlock Style='{StaticResource Lbl}' Text='下限'/>
           <TextBox x:Name='CloneMinBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='只（涨到上限后慢慢收回，再涨回去）' Margin='5,0,0,0' FontSize='10'/>
+          <TextBlock Style='{StaticResource Lbl}' Text='只（到上限后逐只回落到下限，再逐只涨回去）' Margin='5,0,0,0' FontSize='10'/>
         </DockPanel>
         <Grid Margin='0,2,0,6'>
           <Grid.ColumnDefinitions>
@@ -659,7 +667,7 @@ namespace BalancePet
             foreach (string name in new string[]
             {
                 "Header","TitleText","SubText","ActionGrid","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","ScaleSlider","ScaleVal","ScaleAllBtn",
-                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
+                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapAutoChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ActionDurationJitterSlider","ActionDurationJitterVal","ActionPauseJitterSlider","ActionPauseJitterVal","ActionPoolIdlePanel","ActionPoolMovePanel","ActionPoolFxPanel","ActionPoolCount","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
@@ -821,6 +829,7 @@ namespace BalancePet
             BindSwitch("AutoActionsChk", "actions", "enabled");
             BindSwitch("WalkChk", "walk", "enabled");
             BindSwitch("SnapChk", "snap", "enabled");
+            BindSwitch("SnapAutoChk", "snap", "auto");
             ((Slider)ui["SnapDistanceSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
@@ -1464,7 +1473,7 @@ namespace BalancePet
                 chip.Cursor = Cursors.Hand;
                 chip.Background = on ? onBrush : offBrush;
                 chip.Foreground = on ? Brushes.White : new SolidColorBrush(cFg2);
-                chip.ToolTip = on ? "闲时自动播放中（点击移出）" : "未参与自动播放（点击加入）";
+                chip.ToolTip = on ? "自动播放中（点击移出）" : "未参与自动播放（点击加入）";
                 chip.Template = (ControlTemplate)XamlReader.Parse(
                     "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>"
                     + "<Border x:Name='b' Background='{TemplateBinding Background}' CornerRadius='8' Padding='{TemplateBinding Padding}'>"
@@ -2394,6 +2403,7 @@ namespace BalancePet
                 ((CheckBox)ui["AutoActionsChk"]).IsChecked = cfg.GetFlag("actions", "enabled", true);
                 ((CheckBox)ui["WalkChk"]).IsChecked = cfg.GetFlag("walk", "enabled", true);
                 ((CheckBox)ui["SnapChk"]).IsChecked = cfg.GetFlag("snap", "enabled", true);
+                ((CheckBox)ui["SnapAutoChk"]).IsChecked = cfg.GetFlag("snap", "auto", false);
                 SyncBubbleSlider("SnapDistanceSlider", "SnapDistanceVal", cfg.GetNumberAt("snap.distancePx", 56), "0 px");
                 ((CheckBox)ui["SleepChk"]).IsChecked = cfg.GetFlag("sleep", "enabled", true);
                 ((CheckBox)ui["QuipsChk"]).IsChecked = cfg.GetFlag("alert", "quipsOn", true);
