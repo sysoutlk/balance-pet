@@ -363,8 +363,12 @@ namespace BalancePet
         <UniformGrid x:Name='ActionGrid' Columns='4'/>
         <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
         <TextBlock Style='{StaticResource Sect}' Text='外观'/>
+        <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,0,0,4'>
+          <Button x:Name='RoleEditBtn' Content='编辑' Width='56' Style='{StaticResource Mini}' ToolTip='管理模式：添加 / 删除角色素材'/>
+        </StackPanel>
         <WrapPanel x:Name='RolePanel'/>
         <DockPanel Margin='0,2,0,0'>
+          <Button x:Name='RoleAddBtn' Content='添加素材…' Width='92' Style='{StaticResource Btn}' Visibility='Collapsed'/>
           <Button x:Name='AnimMakeBtn' Content='图片转动图…' Width='110' Style='{StaticResource Btn}'/>
           <TextBlock x:Name='AnimMakeStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='6,0,0,0'
                      TextTrimming='CharacterEllipsis' ToolTip='选一张 PNG，自动生成含全部动作的逐帧角色（存在 roles 目录，可再逐帧精修）'/>
@@ -512,6 +516,7 @@ namespace BalancePet
         private readonly DispatcherTimer previewTimer = new DispatcherTimer();
         private double previewPhase;
         private bool updating;
+        private bool roleEditMode;   // 外观页「编辑」开关：只有打开时才显示添加/删除
         private int deviceHz = 60;          // 当前显示器刷新率：帧率滑杆的上限就是它
         private Border previewShadowShape;  // 预览的阴影本体（挖掉卡片形状，只露外面一圈）
         private Grid previewShadowLayer;
@@ -564,7 +569,7 @@ namespace BalancePet
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
-                "RandomRoleChk","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
+                "RandomRoleChk","RoleEditBtn","RoleAddBtn","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
                 "SliverSlider","SliverVal",
                 "ContentRoot","Main","Nav",
@@ -603,6 +608,13 @@ namespace BalancePet
                 ((UniformGrid)ui["ActionGrid"]).Children.Add(button);
             }
             BuildRoleButtons();
+            ((Button)ui["RoleEditBtn"]).Click += delegate
+            {
+                roleEditMode = !roleEditMode;
+                UpdateRoleEditState();
+                BuildRoleButtons();
+            };
+            UpdateRoleEditState();
             BuildProviderRows();
             BuildPlanRows();
             BuildNavPages();
@@ -725,6 +737,7 @@ namespace BalancePet
             ((Button)ui["MixAddBtn"]).ToolTip = "从调色盘取色；超过上限会自动顶掉最早设置的颜色";
             ((Button)ui["QuipImportBtn"]).Click += delegate { ImportQuipsDialog(); };
             ((Button)ui["QuipExportBtn"]).Click += delegate { ExportQuipsDialog(); };
+            ((Button)ui["RoleAddBtn"]).Click += delegate { AddRoleAssetDialog(); };
             ((Button)ui["AnimMakeBtn"]).Click += delegate { MakeAnimDialog(); };
             ((Button)ui["HatPickBtn"]).Click += delegate { HatPickDialog(); };
             ((Button)ui["HatClearBtn"]).Click += delegate
@@ -852,6 +865,46 @@ namespace BalancePet
             BuildRoleButtons();
             Update();
             SetAnimStatus("已生成 " + written + " 帧并换上");
+        }
+
+        /// <summary>把本地图片/GIF 复制进 roles 目录并立刻换上（重名自动加序号，不覆盖旧素材）。</summary>
+        private void AddRoleAssetDialog()
+        {
+            System.Windows.Forms.OpenFileDialog dialog = new System.Windows.Forms.OpenFileDialog();
+            dialog.Title = "选择要添加的角色素材";
+            dialog.Filter = "角色图片 (*.png;*.jpg;*.jpeg;*.gif;*.bmp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp";
+            if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            try
+            {
+                System.IO.Directory.CreateDirectory(AppPaths.RolesDir);
+                string fileName = System.IO.Path.GetFileName(dialog.FileName);
+                string target = System.IO.Path.Combine(AppPaths.RolesDir, fileName);
+                if (System.IO.File.Exists(target) || System.IO.Directory.Exists(target))
+                {
+                    string baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+                    string extension = System.IO.Path.GetExtension(fileName);
+                    int index = 2;
+                    while (true)
+                    {
+                        string candidate = baseName + " (" + index.ToString(CultureInfo.InvariantCulture) + ")" + extension;
+                        target = System.IO.Path.Combine(AppPaths.RolesDir, candidate);
+                        if (!System.IO.File.Exists(target) && !System.IO.Directory.Exists(target)) break;
+                        index++;
+                    }
+                }
+                System.IO.File.Copy(dialog.FileName, target, false);
+                string role = System.IO.Path.GetFileName(target);
+                cfg.Set("", "role", role);
+                cfg.SetAt("roles.random", false);
+                cfg.Save();
+                foreach (PetWindow pet in engine.Pets) pet.ApplyRole(role);
+                BuildRoleButtons();
+                Update();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(root, "添加失败：" + ex.Message, "添加角色素材", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SetAnimStatus(string text)
@@ -1059,7 +1112,7 @@ namespace BalancePet
             };
             button.BorderBrush = Convert.ToString(button.Tag) == selected ? Brush("#4B6BFB") : Brushes.Transparent;
             button.BorderThickness = new Thickness(Convert.ToString(button.Tag) == selected ? 2 : 0);
-            if (string.IsNullOrEmpty(thumbFile))
+            if (string.IsNullOrEmpty(thumbFile) || !roleEditMode)
             {
                 panel.Children.Add(button);
                 return;
@@ -1095,6 +1148,21 @@ namespace BalancePet
             del.Click += delegate { DeleteRoleAsset(roleTag); };
             holder.Children.Add(del);
             panel.Children.Add(holder);
+        }
+
+        /// <summary>切换「编辑」模式时同步按钮文案与添加按钮的显示。</summary>
+        private void UpdateRoleEditState()
+        {
+            if (!ui.ContainsKey("RoleEditBtn")) return;
+            Button edit = ui["RoleEditBtn"] as Button;
+            if (edit != null)
+            {
+                edit.Content = roleEditMode ? "完成" : "编辑";
+                edit.BorderThickness = new Thickness(roleEditMode ? 2 : 0);
+                edit.BorderBrush = roleEditMode ? Brush("#4B6BFB") : Brushes.Transparent;
+            }
+            Button add = ui.ContainsKey("RoleAddBtn") ? ui["RoleAddBtn"] as Button : null;
+            if (add != null) add.Visibility = roleEditMode ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>与面板同色的删除确认框（系统 MessageBox 和整体观感不搭）。</summary>
