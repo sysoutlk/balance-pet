@@ -914,7 +914,10 @@ namespace BalancePet
         {
             // 面板开着时，右键任意一只桌宠都收起面板。这样贴边只露一条、
             // 或者面板对应的那只已经被循环涨落换掉时，也不会出现关不掉的情况。
-            if (panel.IsVisible)
+            // 失焦自动隐藏会在右键事件之前发生，所以“刚隐藏”也要按关闭处理，
+            // 否则会出现收起后立刻又被右键重新打开。
+            bool recentlyHidden = (DateTime.UtcNow - panel.LastHiddenAt).TotalMilliseconds < 350;
+            if (panel.IsVisible || recentlyHidden)
             {
                 panel.HidePanel();
                 return;
