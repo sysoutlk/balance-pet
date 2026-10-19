@@ -182,11 +182,16 @@ namespace BalancePet
       <Setter Property='VerticalContentAlignment' Value='Center'/>
     </Style>
   </Window.Resources>
-  <Border Background='__CARD__' CornerRadius='16' BorderBrush='__CARD_BORDER__' BorderThickness='1' Padding='18,13,18,15'>
-    <Border.Effect>
-      <DropShadowEffect BlurRadius='26' ShadowDepth='6' Opacity='0.5' Color='#000000'/>
-    </Border.Effect>
-    <ScrollViewer VerticalScrollBarVisibility='Auto' HorizontalScrollBarVisibility='Disabled' MaxHeight='640'>
+  <Grid Margin='40'>
+    <Grid x:Name='PanelShadowLayer' Margin='-40' IsHitTestVisible='False'>
+      <Border x:Name='PanelShadowShape' Background='Black' CornerRadius='16' Margin='40'>
+        <Border.Effect>
+          <DropShadowEffect x:Name='PanelShadow' BlurRadius='26' ShadowDepth='6' Opacity='0.5' Color='#000000'/>
+        </Border.Effect>
+      </Border>
+    </Grid>
+    <Border x:Name='PanelCard' Background='__CARD__' CornerRadius='16' BorderBrush='__CARD_BORDER__' BorderThickness='1' Padding='18,13,18,15'>
+      <ScrollViewer VerticalScrollBarVisibility='Auto' HorizontalScrollBarVisibility='Disabled' MaxHeight='640'>
       <ScrollViewer.Resources>
         <Style TargetType='ScrollBar'>
           <Setter Property='Width' Value='10'/>
@@ -481,12 +486,17 @@ namespace BalancePet
         <Button x:Name='QuitBtn' Content='退出桌宠' Margin='0,18,0,0' Height='32' Style='{StaticResource Accent}'/>
       </StackPanel>
     </ScrollViewer>
-  </Border>
+    </Border>
+  </Grid>
 </Window>";
 
         private readonly Config cfg;
         private readonly Engine engine;
         private Window root;
+        private Grid panelShadowLayer;       // 面板阴影层（挖掉卡片形状，只露轮廓外一圈）
+        private Border panelShadowShape;
+        private Border panelCard;
+        private const double PanelShadowPad = 40;
         private readonly Dictionary<string, FrameworkElement> ui = new Dictionary<string, FrameworkElement>();
         private readonly Dictionary<string, TextBlock> statusById = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, PasswordBox> keyBoxes = new Dictionary<string, PasswordBox>();
@@ -532,6 +542,10 @@ namespace BalancePet
             string accent = cfg.GetStringAt("bubble.color1", "#4B6BFB");
             if (string.IsNullOrEmpty(accent) || !accent.StartsWith("#", StringComparison.Ordinal)) accent = "#4B6BFB";
             root = (Window)XamlReader.Parse(PanelXaml(accent));
+            panelShadowLayer = (Grid)root.FindName("PanelShadowLayer");
+            panelShadowShape = (Border)root.FindName("PanelShadowShape");
+            panelCard = (Border)root.FindName("PanelCard");
+            if (panelCard != null) panelCard.SizeChanged += delegate { UpdatePanelShadowClip(); };
             foreach (string name in new string[]
             {
                 "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
@@ -1622,6 +1636,29 @@ namespace BalancePet
         }
 
         // ------------------------------------------------------------ 显示 / 刷新
+        /// <summary>
+        /// 面板阴影与气泡同款：阴影单独一层，整块区域减去卡片的圆角矩形，
+        /// 只让阴影出现在卡片轮廓之外；不然圆角一大，四角缺口里就会透出阴影色。
+        /// </summary>
+        private void UpdatePanelShadowClip()
+        {
+            if (panelShadowLayer == null || panelShadowShape == null || panelCard == null) return;
+            double w = panelCard.ActualWidth;
+            double h = panelCard.ActualHeight;
+            if (w <= 0 || h <= 0)
+            {
+                panelShadowLayer.Clip = null;
+                return;
+            }
+            double radius = panelCard.CornerRadius.TopLeft;
+            panelShadowShape.CornerRadius = new CornerRadius(radius);
+            RectangleGeometry outer = new RectangleGeometry(
+                new Rect(0, 0, w + PanelShadowPad * 2, h + PanelShadowPad * 2));
+            RectangleGeometry inner = new RectangleGeometry(
+                new Rect(PanelShadowPad, PanelShadowPad, w, h), radius, radius);
+            panelShadowLayer.Clip = new CombinedGeometry(GeometryCombineMode.Exclude, outer, inner);
+        }
+
         public void ShowFor(PetWindow pet)
         {
             ActivePet = pet;
@@ -1630,20 +1667,24 @@ namespace BalancePet
             if (pet != null)
             {
                 // Rough placement first, then refine once the window has measured itself.
-                root.Left = Math.Round(pet.X + pet.Width + 12, 1);
-                root.Top = Math.Round(pet.Y, 1);
+                // 窗口四周留了 PanelShadowPad 的阴影余量，摆放时扣掉，卡片才会贴着宠物。
+                root.Left = Math.Round(pet.X + pet.Width + 12 - PanelShadowPad, 1);
+                root.Top = Math.Round(pet.Y - PanelShadowPad, 1);
             }
             root.Show();
             root.UpdateLayout();
+            UpdatePanelShadowClip();
             if (pet != null)
             {
                 ScreenArea area = ScreenArea.ForPoint(pet.X + pet.Width / 2, pet.Y + pet.Height / 2);
+                double cardW = Math.Max(0, root.ActualWidth - PanelShadowPad * 2);
+                double cardH = Math.Max(0, root.ActualHeight - PanelShadowPad * 2);
                 double x = pet.X + pet.Width + 12;
-                if (x + root.ActualWidth > area.Right - 4) x = pet.X - root.ActualWidth - 12;
-                x = Math.Max(area.Left + 4, Math.Min(x, area.Right - root.ActualWidth - 4));
-                double y = Math.Max(area.Top + 4, Math.Min(pet.Y, area.Bottom - root.ActualHeight - 4));
-                root.Left = Math.Round(x, 1);
-                root.Top = Math.Round(y, 1);
+                if (x + cardW > area.Right - 4) x = pet.X - cardW - 12;
+                x = Math.Max(area.Left + 4, Math.Min(x, area.Right - cardW - 4));
+                double y = Math.Max(area.Top + 4, Math.Min(pet.Y, area.Bottom - cardH - 4));
+                root.Left = Math.Round(x - PanelShadowPad, 1);
+                root.Top = Math.Round(y - PanelShadowPad, 1);
             }
             root.Activate();
         }
