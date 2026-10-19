@@ -222,7 +222,10 @@
 | `primaryProvider` | 气泡主平台（`deepseek` / `moonshot` / `siliconflow` / `openrouter` / `qwen` / `doubao` / … / `custom`） |
 | `providers.<id>.on` / `providers.<id>.apiKey` | 各平台开关与 Key（DPAPI 加密后存储） |
 | `walk.*` `snap.*` `throw.*` `sleep.*` `actions.*` `quips.*` | 行为、物理与台词配置 |
-| `actions.pool` / `actions.durationScale` | 闲时自动播放的动作池 / 单次时长倍率（0.5~3） |
+| `actions.pool` | 闲时自动播放的动作池（只对自动动作生效） |
+| `actions.durationScale` / `actions.durationJitter` | 单次动作时长倍率（0.5~3）/ 每次时长的随机幅度（0~0.5，即 ±50%） |
+| `actions.pauseMinSec` / `actions.pauseJitter` | 自动动作的基础间隔 / 间隔随机上浮比例（0~1.5，例如 0.5 = 基础值~1.5 倍） |
+| `clones.pauseMinSec` / `clones.jitter` | 分裂的基础间隔 / 间隔随机上浮比例（与动作间隔同一套算法） |
 | `snap.distancePx` | 松手后离屏幕边多近才贴边吸附（默认 56px，行为页「吸附距离」可调） |
 | `frames.activePerSecond` / `.idlePerSecond` | 动作/空闲帧率（上限自动取显示器刷新率） |
 | `edgeHide.sliverRatio` | 贴边收起来后露出多少（按尺寸取比例，默认 0.32） |

@@ -509,9 +509,13 @@ namespace BalancePet
             int max = (int)cfg.GetNumber("walk", "pauseMaxSec", 26);
             if (max <= min) max = min + 1;
             NextWalkAt = DateTime.UtcNow.AddSeconds(Program.Rng.Next(min, max));
-            int actionMin = (int)cfg.GetNumber("actions", "pauseMinSec", 14);
-            int actionMax = Math.Max(actionMin + 1, (int)cfg.GetNumber("actions", "pauseMaxSec", 45));
-            NextActionAt = DateTime.UtcNow.AddSeconds(Program.Rng.Next(actionMin, actionMax));
+            double actionBase = cfg.GetNumber("actions", "pauseMinSec", 14);
+            double actionJitter = cfg.GetNumber("actions", "pauseJitter", 0.5);
+            if (actionJitter < 0) actionJitter = 0;
+            if (actionJitter > 3) actionJitter = 3;
+            double actionWait = actionBase * (1 + Program.Rng.NextDouble() * actionJitter);
+            if (actionWait < 3) actionWait = 3;
+            NextActionAt = DateTime.UtcNow.AddSeconds(actionWait);
             if (snapToEdge && cfg.GetFlag("snap", "enabled", true)) Snap();
         }
 
@@ -660,8 +664,12 @@ namespace BalancePet
             }
             DateTime now = DateTime.UtcNow;
             double durationScale = cfg.GetNumber("actions", "durationScale", 1.0);
-            if (durationScale < 0.3) durationScale = 0.3;
-            if (durationScale > 5) durationScale = 5;
+            double durationJitter = cfg.GetNumber("actions", "durationJitter", 0.15);
+            if (durationJitter < 0) durationJitter = 0;
+            if (durationJitter > 0.8) durationJitter = 0.8;
+            durationScale *= 1 + (Program.Rng.NextDouble() * 2 - 1) * durationJitter;
+            if (durationScale < 0.2) durationScale = 0.2;
+            if (durationScale > 6) durationScale = 6;
             ActionOriginX = X;
             LastActionKey = action;
             switch (action)

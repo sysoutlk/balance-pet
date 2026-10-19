@@ -391,9 +391,25 @@ namespace BalancePet
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
               </Grid.ColumnDefinitions>
+              <TextBlock Style='{StaticResource Lbl}' Text='时长随机'/>
+              <Slider x:Name='ActionDurationJitterSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0' Maximum='50'/>
+              <TextBlock x:Name='ActionDurationJitterVal' Grid.Column='2' Style='{StaticResource Val}' Text='±15%'/>
+            </Grid>
+            <Grid Margin='0,2,0,0'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+              </Grid.ColumnDefinitions>
               <TextBlock Style='{StaticResource Lbl}' Text='动作间隔'/>
-              <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
-              <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
+              <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='300'/>
+              <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14~21s'/>
+            </Grid>
+            <Grid Margin='0,2,0,0'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Style='{StaticResource Lbl}' Text='间隔随机'/>
+              <Slider x:Name='ActionPauseJitterSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0' Maximum='150'/>
+              <TextBlock x:Name='ActionPauseJitterVal' Grid.Column='2' Style='{StaticResource Val}' Text='+50%'/>
             </Grid>
           </StackPanel>
         </Border>
@@ -531,8 +547,16 @@ namespace BalancePet
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='86'/>
           </Grid.ColumnDefinitions>
           <TextBlock Style='{StaticResource Lbl}' Text='分裂间隔'/>
-          <Slider x:Name='ClonePauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='10' Maximum='300'/>
-          <TextBlock x:Name='ClonePauseVal' Grid.Column='2' Style='{StaticResource Val}' HorizontalAlignment='Right' Text='60~180s' ToolTip='实际间隔在两个数值之间随机'/>
+          <Slider x:Name='ClonePauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='10' Maximum='600'/>
+          <TextBlock x:Name='ClonePauseVal' Grid.Column='2' Style='{StaticResource Val}' HorizontalAlignment='Right' Text='60s' ToolTip='基础间隔；实际间隔会加上右侧的随机幅度'/>
+        </Grid>
+        <Grid Margin='0,2,0,6'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='86'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='间隔随机'/>
+          <Slider x:Name='CloneJitterSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0' Maximum='150'/>
+          <TextBlock x:Name='CloneJitterVal' Grid.Column='2' Style='{StaticResource Val}' HorizontalAlignment='Right' Text='+50%'/>
         </Grid>
         <DockPanel Margin='2,4,0,0'>
           <StackPanel DockPanel.Dock='Right' Orientation='Horizontal' VerticalAlignment='Center'>
@@ -634,7 +658,7 @@ namespace BalancePet
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
-                "ActionPauseSlider","ActionPauseVal","ActionPoolIdlePanel","ActionPoolMovePanel","ActionPoolFxPanel","ActionPoolCount","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
+                "ActionPauseSlider","ActionPauseVal","ActionDurationJitterSlider","ActionDurationJitterVal","ActionPauseJitterSlider","ActionPauseJitterVal","ActionPoolIdlePanel","ActionPoolMovePanel","ActionPoolFxPanel","ActionPoolCount","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","RoleEditBtn","RoleAddBtn","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
@@ -648,7 +672,7 @@ namespace BalancePet
                 "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","BubbleShadowVal",
                 "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
-                ,"ClonePauseSlider","ClonePauseVal"
+                ,"ClonePauseSlider","ClonePauseVal","CloneJitterSlider","CloneJitterVal"
                 ,"CloneCycleChk","CloneMinBox"
             })
             {
@@ -695,6 +719,13 @@ namespace BalancePet
                 cfg.SetAt("actions.durationScale", Math.Round(e.NewValue, 2));
                 cfg.Save();
                 UpdateLabel("ActionDurationVal", e.NewValue, "0.0x");
+            };
+            ((Slider)ui["ActionDurationJitterSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("actions.durationJitter", Math.Round(e.NewValue / 100.0, 2));
+                cfg.Save();
+                ((TextBlock)ui["ActionDurationJitterVal"]).Text = "±" + ((int)Math.Round(e.NewValue)).ToString(CultureInfo.InvariantCulture) + "%";
             };
             BuildRoleButtons();
             ((Button)ui["RoleEditBtn"]).Click += delegate
@@ -757,11 +788,19 @@ namespace BalancePet
             ((Slider)ui["ActionPauseSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
-                int min = (int)e.NewValue;
-                cfg.Set("actions", "pauseMinSec", min);
-                cfg.Set("actions", "pauseMaxSec", (int)(min * 1.75));
-                ((TextBlock)ui["ActionPauseVal"]).Text = min.ToString(CultureInfo.InvariantCulture) + "s";
+                int seconds = (int)Math.Round(e.NewValue);
+                cfg.SetAt("actions.pauseMinSec", seconds);
+                cfg.SetAt("actions.pauseMaxSec", seconds);
                 cfg.Save();
+                UpdateActionPauseLabel();
+            };
+            ((Slider)ui["ActionPauseJitterSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("actions.pauseJitter", Math.Round(e.NewValue / 100.0, 2));
+                cfg.Save();
+                ((TextBlock)ui["ActionPauseJitterVal"]).Text = "+" + ((int)Math.Round(e.NewValue)).ToString(CultureInfo.InvariantCulture) + "%";
+                UpdateActionPauseLabel();
             };
             BindSwitch("AutoActionsChk", "actions", "enabled");
             BindSwitch("WalkChk", "walk", "enabled");
@@ -888,12 +927,19 @@ namespace BalancePet
             ((Slider)ui["ClonePauseSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
             {
                 if (updating) return;
-                int min = (int)Math.Round(e.NewValue);
-                int max = (int)Math.Round(min * 2.5);
-                cfg.SetAt("clones.pauseMinSec", min);
-                cfg.SetAt("clones.pauseMaxSec", max);
+                int seconds = (int)Math.Round(e.NewValue);
+                cfg.SetAt("clones.pauseMinSec", seconds);
+                cfg.SetAt("clones.pauseMaxSec", seconds);
                 cfg.Save();
-                ((TextBlock)ui["ClonePauseVal"]).Text = min.ToString(CultureInfo.InvariantCulture) + "~" + max.ToString(CultureInfo.InvariantCulture) + "s";
+                UpdateClonePauseLabel();
+            };
+            ((Slider)ui["CloneJitterSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("clones.jitter", Math.Round(e.NewValue / 100.0, 2));
+                cfg.Save();
+                ((TextBlock)ui["CloneJitterVal"]).Text = "+" + ((int)Math.Round(e.NewValue)).ToString(CultureInfo.InvariantCulture) + "%";
+                UpdateClonePauseLabel();
             };
             BindSwitch("CloneCycleChk", "clones", "cycle");
             BindNumberBox("CloneMinBox", "clones.min");
@@ -1087,6 +1133,32 @@ namespace BalancePet
             {
                 if (e.Key == Key.Enter) SaveField(path, box.Text);
             };
+        }
+
+        private void UpdateActionPauseLabel()
+        {
+            int baseSec = (int)Math.Round(cfg.GetNumberAt("actions.pauseMinSec", 14));
+            double jitter = cfg.GetNumberAt("actions.pauseJitter", 0.5);
+            if (jitter < 0.005)
+            {
+                ((TextBlock)ui["ActionPauseVal"]).Text = baseSec.ToString(CultureInfo.InvariantCulture) + "s";
+                return;
+            }
+            int maxSec = (int)Math.Round(baseSec * (1 + jitter));
+            ((TextBlock)ui["ActionPauseVal"]).Text = baseSec.ToString(CultureInfo.InvariantCulture) + "~" + maxSec.ToString(CultureInfo.InvariantCulture) + "s";
+        }
+
+        private void UpdateClonePauseLabel()
+        {
+            int baseSec = (int)Math.Round(cfg.GetNumberAt("clones.pauseMinSec", 60));
+            double jitter = cfg.GetNumberAt("clones.jitter", 0.5);
+            if (jitter < 0.005)
+            {
+                ((TextBlock)ui["ClonePauseVal"]).Text = baseSec.ToString(CultureInfo.InvariantCulture) + "s";
+                return;
+            }
+            int maxSec = (int)Math.Round(baseSec * (1 + jitter));
+            ((TextBlock)ui["ClonePauseVal"]).Text = baseSec.ToString(CultureInfo.InvariantCulture) + "~" + maxSec.ToString(CultureInfo.InvariantCulture) + "s";
         }
 
         /// <summary>Slider bound to a numeric config key; the label keeps a live read-out.</summary>
@@ -2293,9 +2365,15 @@ namespace BalancePet
                 ((TextBlock)ui["OpacityVal"]).Text = ((int)Math.Round(cfg.GetNumber("", "opacity", 1.0) * 100)).ToString(CultureInfo.InvariantCulture) + "%";
                 ((Slider)ui["SpeedSlider"]).Value = cfg.GetNumber("walk", "speedPxPerSec", 72);
                 ((TextBlock)ui["SpeedVal"]).Text = ((int)cfg.GetNumber("walk", "speedPxPerSec", 72)).ToString(CultureInfo.InvariantCulture);
-                ((Slider)ui["ActionPauseSlider"]).Value = cfg.GetNumber("actions", "pauseMinSec", 14);
-                ((TextBlock)ui["ActionPauseVal"]).Text = ((int)cfg.GetNumber("actions", "pauseMinSec", 14)).ToString(CultureInfo.InvariantCulture) + "s";
+                ((Slider)ui["ActionPauseSlider"]).Value = Math.Max(6, Math.Min(300, cfg.GetNumber("actions", "pauseMinSec", 14)));
+                double actionJitterPct = cfg.GetNumberAt("actions.pauseJitter", 0.5) * 100;
+                ((Slider)ui["ActionPauseJitterSlider"]).Value = Math.Max(0, Math.Min(150, actionJitterPct));
+                ((TextBlock)ui["ActionPauseJitterVal"]).Text = "+" + ((int)Math.Round(actionJitterPct)).ToString(CultureInfo.InvariantCulture) + "%";
+                UpdateActionPauseLabel();
                 SyncBubbleSlider("ActionDurationSlider", "ActionDurationVal", cfg.GetNumberAt("actions.durationScale", 1), "0.0x");
+                double durationJitterPct = cfg.GetNumberAt("actions.durationJitter", 0.15) * 100;
+                ((Slider)ui["ActionDurationJitterSlider"]).Value = Math.Max(0, Math.Min(50, durationJitterPct));
+                ((TextBlock)ui["ActionDurationJitterVal"]).Text = "±" + ((int)Math.Round(durationJitterPct)).ToString(CultureInfo.InvariantCulture) + "%";
                 ((CheckBox)ui["AutoActionsChk"]).IsChecked = cfg.GetFlag("actions", "enabled", true);
                 ((CheckBox)ui["WalkChk"]).IsChecked = cfg.GetFlag("walk", "enabled", true);
                 ((CheckBox)ui["SnapChk"]).IsChecked = cfg.GetFlag("snap", "enabled", true);
@@ -2358,10 +2436,12 @@ namespace BalancePet
                 BuildAlertRows();
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
-                int clonePauseMin = (int)cfg.GetNumberAt("clones.pauseMinSec", 60);
-                int clonePauseMax = (int)cfg.GetNumberAt("clones.pauseMaxSec", clonePauseMin * 2.5);
-                ((Slider)ui["ClonePauseSlider"]).Value = Math.Max(10, Math.Min(300, clonePauseMin));
-                ((TextBlock)ui["ClonePauseVal"]).Text = clonePauseMin.ToString(CultureInfo.InvariantCulture) + "~" + clonePauseMax.ToString(CultureInfo.InvariantCulture) + "s";
+                int clonePause = (int)cfg.GetNumberAt("clones.pauseMinSec", 60);
+                ((Slider)ui["ClonePauseSlider"]).Value = Math.Max(10, Math.Min(600, clonePause));
+                double cloneJitterPct = cfg.GetNumberAt("clones.jitter", 0.5) * 100;
+                ((Slider)ui["CloneJitterSlider"]).Value = Math.Max(0, Math.Min(150, cloneJitterPct));
+                ((TextBlock)ui["CloneJitterVal"]).Text = "+" + ((int)Math.Round(cloneJitterPct)).ToString(CultureInfo.InvariantCulture) + "%";
+                UpdateClonePauseLabel();
                 ((CheckBox)ui["CloneCycleChk"]).IsChecked = cfg.GetFlagAt("clones.cycle", true);
                 ((TextBox)ui["CloneMinBox"]).Text = ((int)engine.CloneFloor()).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ProxyBox"]).Text = cfg.GetStringAt("network.proxy", "");

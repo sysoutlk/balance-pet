@@ -602,6 +602,19 @@ namespace BalancePet
             SetDefault("clones", "cycle", true);   // 到上限后慢慢收回，再慢慢涨回
             SetDefault("clones", "pauseMinSec", 60.0);
             SetDefault("clones", "pauseMaxSec", 180.0);
+            SetDefault("clones", "jitter", 0.5);
+            // 分裂间隔的随机幅度独立成百分比；由旧的 min/max 反推一次。
+            if (GetNumberAt("clones.jitterVersion", 1) < 2)
+            {
+                double cMin = GetNumberAt("clones.pauseMinSec", 60);
+                double cMax = GetNumberAt("clones.pauseMaxSec", 150);
+                double cJitter = cMin > 0 ? (cMax - cMin) / cMin : 0.5;
+                if (cJitter < 0) cJitter = 0;
+                if (cJitter > 1.5) cJitter = 1.5;
+                SetAt("clones.jitter", Math.Round(cJitter, 2));
+                SetAt("clones.jitterVersion", 2.0);
+                Save();
+            }
             SetDefault("alert", "balanceWarn", true);
             SetDefault("alert", "budgetWarn", true);
             SetDefault("alert", "quotaWarn", true);
@@ -634,6 +647,20 @@ namespace BalancePet
                 Save();
             }
             SetDefault("actions", "durationScale", 1.0);
+            SetDefault("actions", "durationJitter", 0.15);
+            SetDefault("actions", "pauseJitter", 0.5);
+            // 「间隔随机」独立成百分比：由旧的 min/max 反推，只迁移一次。
+            if (GetNumberAt("actions.pauseJitterVersion", 1) < 2)
+            {
+                double jMin = GetNumberAt("actions.pauseMinSec", 14);
+                double jMax = GetNumberAt("actions.pauseMaxSec", 25);
+                double jitter = jMin > 0 ? (jMax - jMin) / jMin : 0.5;
+                if (jitter < 0) jitter = 0;
+                if (jitter > 1.5) jitter = 1.5;
+                SetAt("actions.pauseJitter", Math.Round(jitter, 2));
+                SetAt("actions.pauseJitterVersion", 2.0);
+                Save();
+            }
             SetDefault("actions", "pool", new string[]
             {
                 "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",
