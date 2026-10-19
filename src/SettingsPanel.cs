@@ -232,7 +232,7 @@ namespace BalancePet
       </ScrollViewer.Resources>
       <StackPanel x:Name='ContentRoot' Width='510'>
         <DockPanel x:Name='Header' Background='Transparent'>
-          <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='✕' Width='26' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}'/>
+          <Button x:Name='QuitBtn' DockPanel.Dock='Right' Content='退出桌宠' Width='76' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}' Foreground='#E5484D' BorderBrush='#E5484D' BorderThickness='1' ToolTip='退出桌宠（结束进程）'/>
           <StackPanel Margin='0,2,0,0'>
             <TextBlock x:Name='TitleText' Text='余额桌宠' FontSize='15' FontWeight='Bold' Foreground='__FG__'/>
             <TextBlock x:Name='SubText' Text='…' FontSize='10' Foreground='__MUTED__' Margin='0,3,0,0'/>
@@ -361,7 +361,28 @@ namespace BalancePet
         </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
         <UniformGrid x:Name='ActionGrid' Columns='4'/>
-        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='随机动作' Margin='0,7,0,0'/>
+        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='闲时自动动作' Margin='0,7,0,0'/>
+        <DockPanel Margin='0,6,0,2'>
+          <Button x:Name='ActionPoolAllBtn' Content='全选' Width='46' Style='{StaticResource Mini}'/>
+          <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='46' Style='{StaticResource Mini}'/>
+        </DockPanel>
+        <WrapPanel x:Name='ActionPoolPanel'/>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='单次时长'/>
+          <Slider x:Name='ActionDurationSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.5' Maximum='3'/>
+          <TextBlock x:Name='ActionDurationVal' Grid.Column='2' Style='{StaticResource Val}' Text='1.0x'/>
+        </Grid>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='动作间隔'/>
+          <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
+          <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
+        </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='外观'/>
         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,0,0,4'>
           <Button x:Name='RoleEditBtn' Content='编辑' Width='56' Style='{StaticResource Mini}' ToolTip='管理模式：添加 / 删除角色素材'/>
@@ -438,14 +459,6 @@ namespace BalancePet
           <Slider x:Name='SpeedSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='25' Maximum='170'/>
           <TextBlock x:Name='SpeedVal' Grid.Column='2' Style='{StaticResource Val}' Text='72'/>
         </Grid>
-        <Grid Margin='0,4,0,0'>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Style='{StaticResource Lbl}' Text='动作间隔'/>
-          <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
-          <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
-        </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='余额接口'/>
         <StackPanel x:Name='ProviderList'/>
         
@@ -496,7 +509,7 @@ namespace BalancePet
           </StackPanel>
           <TextBlock x:Name='CloneCount' Style='{StaticResource Lbl}' Text='1 只'/>
         </DockPanel>
-        <Button x:Name='QuitBtn' Content='退出桌宠' Margin='0,18,0,0' Height='32' Style='{StaticResource Accent}'/>
+
       </StackPanel>
     </ScrollViewer>
     </Border>
@@ -563,11 +576,11 @@ namespace BalancePet
             if (panelCard != null) panelCard.SizeChanged += delegate { UpdatePanelShadowClip(); };
             foreach (string name in new string[]
             {
-                "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
+                "Header","TitleText","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
-                "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
+                "ActionPauseSlider","ActionPauseVal","ActionPoolPanel","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","RoleEditBtn","RoleAddBtn","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
@@ -590,7 +603,7 @@ namespace BalancePet
             root.Deactivated += delegate { if (!Pinned) HidePanel(); };
             root.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) HidePanel(); };
             ((FrameworkElement)ui["Header"]).MouseLeftButtonDown += delegate { try { root.DragMove(); } catch { } };
-            ((Button)ui["CloseBtn"]).Click += delegate { HidePanel(); };
+
 
             Button randomButton = new Button();
             randomButton.Content = "随机";
@@ -607,6 +620,26 @@ namespace BalancePet
                 button.Click += delegate { engine.PerformAction(ActivePet, action, false); };
                 ((UniformGrid)ui["ActionGrid"]).Children.Add(button);
             }
+            BuildActionPoolChips();
+            ((Button)ui["ActionPoolAllBtn"]).Click += delegate
+            {
+                cfg.SetAt("actions.pool", PetWindow.ActionKeys);
+                cfg.Save();
+                BuildActionPoolChips();
+            };
+            ((Button)ui["ActionPoolNoneBtn"]).Click += delegate
+            {
+                cfg.SetAt("actions.pool", new string[0]);
+                cfg.Save();
+                BuildActionPoolChips();
+            };
+            ((Slider)ui["ActionDurationSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("actions.durationScale", Math.Round(e.NewValue, 2));
+                cfg.Save();
+                UpdateLabel("ActionDurationVal", e.NewValue, "0.0x");
+            };
             BuildRoleButtons();
             ((Button)ui["RoleEditBtn"]).Click += delegate
             {
@@ -803,7 +836,10 @@ namespace BalancePet
             ((Button)ui["RefreshBtn"]).Click += delegate { engine.Data.Refresh(); };
             ((Button)ui["CloneAddBtn"]).Click += delegate { engine.AddClone(); Update(); };
             ((Button)ui["CloneRemoveBtn"]).Click += delegate { engine.RemoveClone(); Update(); };
-            ((Button)ui["QuitBtn"]).Click += delegate { engine.Quit(); };
+            ((Button)ui["QuitBtn"]).Click += delegate
+            {
+                if (ConfirmDialog("退出桌宠", "退出后桌宠与余额提醒都会停止运行。", "退出")) engine.Quit();
+            };
         }
 
         /// <summary>选一个 JSON 文件导入台词：合并去重，不动已有台词。</summary>
@@ -1034,6 +1070,40 @@ namespace BalancePet
         }
 
         // ------------------------------------------------------------ 角色
+        /// <summary>动作点播页的「闲时自动播放池」：点动作名切换是否参与自动播放。</summary>
+        private void BuildActionPoolChips()
+        {
+            WrapPanel panel = (WrapPanel)ui["ActionPoolPanel"];
+            panel.Children.Clear();
+            List<string> pool = cfg.GetStrings("actions", "pool");
+            foreach (string key in PetWindow.ActionKeys)
+            {
+                string action = key;
+                bool on = pool.Contains(key);
+                Button chip = new Button();
+                chip.Style = (Style)root.Resources["Mini"];
+                chip.Content = Engine.ActionName(key);
+                chip.FontSize = 10.5;
+                chip.Height = 26;
+                chip.Padding = new Thickness(9, 0, 9, 0);
+                chip.Margin = new Thickness(0, 0, 5, 5);
+                chip.Opacity = on ? 1.0 : 0.5;
+                chip.BorderThickness = new Thickness(on ? 2 : 0);
+                chip.BorderBrush = on ? Brush("#4B6BFB") : Brushes.Transparent;
+                chip.ToolTip = on ? "闲时自动播放中（点击移出）" : "未参与自动播放（点击加入）";
+                chip.Click += delegate
+                {
+                    List<string> current = cfg.GetStrings("actions", "pool");
+                    if (current.Contains(action)) current.Remove(action);
+                    else current.Add(action);
+                    cfg.SetAt("actions.pool", current.ToArray());
+                    cfg.Save();
+                    BuildActionPoolChips();
+                };
+                panel.Children.Add(chip);
+            }
+        }
+
         private void BuildRoleButtons()
         {
             WrapPanel panel = (WrapPanel)ui["RolePanel"];
@@ -1165,8 +1235,8 @@ namespace BalancePet
             if (add != null) add.Visibility = roleEditMode ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>与面板同色的删除确认框（系统 MessageBox 和整体观感不搭）。</summary>
-        private bool ConfirmDeleteRole(string role)
+        /// <summary>与面板同色的确认框（系统 MessageBox 和整体观感不搭）。</summary>
+        private bool ConfirmDialog(string headText, string bodyText, string okText)
         {
             Window dialog = new Window();
             dialog.WindowStyle = WindowStyle.None;
@@ -1187,12 +1257,12 @@ namespace BalancePet
             card.BorderThickness = new Thickness(1);
             StackPanel stack = new StackPanel();
             TextBlock head = new TextBlock();
-            head.Text = "删除角色素材";
+            head.Text = headText;
             head.FontSize = 13;
             head.FontWeight = FontWeights.SemiBold;
             head.Foreground = new SolidColorBrush(cFg);
             TextBlock body = new TextBlock();
-            body.Text = "「" + role + "」会从 roles 目录彻底删除，无法恢复。";
+            body.Text = bodyText;
             body.FontSize = 11.5;
             body.Foreground = new SolidColorBrush(cFg2);
             body.TextWrapping = TextWrapping.Wrap;
@@ -1204,7 +1274,7 @@ namespace BalancePet
             cancel.Width = 64;
             cancel.Style = (Style)root.Resources["Btn"];
             Button ok = new Button();
-            ok.Content = "删除";
+            ok.Content = okText;
             ok.Width = 64;
             ok.Style = (Style)root.Resources["Btn"];
             ok.Foreground = new SolidColorBrush(cErr);
@@ -1232,7 +1302,7 @@ namespace BalancePet
         private void DeleteRoleAsset(string role)
         {
             if (string.IsNullOrEmpty(role)) return;
-            if (!ConfirmDeleteRole(role)) return;
+            if (!ConfirmDialog("删除角色素材", "「" + role + "」会从 roles 目录彻底删除，无法恢复。", "删除")) return;
             try
             {
                 string rootDir = System.IO.Path.GetFullPath(AppPaths.RolesDir);
@@ -1931,6 +2001,7 @@ namespace BalancePet
                 ((TextBlock)ui["SpeedVal"]).Text = ((int)cfg.GetNumber("walk", "speedPxPerSec", 72)).ToString(CultureInfo.InvariantCulture);
                 ((Slider)ui["ActionPauseSlider"]).Value = cfg.GetNumber("actions", "pauseMinSec", 14);
                 ((TextBlock)ui["ActionPauseVal"]).Text = ((int)cfg.GetNumber("actions", "pauseMinSec", 14)).ToString(CultureInfo.InvariantCulture) + "s";
+                SyncBubbleSlider("ActionDurationSlider", "ActionDurationVal", cfg.GetNumberAt("actions.durationScale", 1), "0.0x");
                 ((CheckBox)ui["AutoActionsChk"]).IsChecked = cfg.GetFlag("actions", "enabled", true);
                 ((CheckBox)ui["WalkChk"]).IsChecked = cfg.GetFlag("walk", "enabled", true);
                 ((CheckBox)ui["SnapChk"]).IsChecked = cfg.GetFlag("snap", "enabled", true);

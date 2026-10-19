@@ -219,7 +219,7 @@ namespace BalancePet
         {
             try
             {
-                string path = Path.Combine(AppPaths.Root, "pet-log.txt");
+                string path = Path.Combine(AppPaths.DataRoot, "pet-log.txt");
                 if (File.Exists(path))
                 {
                     FileInfo info = new FileInfo(path);
@@ -625,6 +625,7 @@ namespace BalancePet
             SetDefault("actions", "enabled", true);
             SetDefault("actions", "pauseMinSec", 14.0);
             SetDefault("actions", "pauseMaxSec", 45.0);
+            SetDefault("actions", "durationScale", 1.0);
             SetDefault("actions", "pool", new string[]
             {
                 "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",

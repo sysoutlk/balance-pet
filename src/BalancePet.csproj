@@ -16,6 +16,10 @@
     <Version>1.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The installer has its own Main() and is built separately by build.ps1. -->
+    <Compile Remove="Setup.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Provides net48 reference assemblies so this project builds on machines (and CI images)
          that do not have the full .NET Framework targeting pack installed. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />

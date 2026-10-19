@@ -659,6 +659,9 @@ namespace BalancePet
                 action = pool[Program.Rng.Next(pool.Count)];
             }
             DateTime now = DateTime.UtcNow;
+            double durationScale = cfg.GetNumber("actions", "durationScale", 1.0);
+            if (durationScale < 0.3) durationScale = 0.3;
+            if (durationScale > 5) durationScale = 5;
             ActionOriginX = X;
             LastActionKey = action;
             switch (action)
@@ -696,11 +699,15 @@ namespace BalancePet
                     break;
                 case "follow": Action = "follow"; ActionUntil = now.AddSeconds(12); break;
                 // 特效动作：角色自己保持小幅度姿态，真正的"内容"在特效层（粒子）
-                case "fireworks": Action = "hop"; ActionUntil = now.AddMilliseconds(600); PlayFx("fireworks", 3.2); break;
-                case "hearts": Action = "shy"; ActionUntil = now.AddMilliseconds(900); PlayFx("hearts", 2.8); break;
-                case "sparkles": Action = "nod"; ActionUntil = now.AddMilliseconds(700); PlayFx("sparkles", 2.6); break;
-                case "confetti": Action = "bounce"; ActionUntil = now.AddMilliseconds(900); PlayFx("confetti", 3.0); break;
+                case "fireworks": Action = "hop"; ActionUntil = now.AddMilliseconds(600); PlayFx("fireworks", 3.2 * durationScale); break;
+                case "hearts": Action = "shy"; ActionUntil = now.AddMilliseconds(900); PlayFx("hearts", 2.8 * durationScale); break;
+                case "sparkles": Action = "nod"; ActionUntil = now.AddMilliseconds(700); PlayFx("sparkles", 2.6 * durationScale); break;
+                case "confetti": Action = "bounce"; ActionUntil = now.AddMilliseconds(900); PlayFx("confetti", 3.0 * durationScale); break;
                 default: return;
+            }
+            if (ActionUntil != DateTime.MinValue && Math.Abs(durationScale - 1.0) > 0.001)
+            {
+                ActionUntil = now.AddTicks((long)((ActionUntil - now).Ticks * durationScale));
             }
             ActionStart = now;
         }

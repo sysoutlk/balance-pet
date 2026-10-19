@@ -24,11 +24,10 @@
 
 ## 快速开始
 
-1. 构建：双击 `build.cmd`（或下载 Release 中的 `balance-pet.exe`）。
-2. 双击 `balance-pet.exe` 启动桌宠。首次运行会在同目录生成 `pet-config.json`。
+1. 安装：双击 `balance-pet-setup.exe` 选择安装目录（默认 `%LOCALAPPDATA%\Programs\BalancePet`），自动创建桌面和开始菜单快捷方式；也可以直接用便携版 `balance-pet.exe`。
+2. 从快捷方式或 `balance-pet.exe` 启动桌宠。运行数据默认保存在 `%APPDATA%\BalancePet`，不会写到 exe 所在目录；想完全便携，在 exe 同目录放一个空的 `portable.txt`。
 3. 右键桌宠打开设置卡片，在「余额接口」里填各平台 API Key 并点「应用」。
-4. 可选：运行 `scripts\install-desktop-shortcut.ps1` 创建桌面快捷方式；
-   运行 `scripts\install-autostart.ps1` 加入开机自启。
+4. 可选：运行 `scripts\install-autostart.ps1` 加入开机自启；便携用户也可以用 `scripts\install-desktop-shortcut.ps1` 建快捷方式。
 
 ### 交互
 
@@ -167,7 +166,7 @@
 - **动作库**：26 种动作（蹦跳、转圈、打滚、点头、摇头、招手、鼓掌、伸懒腰、打哈欠、害羞、
   吓一跳、左看右看、趴一会、睡觉、踱步、探头、溜达、冲刺、跟随鼠标、打招呼、摇摆、连蹦，
   外加放烟花、比心、闪光、撒花四种特效动作），
-  设置卡片里有「随机」按钮，也可以打开「随机动作」让它自己演。
+  动作点播页可点任意动作立即播放；勾选「闲时自动动作」后，桌宠会从选中的动作池里自己演（支持全选/清空，单次时长 0.5x~3x、动作间隔可调）。
 
 ### 特效动作与装扮
 
@@ -187,18 +186,19 @@
 
 ## 目录与文件（便携式）
 
-程序是「解压即用」的便携结构：所有东西都放在 exe 同目录，卸载 = 删文件夹。
+默认安装/绿色两用：运行数据放在 `%APPDATA%\BalancePet`（不会在 exe 旁边散落文件）；在 exe 同目录放一个空的 `portable.txt` 就切回完全便携模式，所有数据回到 exe 旁边。卸载 = 删除安装目录和 `%APPDATA%\BalancePet`。
 除了 exe 与 `assets\app.ico`，**下面这些都不进仓库**（见 `.gitignore`）：
 
 | 路径 | 是什么 | 是否入库 |
 | --- | --- | --- |
-| `balance-pet.exe` | 构建产物（`build.cmd` 生成） | 否 |
-| `pet-config.json` | 你的配置与 API Key（DPAPI 加密，只限当前用户解密） | 否 |
-| `pet-state.json` | 用量历史（本地统计用） | 否 |
-| `roles\` | 角色素材（立绘/GIF/序列帧/雪碧图） | 否，版权自理 |
-| `props\` | 装扮素材（帽子等挂件） | 否，版权自理 |
-| `quips.json` | 可选台词包，启动时自动合并 | 否 |
-| `pet-log.txt` / `*-report.txt` | 诊断日志与自检/冒烟报告 | 否 |
+| `balance-pet.exe` / `balance-pet-setup.exe` | 程序与安装包（`build.cmd` 生成） | 否 |
+| `%APPDATA%\BalancePet\pet-config.json` | 你的配置与 API Key（DPAPI 加密，只限当前用户解密） | 否 |
+| `%APPDATA%\BalancePet\pet-state.json` | 用量历史（本地统计用） | 否 |
+| `%APPDATA%\BalancePet\roles\` | 角色素材（立绘/GIF/序列帧/雪碧图） | 否，版权自理 |
+| `%APPDATA%\BalancePet\props\` | 装扮素材（帽子等挂件） | 否，版权自理 |
+| `%APPDATA%\BalancePet\quips.json` | 可选台词包，启动时自动合并 | 否 |
+| `%APPDATA%\BalancePet\pet-log.txt` / `*-report.txt` | 诊断日志与自检/冒烟报告 | 否 |
+| `portable.txt`（exe 旁边） | 放了它就切到完全便携模式，以上数据全部改放 exe 旁边 | 否 |
 
 ## 隐私与版权
 
@@ -222,6 +222,7 @@
 | `primaryProvider` | 气泡主平台（`deepseek` / `moonshot` / `siliconflow` / `openrouter` / `qwen` / `doubao` / … / `custom`） |
 | `providers.<id>.on` / `providers.<id>.apiKey` | 各平台开关与 Key（DPAPI 加密后存储） |
 | `walk.*` `snap.*` `throw.*` `sleep.*` `actions.*` `quips.*` | 行为、物理与台词配置 |
+| `actions.pool` / `actions.durationScale` | 闲时自动播放的动作池 / 单次时长倍率（0.5~3） |
 | `snap.distancePx` | 松手后离屏幕边多近才贴边吸附（默认 56px，行为页「吸附距离」可调） |
 | `frames.activePerSecond` / `.idlePerSecond` | 动作/空闲帧率（上限自动取显示器刷新率） |
 | `edgeHide.sliverRatio` | 贴边收起来后露出多少（按尺寸取比例，默认 0.32） |
