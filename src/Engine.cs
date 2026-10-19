@@ -912,8 +912,14 @@ namespace BalancePet
 
         private void TogglePanel(PetWindow pet)
         {
-            if (panel.IsVisible && panel.ActivePet == pet) panel.HidePanel();
-            else panel.ShowFor(pet);
+            // 面板开着时，右键任意一只桌宠都收起面板。这样贴边只露一条、
+            // 或者面板对应的那只已经被循环涨落换掉时，也不会出现关不掉的情况。
+            if (panel.IsVisible)
+            {
+                panel.HidePanel();
+                return;
+            }
+            if (pet != null) panel.ShowFor(pet);
         }
 
         public void PerformAction(PetWindow pet, string key, bool speak)
