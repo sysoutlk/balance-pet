@@ -86,7 +86,7 @@ namespace BalancePet
 
     internal static class Providers
     {
-        public static string Version = "1.0.0";
+        public static string Version = "1.1.0";
 
         /// <summary>这个平台的计价是否分标准/优惠时段（错峰优惠）：只有 DeepSeek 是。</summary>
         public static bool HasPeakPricing(string id)
