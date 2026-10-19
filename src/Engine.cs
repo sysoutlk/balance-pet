@@ -316,11 +316,9 @@ namespace BalancePet
             }
             if (now >= pet.NextActionAt && cfg.GetFlag("actions", "enabled", true))
             {
+                // 调设置/看预览时先不自动演，免得动作和气泡打断操作。
+                if (panel != null && panel.IsVisible) return;
                 pet.StartAction("random");
-                if (Program.Rng.NextDouble() < 0.35)
-                {
-                    ShowBubbleText(pet, QuipFor(pet.LastActionKey));
-                }
             }
         }
 

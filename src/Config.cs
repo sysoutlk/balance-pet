@@ -624,7 +624,15 @@ namespace BalancePet
             }
             SetDefault("actions", "enabled", true);
             SetDefault("actions", "pauseMinSec", 14.0);
-            SetDefault("actions", "pauseMaxSec", 45.0);
+            SetDefault("actions", "pauseMaxSec", 25.0);
+            // 动作间隔上限从 2.6 倍收紧到 1.75 倍：由滑杆写出的旧比例一并迁移。
+            double pauseMin = GetNumberAt("actions.pauseMinSec", 14);
+            double pauseMax = GetNumberAt("actions.pauseMaxSec", 25);
+            if (pauseMin > 0 && Math.Abs(pauseMax - Math.Floor(pauseMin * 2.6)) <= 1)
+            {
+                SetAt("actions.pauseMaxSec", Math.Floor(pauseMin * 1.75));
+                Save();
+            }
             SetDefault("actions", "durationScale", 1.0);
             SetDefault("actions", "pool", new string[]
             {
