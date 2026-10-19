@@ -580,7 +580,8 @@ namespace BalancePet
             Button randomButton = new Button();
             randomButton.Content = "随机";
             randomButton.Style = (Style)root.Resources["Accent"];
-            randomButton.Click += delegate { engine.PerformAction(ActivePet, "random", true); };
+            // 动作点播只演示动作，不弹台词气泡（气泡留给自动动作、提醒和点击查看）。
+            randomButton.Click += delegate { engine.PerformAction(ActivePet, "random", false); };
             ((UniformGrid)ui["ActionGrid"]).Children.Add(randomButton);
             foreach (string key in PetWindow.ActionKeys)
             {
@@ -588,7 +589,7 @@ namespace BalancePet
                 button.Content = Engine.ActionName(key);
                 button.Style = (Style)root.Resources["Btn"];
                 string action = key;
-                button.Click += delegate { engine.PerformAction(ActivePet, action, true); };
+                button.Click += delegate { engine.PerformAction(ActivePet, action, false); };
                 ((UniformGrid)ui["ActionGrid"]).Children.Add(button);
             }
             BuildRoleButtons();
