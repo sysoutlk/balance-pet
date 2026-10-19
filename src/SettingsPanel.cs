@@ -526,11 +526,14 @@ namespace BalancePet
           <TextBox x:Name='CloneMinBox' Style='{StaticResource TxtBox}' Width='52' Margin='8,0,0,0'/>
           <TextBlock Style='{StaticResource Lbl}' Text='只（涨到上限后慢慢收回，再涨回去）' Margin='5,0,0,0' FontSize='10'/>
         </DockPanel>
-        <DockPanel Margin='0,0,0,6'>
+        <Grid Margin='0,2,0,6'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='86'/>
+          </Grid.ColumnDefinitions>
           <TextBlock Style='{StaticResource Lbl}' Text='分裂间隔'/>
-          <TextBox x:Name='ClonePauseBox' Style='{StaticResource TxtBox}' Width='56' Margin='8,0,0,0'/>
-          <TextBlock Style='{StaticResource Lbl}' Text='秒起（实际为 1~2.5 倍之间的随机）' Margin='5,0,0,0' FontSize='10'/>
-        </DockPanel>
+          <Slider x:Name='ClonePauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='10' Maximum='300'/>
+          <TextBlock x:Name='ClonePauseVal' Grid.Column='2' Style='{StaticResource Val}' HorizontalAlignment='Right' Text='60~180s' ToolTip='实际间隔在两个数值之间随机'/>
+        </Grid>
         <DockPanel Margin='2,4,0,0'>
           <StackPanel DockPanel.Dock='Right' Orientation='Horizontal' VerticalAlignment='Center'>
             <Button x:Name='CloneAddBtn' Content='来一个' Width='72' Height='28' Margin='0,0,6,0' Style='{StaticResource Btn}'/>
@@ -645,7 +648,7 @@ namespace BalancePet
                 "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","BubbleShadowVal",
                 "PickThemeBtn","MixAddBtn",
                 "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
-                ,"ClonePauseBox"
+                ,"ClonePauseSlider","ClonePauseVal"
                 ,"CloneCycleChk","CloneMinBox"
             })
             {
@@ -882,7 +885,16 @@ namespace BalancePet
             previewTimer.Start();
             BindNumberBox("EdgeDelayBox", "edgeHide.delaySec");
             BindNumberBox("CloneMaxBox", "clones.max");
-            BindNumberBox("ClonePauseBox", "clones.pauseMinSec");
+            ((Slider)ui["ClonePauseSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                int min = (int)Math.Round(e.NewValue);
+                int max = (int)Math.Round(min * 2.5);
+                cfg.SetAt("clones.pauseMinSec", min);
+                cfg.SetAt("clones.pauseMaxSec", max);
+                cfg.Save();
+                ((TextBlock)ui["ClonePauseVal"]).Text = min.ToString(CultureInfo.InvariantCulture) + "~" + max.ToString(CultureInfo.InvariantCulture) + "s";
+            };
             BindSwitch("CloneCycleChk", "clones", "cycle");
             BindNumberBox("CloneMinBox", "clones.min");
             BindField("ProxyBox", "network.proxy");
@@ -1112,11 +1124,7 @@ namespace BalancePet
             double value;
             if (!double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value < 0) value = 0;
             cfg.SetAt(path, value);
-            if (path == "clones.pauseMinSec")
-            {
-                // 分裂间隔：填的是最小值，实际在 1~2.5 倍之间随机。
-                cfg.SetAt("clones.pauseMaxSec", Math.Round(value * 2.5));
-            }
+
             cfg.Save();
             engine.Data.Refresh();
             Update();
@@ -2350,7 +2358,10 @@ namespace BalancePet
                 BuildAlertRows();
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
-                ((TextBox)ui["ClonePauseBox"]).Text = ((int)cfg.GetNumberAt("clones.pauseMinSec", 60)).ToString(CultureInfo.InvariantCulture);
+                int clonePauseMin = (int)cfg.GetNumberAt("clones.pauseMinSec", 60);
+                int clonePauseMax = (int)cfg.GetNumberAt("clones.pauseMaxSec", clonePauseMin * 2.5);
+                ((Slider)ui["ClonePauseSlider"]).Value = Math.Max(10, Math.Min(300, clonePauseMin));
+                ((TextBlock)ui["ClonePauseVal"]).Text = clonePauseMin.ToString(CultureInfo.InvariantCulture) + "~" + clonePauseMax.ToString(CultureInfo.InvariantCulture) + "s";
                 ((CheckBox)ui["CloneCycleChk"]).IsChecked = cfg.GetFlagAt("clones.cycle", true);
                 ((TextBox)ui["CloneMinBox"]).Text = ((int)engine.CloneFloor()).ToString(CultureInfo.InvariantCulture);
                 ((TextBox)ui["ProxyBox"]).Text = cfg.GetStringAt("network.proxy", "");
