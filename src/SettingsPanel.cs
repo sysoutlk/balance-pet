@@ -360,8 +360,7 @@ namespace BalancePet
           <TextBlock x:Name='IdleFpsVal' Grid.Column='2' Style='{StaticResource Val}' Text='4 fps'/>
         </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
-        <UniformGrid x:Name='ActionGrid' Columns='4'/>
-        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='闲时自动动作' Margin='0,7,0,0'/>
+        <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='闲时自动动作' Margin='0,0,0,0'/>
         <DockPanel Margin='0,6,0,2'>
           <Button x:Name='ActionPoolAllBtn' Content='全选' Width='46' Style='{StaticResource Mini}'/>
           <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='46' Style='{StaticResource Mini}'/>
@@ -383,6 +382,21 @@ namespace BalancePet
           <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
           <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
         </Grid>
+        <Border Margin='0,8,0,0' Height='160' CornerRadius='10' Background='__DESK__' ClipToBounds='True'>
+          <Grid>
+            <ContentControl x:Name='ActionPreviewHost' HorizontalAlignment='Center' VerticalAlignment='Center' RenderTransformOrigin='0.5,1'>
+              <ContentControl.RenderTransform>
+                <TransformGroup>
+                  <ScaleTransform x:Name='ActionPreviewScale'/>
+                  <RotateTransform x:Name='ActionPreviewRotate'/>
+                  <TranslateTransform x:Name='ActionPreviewMove'/>
+                </TransformGroup>
+              </ContentControl.RenderTransform>
+            </ContentControl>
+            <TextBlock x:Name='ActionPreviewLabel' Text='预览：点击下方动作' FontSize='10' Foreground='__MUTED__' Margin='10,0,0,8' VerticalAlignment='Bottom' HorizontalAlignment='Left'/>
+          </Grid>
+        </Border>
+        <UniformGrid x:Name='ActionGrid' Columns='4' Margin='0,8,0,0'/>
         <TextBlock Style='{StaticResource Sect}' Text='外观'/>
         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,0,0,4'>
           <Button x:Name='RoleEditBtn' Content='编辑' Width='56' Style='{StaticResource Mini}' ToolTip='管理模式：添加 / 删除角色素材'/>
@@ -527,6 +541,16 @@ namespace BalancePet
         private readonly Dictionary<string, TextBlock> statusById = new Dictionary<string, TextBlock>();
         private readonly Dictionary<string, PasswordBox> keyBoxes = new Dictionary<string, PasswordBox>();
         private readonly DispatcherTimer previewTimer = new DispatcherTimer();
+        private readonly DispatcherTimer actionPreviewTimer = new DispatcherTimer();
+        private DateTime actionPreviewStart;
+        private string actionPreviewKey = "";
+        private double actionPreviewSeconds = 1.0;
+        private ContentControl actionPreviewHost;
+        private TextBlock actionPreviewLabel;
+        private ScaleTransform actionPreviewScale;
+        private RotateTransform actionPreviewRotate;
+        private TranslateTransform actionPreviewMove;
+        private string actionPreviewRole = "";
         private double previewPhase;
         private bool updating;
         private bool roleEditMode;   // 外观页「编辑」开关：只有打开时才显示添加/删除
@@ -570,13 +594,23 @@ namespace BalancePet
             string accent = cfg.GetStringAt("bubble.color1", "#4B6BFB");
             if (string.IsNullOrEmpty(accent) || !accent.StartsWith("#", StringComparison.Ordinal)) accent = "#4B6BFB";
             root = (Window)XamlReader.Parse(PanelXaml(accent));
+            actionPreviewHost = (ContentControl)root.FindName("ActionPreviewHost");
+            actionPreviewLabel = (TextBlock)root.FindName("ActionPreviewLabel");
+            actionPreviewScale = (ScaleTransform)root.FindName("ActionPreviewScale");
+            actionPreviewRotate = (RotateTransform)root.FindName("ActionPreviewRotate");
+            actionPreviewMove = (TranslateTransform)root.FindName("ActionPreviewMove");
+            actionPreviewRole = "";
+            actionPreviewTimer.Stop();
+            actionPreviewTimer.Interval = TimeSpan.FromMilliseconds(33);
+            actionPreviewTimer.Tick -= OnActionPreviewTick;
+            actionPreviewTimer.Tick += OnActionPreviewTick;
             panelShadowLayer = (Grid)root.FindName("PanelShadowLayer");
             panelShadowShape = (Border)root.FindName("PanelShadowShape");
             panelCard = (Border)root.FindName("PanelCard");
             if (panelCard != null) panelCard.SizeChanged += delegate { UpdatePanelShadowClip(); };
             foreach (string name in new string[]
             {
-                "Header","TitleText","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
+                "Header","TitleText","SubText","ActionGrid","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","ScaleSlider","ScaleVal",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
@@ -608,8 +642,9 @@ namespace BalancePet
             Button randomButton = new Button();
             randomButton.Content = "随机";
             randomButton.Style = (Style)root.Resources["Accent"];
-            // 动作点播只演示动作，不弹台词气泡（气泡留给自动动作、提醒和点击查看）。
-            randomButton.Click += delegate { engine.PerformAction(ActivePet, "random", false); };
+            // 动作按钮只做预览，不驱动真实的桌宠。
+            randomButton.ToolTip = "从动作池随机预览一个";
+            randomButton.Click += delegate { StartActionPreview("random"); };
             ((UniformGrid)ui["ActionGrid"]).Children.Add(randomButton);
             foreach (string key in PetWindow.ActionKeys)
             {
@@ -617,7 +652,8 @@ namespace BalancePet
                 button.Content = Engine.ActionName(key);
                 button.Style = (Style)root.Resources["Btn"];
                 string action = key;
-                button.Click += delegate { engine.PerformAction(ActivePet, action, false); };
+                button.ToolTip = "预览这个动作";
+                button.Click += delegate { StartActionPreview(action); };
                 ((UniformGrid)ui["ActionGrid"]).Children.Add(button);
             }
             BuildActionPoolChips();
@@ -1070,6 +1106,221 @@ namespace BalancePet
         }
 
         // ------------------------------------------------------------ 角色
+        // ------------------------------------------------------------ 动作预览
+        private void StartActionPreview(string key)
+        {
+            if (key == "random")
+            {
+                List<string> pool = cfg.GetStrings("actions", "pool");
+                if (pool.Count == 0) { SetActionPreviewLabel("动作池是空的"); return; }
+                key = pool[Program.Rng.Next(pool.Count)];
+            }
+            actionPreviewKey = key;
+            actionPreviewStart = DateTime.UtcNow;
+            double scale = cfg.GetNumber("actions", "durationScale", 1.0);
+            if (scale < 0.3) scale = 0.3;
+            if (scale > 5) scale = 5;
+            actionPreviewSeconds = ActionPreviewSeconds(key) * scale;
+            ResetActionPreviewTransforms();
+            RefreshActionPreviewVisual();
+            SetActionPreviewLabel("预览：" + Engine.ActionName(key));
+            actionPreviewTimer.Start();
+        }
+
+        private void SetActionPreviewLabel(string text)
+        {
+            if (actionPreviewLabel != null) actionPreviewLabel.Text = text;
+        }
+
+        private void OnActionPreviewTick(object sender, EventArgs e)
+        {
+            if (actionPreviewHost == null) return;
+            double elapsed = (DateTime.UtcNow - actionPreviewStart).TotalSeconds;
+            double progress = actionPreviewSeconds <= 0 ? 1 : elapsed / actionPreviewSeconds;
+            if (progress >= 1)
+            {
+                actionPreviewTimer.Stop();
+                ResetActionPreviewTransforms();
+                return;
+            }
+            ApplyActionPreviewFrame(actionPreviewKey, Math.Max(0, Math.Min(1, progress)), elapsed);
+        }
+
+        private void ResetActionPreviewTransforms()
+        {
+            if (actionPreviewScale == null) return;
+            actionPreviewScale.ScaleX = 1;
+            actionPreviewScale.ScaleY = 1;
+            actionPreviewRotate.Angle = 0;
+            actionPreviewMove.X = 0;
+            actionPreviewMove.Y = 0;
+        }
+
+        private void ApplyActionPreviewFrame(string key, double p, double t)
+        {
+            ResetActionPreviewTransforms();
+            switch (key)
+            {
+                case "hop": actionPreviewMove.Y = -30 * Math.Sin(Math.PI * p); break;
+                case "bounce": actionPreviewMove.Y = -26 * Math.Abs(Math.Sin(3 * Math.PI * p)); break;
+                case "spin": actionPreviewRotate.Angle = 360 * p; break;
+                case "roll": actionPreviewRotate.Angle = -720 * p; actionPreviewMove.Y = -14 * Math.Sin(Math.PI * p); break;
+                case "wobble": actionPreviewRotate.Angle = 14 * Math.Sin(6 * Math.PI * p); break;
+                case "nod": actionPreviewMove.Y = -6 * Math.Abs(Math.Sin(3 * Math.PI * p)); actionPreviewRotate.Angle = 3 * Math.Sin(6 * Math.PI * p); break;
+                case "shake": actionPreviewMove.X = 7 * Math.Sin(6 * Math.PI * p); actionPreviewRotate.Angle = 4 * Math.Sin(6 * Math.PI * p); break;
+                case "wave": actionPreviewRotate.Angle = 11 * Math.Sin(8 * Math.PI * p); actionPreviewMove.Y = -4 * Math.Abs(Math.Sin(4 * Math.PI * p)); break;
+                case "clap":
+                    {
+                        double k = Math.Abs(Math.Sin(8 * Math.PI * p));
+                        actionPreviewScale.ScaleX = 1 + 0.12 * k;
+                        actionPreviewMove.Y = -3 * k;
+                        break;
+                    }
+                case "stretch":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        actionPreviewScale.ScaleY = 1 + 0.18 * k;
+                        actionPreviewScale.ScaleX = 1 - 0.10 * k;
+                        break;
+                    }
+                case "yawn":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        actionPreviewScale.ScaleY = 1 + 0.22 * k;
+                        actionPreviewMove.Y = -5 * k;
+                        break;
+                    }
+                case "shy":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        actionPreviewScale.ScaleY = 1 - 0.14 * k;
+                        actionPreviewRotate.Angle = -6 * k;
+                        actionPreviewMove.Y = 2 * Math.Sin(2 * Math.PI * p);
+                        break;
+                    }
+                case "startle":
+                    {
+                        double k = Math.Sin(Math.PI * p);
+                        actionPreviewScale.ScaleX = 1 + 0.14 * k;
+                        actionPreviewScale.ScaleY = 1 + 0.14 * k;
+                        actionPreviewMove.Y = -18 * k;
+                        actionPreviewRotate.Angle = 3 * Math.Sin(10 * Math.PI * p);
+                        break;
+                    }
+                case "lie":
+                case "sleep":
+                    {
+                        double down = Math.Min(1, p / 0.15);
+                        double back = p > 0.85 ? Math.Min(1, (p - 0.85) / 0.15) : 0;
+                        double amount = Math.Max(0, down - back);
+                        actionPreviewRotate.Angle = 76 * amount;
+                        actionPreviewMove.Y = 6 * amount + Math.Sin(t * 1.6) * 1.2 * amount;
+                        break;
+                    }
+                case "look":
+                    {
+                        bool left = (p > 0.2 && p < 0.5) || (p > 0.7 && p < 0.9);
+                        actionPreviewScale.ScaleX = left ? -1 : 1;
+                        break;
+                    }
+                case "greet":
+                    if (p < 0.4)
+                    {
+                        actionPreviewMove.Y = -24 * Math.Sin(Math.PI * (p / 0.4));
+                    }
+                    else
+                    {
+                        double q = (p - 0.4) / 0.6;
+                        actionPreviewRotate.Angle = 11 * Math.Sin(8 * Math.PI * q);
+                        actionPreviewMove.Y = -4 * Math.Abs(Math.Sin(4 * Math.PI * q));
+                    }
+                    break;
+                case "pace": actionPreviewMove.X = 90 * Math.Sin(2 * Math.PI * p); break;
+                case "peek":
+                    {
+                        double out1 = Math.Min(1, p / 0.35);
+                        double back2 = p > 0.65 ? Math.Min(1, (p - 0.65) / 0.35) : 0;
+                        double amount = Math.Max(0, out1 - back2);
+                        actionPreviewMove.X = -70 * amount;
+                        actionPreviewMove.Y = -2 * Math.Abs(Math.Sin(8 * Math.PI * p)) * (1 - amount);
+                        break;
+                    }
+                case "stroll": actionPreviewMove.X = 60 * Math.Sin(2 * Math.PI * p); actionPreviewMove.Y = -2 * Math.Abs(Math.Sin(8 * Math.PI * p)); break;
+                case "dash": actionPreviewMove.X = (p * 2 - 1) * 110; break;
+                case "follow": actionPreviewMove.X = 40 * Math.Sin(2 * Math.PI * p); break;
+                case "fireworks": actionPreviewMove.Y = -30 * Math.Sin(Math.PI * p); break;
+                case "hearts": actionPreviewScale.ScaleY = 1 - 0.14 * Math.Sin(Math.PI * p); actionPreviewRotate.Angle = -6 * Math.Sin(Math.PI * p); break;
+                case "sparkles": actionPreviewRotate.Angle = 14 * Math.Sin(6 * Math.PI * p); break;
+                case "confetti": actionPreviewMove.Y = -26 * Math.Abs(Math.Sin(3 * Math.PI * p)); break;
+            }
+        }
+
+        private static double ActionPreviewSeconds(string key)
+        {
+            switch (key)
+            {
+                case "hop": return 0.48;
+                case "bounce": return 0.95;
+                case "spin": return 0.68;
+                case "roll": return 1.2;
+                case "wobble": return 1.1;
+                case "nod": return 1.2;
+                case "shake": return 0.95;
+                case "wave": return 1.3;
+                case "clap": return 0.95;
+                case "stretch": return 0.95;
+                case "yawn": return 1.7;
+                case "shy": return 1.5;
+                case "startle": return 0.6;
+                case "look": return 1.9;
+                case "greet": return 1.5;
+                case "lie": return 4.0;
+                case "sleep": return 4.0;
+                case "pace": return 2.6;
+                case "peek": return 3.0;
+                case "stroll": return 2.2;
+                case "dash": return 1.4;
+                case "follow": return 2.2;
+                case "fireworks": return 1.4;
+                case "hearts": return 1.2;
+                case "sparkles": return 1.1;
+                case "confetti": return 1.2;
+                default: return 1.0;
+            }
+        }
+
+        private void RefreshActionPreviewVisual()
+        {
+            if (actionPreviewHost == null) return;
+            string role = cfg.GetString("", "role", "");
+            if (role == actionPreviewRole && actionPreviewHost.Content != null) return;
+            actionPreviewRole = role;
+            actionPreviewHost.Content = null;
+            try
+            {
+                string file = AppPaths.RoleThumbFile(role);
+                if (!string.IsNullOrEmpty(file))
+                {
+                    BitmapImage bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(file);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.DecodePixelWidth = 220;
+                    bitmap.EndInit();
+                    Image image = new Image();
+                    image.Source = bitmap;
+                    image.Stretch = Stretch.Uniform;
+                    image.Height = 110;
+                    actionPreviewHost.Content = image;
+                    return;
+                }
+            }
+            catch
+            {
+            }
+            actionPreviewHost.Content = Mascot.CreateThumbnail(110, 110);
+        }
+
         /// <summary>动作点播页的「闲时自动播放池」：点动作名切换是否参与自动播放。</summary>
         private void BuildActionPoolChips()
         {
@@ -2060,6 +2311,7 @@ namespace BalancePet
                 MarkPalette("Color1Panel", cfg.GetStringAt("bubble.color1", "#4B6BFB"));
                 MarkMixPalette();
                 UpdatePreview();
+            RefreshActionPreviewVisual();
                 BuildAlertRows();
                 ((TextBox)ui["EdgeDelayBox"]).Text = cfg.GetNumberAt("edgeHide.delaySec", 10).ToString("0.#", CultureInfo.InvariantCulture);
                 ((TextBox)ui["CloneMaxBox"]).Text = ((int)engine.CloneCap()).ToString(CultureInfo.InvariantCulture);
