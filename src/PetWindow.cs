@@ -541,7 +541,7 @@ namespace BalancePet
         {
             ScreenArea area = ScreenArea.ForPoint(X + Width / 2, Y + Height / 2);
             double margin = cfg.GetNumber("snap", "marginPx", 6);
-            double distance = cfg.GetNumber("snap", "distancePx", 140);
+            double distance = cfg.GetNumber("snap", "distancePx", 56);
             string best = "";
             double bestGap = double.MaxValue;
             double gapLeft = X - area.Left;
@@ -596,7 +596,7 @@ namespace BalancePet
             double margin = cfg.GetNumber("walk", "marginPx", 12);
             // Keep normal strolls out of the snap zone: only a user drag (or a throw) should
             // park the pet against an edge, otherwise it would tuck itself in on its own.
-            double snapDistance = cfg.GetFlag("snap", "enabled", true) ? cfg.GetNumber("snap", "distancePx", 140) : 0;
+            double snapDistance = cfg.GetFlag("snap", "enabled", true) ? cfg.GetNumber("snap", "distancePx", 56) : 0;
             margin += snapDistance;
             double minX = area.Left + margin;
             double maxX = Math.Max(minX, area.Right - Width - margin);

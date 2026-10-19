@@ -417,6 +417,14 @@ namespace BalancePet
           <Slider x:Name='SliverSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.05' Maximum='0.8'/>
           <TextBlock x:Name='SliverVal' Grid.Column='2' Style='{StaticResource Val}' Text='32%'/>
         </Grid>
+        <Grid Margin='0,4,0,0'>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Style='{StaticResource Lbl}' Text='吸附距离'/>
+          <Slider x:Name='SnapDistanceSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='8' Maximum='200'/>
+          <TextBlock x:Name='SnapDistanceVal' Grid.Column='2' Style='{StaticResource Val}' Text='56 px'/>
+        </Grid>
         <Grid Margin='0,6,0,0'>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
@@ -549,7 +557,7 @@ namespace BalancePet
             foreach (string name in new string[]
             {
                 "Header","TitleText","CloseBtn","SubText","ActionGrid","AutoActionsChk","RolePanel","ScaleSlider","ScaleVal",
-                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
+                "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
                 "ActionPauseSlider","ActionPauseVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
@@ -655,6 +663,13 @@ namespace BalancePet
             BindSwitch("AutoActionsChk", "actions", "enabled");
             BindSwitch("WalkChk", "walk", "enabled");
             BindSwitch("SnapChk", "snap", "enabled");
+            ((Slider)ui["SnapDistanceSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
+            {
+                if (updating) return;
+                cfg.SetAt("snap.distancePx", Math.Round(e.NewValue));
+                cfg.Save();
+                UpdateLabel("SnapDistanceVal", Math.Round(e.NewValue), "0 px");
+            };
             BindSwitch("SleepChk", "sleep", "enabled");
             BindSwitch("QuipsChk", "alert", "quipsOn");
             BindSwitch("CollideChk", "pets", "collide");
@@ -1717,6 +1732,7 @@ namespace BalancePet
                 ((CheckBox)ui["AutoActionsChk"]).IsChecked = cfg.GetFlag("actions", "enabled", true);
                 ((CheckBox)ui["WalkChk"]).IsChecked = cfg.GetFlag("walk", "enabled", true);
                 ((CheckBox)ui["SnapChk"]).IsChecked = cfg.GetFlag("snap", "enabled", true);
+                SyncBubbleSlider("SnapDistanceSlider", "SnapDistanceVal", cfg.GetNumberAt("snap.distancePx", 56), "0 px");
                 ((CheckBox)ui["SleepChk"]).IsChecked = cfg.GetFlag("sleep", "enabled", true);
                 ((CheckBox)ui["QuipsChk"]).IsChecked = cfg.GetFlag("alert", "quipsOn", true);
                 ((CheckBox)ui["CollideChk"]).IsChecked = cfg.GetFlagAt("pets.collide", true);

@@ -220,6 +220,7 @@
 | `primaryProvider` | 气泡主平台（`deepseek` / `moonshot` / `siliconflow` / `openrouter` / `qwen` / `doubao` / … / `custom`） |
 | `providers.<id>.on` / `providers.<id>.apiKey` | 各平台开关与 Key（DPAPI 加密后存储） |
 | `walk.*` `snap.*` `throw.*` `sleep.*` `actions.*` `quips.*` | 行为、物理与台词配置 |
+| `snap.distancePx` | 松手后离屏幕边多近才贴边吸附（默认 56px，行为页「吸附距离」可调） |
 | `frames.activePerSecond` / `.idlePerSecond` | 动作/空闲帧率（上限自动取显示器刷新率） |
 | `edgeHide.sliverRatio` | 贴边收起来后露出多少（按尺寸取比例，默认 0.32） |
 | `fx.enabled` | 特效层总开关（放烟花 / 比心 / 闪光 / 撒花） |
