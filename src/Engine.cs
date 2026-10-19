@@ -909,10 +909,12 @@ namespace BalancePet
 
         private double SplitInterval()
         {
-            double min = cfg.GetNumberAt("clones.pauseMinSec", 240);
-            double max = cfg.GetNumberAt("clones.pauseMaxSec", 600);
-            if (max <= min) max = min + 60;
-            return min + Program.Rng.NextDouble() * (max - min);
+            double seconds = cfg.GetNumberAt("clones.pauseMinSec", 60);
+            if (seconds < 5) seconds = 5;
+            double jitter = cfg.GetNumberAt("clones.jitter", 0.5);
+            if (jitter < 0) jitter = 0;
+            if (jitter > 3) jitter = 3;
+            return seconds * (1 + Program.Rng.NextDouble() * jitter);
         }
 
         public void AddClone()
