@@ -739,7 +739,7 @@ namespace BalancePet
                 if (updating) return;
                 int min = (int)e.NewValue;
                 cfg.Set("actions", "pauseMinSec", min);
-                cfg.Set("actions", "pauseMaxSec", (int)(min * 2.6));
+                cfg.Set("actions", "pauseMaxSec", (int)(min * 1.75));
                 ((TextBlock)ui["ActionPauseVal"]).Text = min.ToString(CultureInfo.InvariantCulture) + "s";
                 cfg.Save();
             };
