@@ -636,6 +636,7 @@ namespace BalancePet
 
         public PetWindow ActivePet;
         public bool Pinned;
+        public DateTime LastHiddenAt = DateTime.MinValue;
 
         public SettingsPanel(Config config, Engine engineRef)
         {
@@ -2379,7 +2380,11 @@ namespace BalancePet
 
         public void HidePanel()
         {
-            if (root != null) root.Visibility = Visibility.Hidden;
+            if (root != null)
+            {
+                if (root.Visibility == Visibility.Visible) LastHiddenAt = DateTime.UtcNow;
+                root.Visibility = Visibility.Hidden;
+            }
         }
 
         public new bool IsVisible
