@@ -25,10 +25,18 @@ namespace BalancePet
         private readonly SettingsPanel panel;
         private DateTime lastTick = DateTime.UtcNow;
         private DateTime lastPositionSave = DateTime.UtcNow;
-        private DateTime nextSplitAt = DateTime.MinValue;
-        private DateTime nextShrinkAt = DateTime.MinValue;
+        private DateTime nextCloneStepAt = DateTime.MinValue;
+        private bool cloneFalling;
         private DateTime demoActionAt = DateTime.MinValue;
         private DateTime lastBumpQuipAt = DateTime.MinValue;
+        private sealed class SuspendedPet
+        {
+            public string Role;
+            public double Scale;
+            public double X;
+            public double Y;
+        }
+        private readonly List<SuspendedPet> suspended = new List<SuspendedPet>();
         private bool? lastPeak;
         private readonly HashSet<string> balanceLatched = new HashSet<string>();
         private readonly HashSet<string> budgetLatched = new HashSet<string>();
@@ -236,17 +244,14 @@ namespace BalancePet
                 return;
             }
 
-            if (!string.IsNullOrEmpty(pet.Action))
-            {
-                double total = (pet.ActionUntil - pet.ActionStart).TotalSeconds;
-                double p = total <= 0 ? 1 : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
-                AnimateAction(pet, now, p);
-                if (now >= pet.ActionUntil) EndAction(pet);
-                return;
-            }
-
             if (pet.Mode == "walk")
             {
+                // 关掉「持续散步」后立刻停在原地；已经走完的路不再继续。
+                if (!cfg.GetFlag("walk", "enabled", true) || sleeping)
+                {
+                    pet.SetIdle();
+                    return;
+                }
                 double dx = pet.TargetX - pet.X;
                 double dy = pet.TargetY - pet.Y;
                 double distance = Math.Sqrt(dx * dx + dy * dy);
@@ -266,10 +271,47 @@ namespace BalancePet
                 pet.X += Math.Cos(heading) * step;
                 pet.Y += Math.Sin(heading) * step;
                 if (Math.Abs(dx) > 6) pet.SetFacing(dx > 0 ? 1 : -1);
-                double rate = pet.SpeedFactor >= 2 ? 16 : 9;
-                pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
-                if (pet.SpeedFactor >= 2) pet.Spin.Angle = pet.Facing * 7;
+
+                if (!string.IsNullOrEmpty(pet.Action))
+                {
+                    // 散步途中叠加动作：身体继续前进，姿态动画照常播放。
+                    double total = (pet.ActionUntil - pet.ActionStart).TotalSeconds;
+                    double p = total <= 0 ? 1 : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
+                    AnimateAction(pet, now, p);
+                    if (now >= pet.ActionUntil) EndAction(pet, now, true);
+                }
+                else
+                {
+                    double rate = pet.SpeedFactor >= 2 ? 16 : 9;
+                    pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
+                    if (pet.SpeedFactor >= 2) pet.Spin.Angle = pet.Facing * 7;
+                    if (now >= pet.NextActionAt && cfg.GetFlag("actions", "enabled", true)
+                        && !(panel != null && panel.IsVisible))
+                    {
+                        string walkingAction = PickWalkingAction();
+                        if (string.IsNullOrEmpty(walkingAction))
+                        {
+                            // 动作池为空或全是原地动作：别每帧重试。
+                            pet.NextActionAt = now.AddSeconds(30);
+                        }
+                        else
+                        {
+                            pet.NextActionAt = DateTime.MaxValue;
+                            Log.Write("walk action " + walkingAction);
+                            pet.StartAction(walkingAction);
+                        }
+                    }
+                }
                 pet.ApplyPosition();
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(pet.Action))
+            {
+                double total = (pet.ActionUntil - pet.ActionStart).TotalSeconds;
+                double p = total <= 0 ? 1 : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
+                AnimateAction(pet, now, p);
+                if (now >= pet.ActionUntil) EndAction(pet, now, false);
                 return;
             }
 
@@ -698,17 +740,61 @@ namespace BalancePet
             }
         }
 
-        private static void EndAction(PetWindow pet)
+        private void ScheduleNextAction(PetWindow pet, DateTime now)
         {
+            double baseSec = cfg.GetNumber("actions", "pauseMinSec", 14);
+            double jitter = cfg.GetNumber("actions", "pauseJitter", 0.5);
+            if (baseSec < 3) baseSec = 3;
+            if (jitter < 0) jitter = 0;
+            if (jitter > 3) jitter = 3;
+            double wait = baseSec * (1 + Program.Rng.NextDouble() * jitter);
+            if (wait < 3) wait = 3;
+            pet.NextActionAt = now.AddSeconds(wait);
+        }
+
+        /// <summary>散步时只叠加不抢位置的姿态动作；pace/peek/follow 这类会改坐标的动作
+        /// 仍然留给原地表演，避免和行走路径打架。</summary>
+        private static bool CanWalkAction(string key)
+        {
+            return key != "pace" && key != "peek" && key != "follow" && key != "lie" && key != "sleep";
+        }
+
+        private string PickWalkingAction()
+        {
+            List<string> usable = new List<string>();
+            foreach (string key in cfg.GetStrings("actions", "pool"))
+            {
+                if (CanWalkAction(key)) usable.Add(key);
+            }
+            if (usable.Count == 0) return "";
+            return usable[Program.Rng.Next(usable.Count)];
+        }
+
+        private void EndAction(PetWindow pet, DateTime now, bool keepWalking)
+        {
+            string finished = pet.Action;
             pet.Action = "";
-            pet.X = pet.ActionOriginX;
-            pet.ApplyPosition();
+            // pace/peek 会自己移动，结束后回到动作起点；其它动作不重置位置，
+            // 否则散步途中做完动作会被拽回原地。
+            if (!keepWalking && (finished == "pace" || finished == "peek"))
+            {
+                pet.X = pet.ActionOriginX;
+                pet.ApplyPosition();
+            }
             pet.Spin.Angle = 0;
             pet.Squash.ScaleX = 1;
             pet.Squash.ScaleY = 1;
             pet.Bob.X = 0;
             pet.Bob.Y = 0;
-            pet.SetIdle();
+            if (keepWalking)
+            {
+                pet.Mode = "walk";
+                ScheduleNextAction(pet, now);
+            }
+            else
+            {
+                pet.SetIdle();
+            }
         }
 
         // ------------------------------------------------------------ 贴边隐藏
@@ -835,6 +921,13 @@ namespace BalancePet
             if (pet == null && Pets.Count > 0) pet = Pets[0];
             if (pet == null) return;
             if (pet.EdgeHidden) RevealPet(pet);
+            if (pet.Mode == "walk")
+            {
+                if (key == "random") key = PickWalkingAction();
+                else if (!CanWalkAction(key)) return;
+                if (string.IsNullOrEmpty(key)) return;
+                pet.NextActionAt = DateTime.MaxValue;
+            }
             pet.StartAction(key);
             if (string.IsNullOrEmpty(pet.LastActionKey)) return;
             if (speak && cfg.GetFlag("alert", "quipsOn", true))
@@ -878,34 +971,77 @@ namespace BalancePet
 
         private bool AutoSplitDue(DateTime now)
         {
-            if (!cfg.GetFlagAt("clones.auto", true)) return false;
+            if (!cfg.GetFlagAt("clones.auto", true))
+            {
+                nextCloneStepAt = DateTime.MinValue;
+                cloneFalling = false;
+                return false;
+            }
             if (Pets.Count == 0) return false;
             int cap = CloneCap();
             int floor = CloneFloor();
+            if (cap > 0 && floor > cap) floor = cap;
             bool cycle = cfg.GetFlagAt("clones.cycle", true);
-            bool atCap = cap > 0 && Pets.Count >= cap;
+            if (!cycle) cloneFalling = false;
 
-            if (atCap || (cap > 0 && Pets.Count >= cap))   // 到顶了：循环模式下慢慢收回
+            // 到顶/到底时只切换一次阶段，并留一个间隔作为停顿；
+            // 阶段确定后按同一节奏逐只收或逐只涨，不会在顶上反复横跳。
+            bool phaseChanged = false;
+            if (cap > 0 && Pets.Count >= cap)
             {
-                if (!cycle || Pets.Count <= floor) return false;
-                if (nextShrinkAt == DateTime.MinValue)
+                if (!cycle)
                 {
-                    nextShrinkAt = now.AddSeconds(SplitInterval());
+                    nextCloneStepAt = DateTime.MaxValue;
                     return false;
                 }
-                if (now < nextShrinkAt) return false;
-                nextShrinkAt = DateTime.MinValue;
-                RemoveClone();
-                return true;
+                if (!cloneFalling)
+                {
+                    cloneFalling = true;
+                    phaseChanged = true;
+                }
             }
-            if (nextSplitAt == DateTime.MinValue)
+            else if (Pets.Count <= floor)
             {
-                nextSplitAt = now.AddSeconds(SplitInterval());
+                if (cloneFalling)
+                {
+                    cloneFalling = false;
+                    phaseChanged = true;
+                }
+            }
+            if (phaseChanged)
+            {
+                nextCloneStepAt = now.AddSeconds(SplitInterval());
                 return false;
             }
-            if (now < nextSplitAt) return false;
-            nextSplitAt = now.AddSeconds(SplitInterval());
+
+            if (nextCloneStepAt == DateTime.MinValue || nextCloneStepAt == DateTime.MaxValue)
+            {
+                nextCloneStepAt = now.AddSeconds(SplitInterval());
+                return false;
+            }
+            if (now < nextCloneStepAt) return false;
+
+            if (cloneFalling)
+            {
+                if (Pets.Count > floor)
+                {
+                    RemoveClone(true);
+                    nextCloneStepAt = now.AddSeconds(SplitInterval());
+                    return true;
+                }
+                cloneFalling = false;
+                nextCloneStepAt = now.AddSeconds(SplitInterval());
+                return false;
+            }
+
+            if (cap > 0 && Pets.Count >= cap)
+            {
+                cloneFalling = true;
+                nextCloneStepAt = now.AddSeconds(SplitInterval());
+                return false;
+            }
             AddClone();
+            nextCloneStepAt = now.AddSeconds(SplitInterval());
             return true;
         }
 
@@ -924,11 +1060,34 @@ namespace BalancePet
             int cap = CloneCap();
             if (cap > 0 && Pets.Count >= cap) return;
             if (Pets.Count == 0) return;
+            SuspendedPet revive = null;
+            if (suspended.Count > 0)
+            {
+                revive = suspended[suspended.Count - 1];
+                suspended.RemoveAt(suspended.Count - 1);
+            }
             PetWindow source = Pets[Program.Rng.Next(Pets.Count)];
             PetWindow pet = new PetWindow(cfg);
-            pet.ApplyRole(PickRole(source.Role));
-            pet.ResizePet();
-            pet.Place(source.X + 60 + Program.Rng.Next(0, 60), source.Y - 30 - Program.Rng.Next(0, 60));
+            if (revive != null)
+            {
+                Log.Write("clone revive role=" + (revive.Role == "" ? "__mascot" : revive.Role) + " scale=" + revive.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                // 循环涨落收回的分身原样回来：同一角色、同一大小、同一位置，
+                // 不会再随机换一只新的。
+                pet.ApplyRole(revive.Role);
+                pet.SetScale(revive.Scale, false);
+                pet.ResizePet();
+                ScreenArea area = ScreenArea.ForPoint(revive.X + pet.Width / 2, revive.Y + pet.Height / 2);
+                double x = Math.Max(area.Left, Math.Min(revive.X, area.Right - pet.Width));
+                double y = Math.Max(area.Top, Math.Min(revive.Y, area.Bottom - pet.Height));
+                pet.Place(x, y);
+            }
+            else
+            {
+                pet.ApplyRole(PickRole(source.Role));
+                Log.Write("clone new role=" + (pet.Role == "" ? "__mascot" : pet.Role) + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                pet.ResizePet();
+                pet.Place(source.X + 60 + Program.Rng.Next(0, 60), source.Y - 30 - Program.Rng.Next(0, 60));
+            }
             WirePet(pet);
             Pets.Add(pet);
             pet.Show();
@@ -938,8 +1097,25 @@ namespace BalancePet
 
         public void RemoveClone()
         {
+            RemoveClone(false);
+        }
+
+        /// <summary>suspend=true 用于循环涨落：收回时记住这只，涨回时原样恢复。</summary>
+        public void RemoveClone(bool suspend)
+        {
             if (Pets.Count <= 1) return;
             PetWindow pet = Pets[Pets.Count - 1];
+            if (suspend)
+            {
+                Log.Write("clone suspend role=" + (pet.Role == "" ? "__mascot" : pet.Role) + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                suspended.Add(new SuspendedPet
+                {
+                    Role = pet.Role,
+                    Scale = pet.Scale,
+                    X = pet.EdgeHidden ? pet.EdgeShownX : pet.X,
+                    Y = pet.EdgeHidden ? pet.EdgeShownY : pet.Y
+                });
+            }
             Pets.RemoveAt(Pets.Count - 1);
             pet.Close();
         }
