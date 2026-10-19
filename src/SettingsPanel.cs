@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -528,6 +529,7 @@ namespace BalancePet
         private Color cOk;
         private Color cErr;
         private Color cChip;
+        private Color cCard;
         // 主题色只保留"当前这一块"：对勾 + 光晕标识选中；面板重建后由 BuildColorPalette 重新创建。
         private Grid themeSwatchBox;
         private Border themeSwatch;
@@ -982,6 +984,7 @@ namespace BalancePet
         private void BuildRoleButtons()
         {
             WrapPanel panel = (WrapPanel)ui["RolePanel"];
+            panel.Children.Clear();   // 刷新前先清空，避免重复叠加
             string selected = cfg.GetString("", "role", "");
             AddRoleButton(panel, "", "内置小鲸鱼", selected, null);
             List<string> files = AppPaths.RoleFiles();
@@ -1056,7 +1059,137 @@ namespace BalancePet
             };
             button.BorderBrush = Convert.ToString(button.Tag) == selected ? Brush("#4B6BFB") : Brushes.Transparent;
             button.BorderThickness = new Thickness(Convert.ToString(button.Tag) == selected ? 2 : 0);
-            panel.Children.Add(button);
+            if (string.IsNullOrEmpty(thumbFile))
+            {
+                panel.Children.Add(button);
+                return;
+            }
+            // 自定义素材右上角挂一个删除按钮：删完立刻刷新列表，不用重启面板。
+            Grid holder = new Grid();
+            holder.Margin = new Thickness(0, 0, 7, 7);
+            button.Margin = new Thickness(0);
+            holder.Children.Add(button);
+            Button del = new Button();
+            del.Width = 16;
+            del.Height = 16;
+            del.Padding = new Thickness(0);
+            del.BorderThickness = new Thickness(0);
+            del.Cursor = Cursors.Hand;
+            del.FontSize = 10;
+            del.Foreground = Brushes.White;
+            del.Content = "×";
+            del.HorizontalAlignment = HorizontalAlignment.Right;
+            del.VerticalAlignment = VerticalAlignment.Top;
+            del.Margin = new Thickness(0, 2, 2, 0);
+            del.ToolTip = "删除这个素材（会从 roles 目录移除，无法恢复）";
+            del.Template = (ControlTemplate)XamlReader.Parse(
+                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>"
+                + "<Border x:Name='b' Background='#E5484D' CornerRadius='8'>"
+                + "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>"
+                + "</Border>"
+                + "<ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'>"
+                + "<Setter TargetName='b' Property='Opacity' Value='0.82'/>"
+                + "</Trigger></ControlTemplate.Triggers></ControlTemplate>");
+            AutomationProperties.SetName(del, "删除 " + label);
+            string roleTag = tag;
+            del.Click += delegate { DeleteRoleAsset(roleTag); };
+            holder.Children.Add(del);
+            panel.Children.Add(holder);
+        }
+
+        /// <summary>与面板同色的删除确认框（系统 MessageBox 和整体观感不搭）。</summary>
+        private bool ConfirmDeleteRole(string role)
+        {
+            Window dialog = new Window();
+            dialog.WindowStyle = WindowStyle.None;
+            dialog.AllowsTransparency = true;
+            dialog.Background = Brushes.Transparent;
+            dialog.ShowInTaskbar = false;
+            dialog.Topmost = true;
+            dialog.SizeToContent = SizeToContent.WidthAndHeight;
+            dialog.ResizeMode = ResizeMode.NoResize;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            dialog.FontFamily = root.FontFamily;
+            Border card = new Border();
+            card.CornerRadius = new CornerRadius(12);
+            card.Width = 320;
+            card.Padding = new Thickness(18, 14, 18, 12);
+            card.Background = new SolidColorBrush(cCard);
+            card.BorderBrush = new SolidColorBrush(cBorder);
+            card.BorderThickness = new Thickness(1);
+            StackPanel stack = new StackPanel();
+            TextBlock head = new TextBlock();
+            head.Text = "删除角色素材";
+            head.FontSize = 13;
+            head.FontWeight = FontWeights.SemiBold;
+            head.Foreground = new SolidColorBrush(cFg);
+            TextBlock body = new TextBlock();
+            body.Text = "「" + role + "」会从 roles 目录彻底删除，无法恢复。";
+            body.FontSize = 11.5;
+            body.Foreground = new SolidColorBrush(cFg2);
+            body.TextWrapping = TextWrapping.Wrap;
+            body.Margin = new Thickness(0, 8, 0, 12);
+            DockPanel row = new DockPanel();
+            row.HorizontalAlignment = HorizontalAlignment.Right;
+            Button cancel = new Button();
+            cancel.Content = "取消";
+            cancel.Width = 64;
+            cancel.Style = (Style)root.Resources["Btn"];
+            Button ok = new Button();
+            ok.Content = "删除";
+            ok.Width = 64;
+            ok.Style = (Style)root.Resources["Btn"];
+            ok.Foreground = new SolidColorBrush(cErr);
+            bool confirmed = false;
+            cancel.Click += delegate { dialog.Close(); };
+            ok.Click += delegate { confirmed = true; dialog.Close(); };
+            row.Children.Add(cancel);
+            row.Children.Add(ok);
+            stack.Children.Add(head);
+            stack.Children.Add(body);
+            stack.Children.Add(row);
+            card.Child = stack;
+            dialog.Content = card;
+            dialog.Owner = root;
+            dialog.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Escape) dialog.Close();
+                else if (e.Key == Key.Enter) { confirmed = true; dialog.Close(); }
+            };
+            dialog.ShowDialog();
+            return confirmed;
+        }
+
+        /// <summary>删除 roles 目录里的一个角色素材（文件或逐帧目录），并刷新外观列表。</summary>
+        private void DeleteRoleAsset(string role)
+        {
+            if (string.IsNullOrEmpty(role)) return;
+            if (!ConfirmDeleteRole(role)) return;
+            try
+            {
+                string rootDir = System.IO.Path.GetFullPath(AppPaths.RolesDir);
+                string guard = rootDir.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+                string target = System.IO.Path.GetFullPath(System.IO.Path.Combine(rootDir, role));
+                if (!target.StartsWith(guard, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("素材路径不在 roles 目录内");
+                }
+                if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
+                else if (System.IO.File.Exists(target)) System.IO.File.Delete(target);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(root, "删除失败：" + ex.Message, "删除角色素材", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            if (cfg.GetString("", "role", "") == role)
+            {
+                cfg.Set("", "role", "");
+                cfg.Save();
+                foreach (PetWindow pet in engine.Pets) pet.ApplyRole("");
+            }
+            BuildRoleButtons();
+            Update();
         }
 
         // ------------------------------------------------------------ 数据源
@@ -1679,6 +1812,7 @@ namespace BalancePet
         {
             ActivePet = pet;
             Update();
+            BuildRoleButtons();   // roles\ 可能被外部增删：每次打开都重新扫描
             root.Visibility = Visibility.Visible;
             if (pet != null)
             {
@@ -2057,6 +2191,7 @@ namespace BalancePet
             cFg2 = Parse(ToHex(palette.RowValue));
             cMuted = Parse(ToHex(palette.Muted));
             cChip = Parse(chip);
+            cCard = Parse(card);
             cOk = Parse(dark ? "#7ADFA0" : "#1F8A4C");
             cErr = Parse(dark ? "#FF9C93" : "#C93A34");
             // 设置面板的文字色也可以逐项覆盖：ui.colors.fg / fg2 / muted / ok / err
@@ -2816,6 +2951,8 @@ namespace BalancePet
                 item.BorderThickness = new Thickness(ReferenceEquals(item, active) ? 2 : 0);
                 item.BorderBrush = ReferenceEquals(item, active) ? Brush("#4B6BFB") : Brushes.Transparent;
             }
+            // 外观页的角色素材可能在外部被增删：切回该页时重新扫描 roles 目录。
+            if (page != null && page.Children.Contains((UIElement)ui["RolePanel"])) BuildRoleButtons();
         }
 
         private readonly List<Button> navButtons = new List<Button>();
