@@ -361,27 +361,42 @@ namespace BalancePet
         </Grid>
         <TextBlock Style='{StaticResource Sect}' Text='动作点播'/>
         <CheckBox x:Name='AutoActionsChk' Style='{StaticResource Switch}' Content='闲时自动动作' Margin='0,0,0,0'/>
-        <DockPanel Margin='0,6,0,2'>
-          <Button x:Name='ActionPoolAllBtn' Content='全选' Width='46' Style='{StaticResource Mini}'/>
-          <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='46' Style='{StaticResource Mini}'/>
-        </DockPanel>
-        <WrapPanel x:Name='ActionPoolPanel'/>
-        <Grid Margin='0,4,0,0'>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Style='{StaticResource Lbl}' Text='单次时长'/>
-          <Slider x:Name='ActionDurationSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.5' Maximum='3'/>
-          <TextBlock x:Name='ActionDurationVal' Grid.Column='2' Style='{StaticResource Val}' Text='1.0x'/>
-        </Grid>
-        <Grid Margin='0,4,0,0'>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Style='{StaticResource Lbl}' Text='动作间隔'/>
-          <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
-          <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
-        </Grid>
+        <Border Background='__ROW__' CornerRadius='12' Padding='12,10,12,8' Margin='0,6,0,0'>
+          <StackPanel>
+            <DockPanel>
+              <StackPanel Orientation='Horizontal' DockPanel.Dock='Right' VerticalAlignment='Center'>
+                <Button x:Name='ActionPoolAllBtn' Content='全选' Width='42' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
+                <Button x:Name='ActionPoolNoneBtn' Content='清空' Width='42' Height='24' FontSize='10.5' Style='{StaticResource Btn}'/>
+              </StackPanel>
+              <StackPanel Orientation='Horizontal' VerticalAlignment='Center'>
+                <TextBlock Text='闲时动作池' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
+                <TextBlock x:Name='ActionPoolCount' Text='已选 0 / 26' FontSize='10' Foreground='__MUTED__' Margin='8,0,0,0' VerticalAlignment='Center'/>
+              </StackPanel>
+            </DockPanel>
+            <TextBlock Text='小动作' FontSize='10' Foreground='__MUTED__' Margin='0,8,0,3'/>
+            <WrapPanel x:Name='ActionPoolIdlePanel'/>
+            <TextBlock Text='移动' FontSize='10' Foreground='__MUTED__' Margin='0,2,0,3'/>
+            <WrapPanel x:Name='ActionPoolMovePanel'/>
+            <TextBlock Text='特效' FontSize='10' Foreground='__MUTED__' Margin='0,2,0,3'/>
+            <WrapPanel x:Name='ActionPoolFxPanel'/>
+            <Grid Margin='0,8,0,0'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Style='{StaticResource Lbl}' Text='单次时长'/>
+              <Slider x:Name='ActionDurationSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='0.5' Maximum='3'/>
+              <TextBlock x:Name='ActionDurationVal' Grid.Column='2' Style='{StaticResource Val}' Text='1.0x'/>
+            </Grid>
+            <Grid Margin='0,2,0,0'>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width='56'/><ColumnDefinition Width='*'/><ColumnDefinition Width='46'/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Style='{StaticResource Lbl}' Text='动作间隔'/>
+              <Slider x:Name='ActionPauseSlider' Grid.Column='1' Style='{StaticResource Flat}' Minimum='6' Maximum='90'/>
+              <TextBlock x:Name='ActionPauseVal' Grid.Column='2' Style='{StaticResource Val}' Text='14s'/>
+            </Grid>
+          </StackPanel>
+        </Border>
         <Border Margin='0,8,0,0' Height='160' CornerRadius='10' Background='__DESK__' ClipToBounds='True'>
           <Grid>
             <ContentControl x:Name='ActionPreviewHost' HorizontalAlignment='Center' VerticalAlignment='Center' RenderTransformOrigin='0.5,1'>
@@ -551,6 +566,8 @@ namespace BalancePet
         private RotateTransform actionPreviewRotate;
         private TranslateTransform actionPreviewMove;
         private string actionPreviewRole = "";
+        private static readonly string[] MoveActionKeys = new string[] { "pace", "peek", "stroll", "dash", "follow" };
+        private static readonly string[] FxActionKeys = new string[] { "fireworks", "hearts", "sparkles", "confetti" };
         private double previewPhase;
         private bool updating;
         private bool roleEditMode;   // 外观页「编辑」开关：只有打开时才显示添加/删除
@@ -614,7 +631,7 @@ namespace BalancePet
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
-                "ActionPauseSlider","ActionPauseVal","ActionPoolPanel","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
+                "ActionPauseSlider","ActionPauseVal","ActionPoolIdlePanel","ActionPoolMovePanel","ActionPoolFxPanel","ActionPoolCount","ActionPoolAllBtn","ActionPoolNoneBtn","ActionDurationSlider","ActionDurationVal","ProviderList","UnsupportedPanel","RefreshBtn","DataText",
                 "PlanList",
                 "RandomRoleChk","RoleEditBtn","RoleAddBtn","AnimMakeBtn","AnimMakeStatus","ProxyBox","EdgeHideChk","EdgeDelayBox","AlertList","AlertChk","BudgetChk","QuotaChk",
                 "HatPickBtn","HatClearBtn","HatStatus","HatSizeSlider","HatSizeVal","HatXSlider","HatXVal","HatYSlider","HatYVal",
@@ -1321,27 +1338,44 @@ namespace BalancePet
             actionPreviewHost.Content = Mascot.CreateThumbnail(110, 110);
         }
 
-        /// <summary>动作点播页的「闲时自动播放池」：点动作名切换是否参与自动播放。</summary>
+        /// <summary>动作池按类别分组：小动作 / 移动 / 特效；选中态用实心高亮。</summary>
         private void BuildActionPoolChips()
         {
-            WrapPanel panel = (WrapPanel)ui["ActionPoolPanel"];
-            panel.Children.Clear();
+            WrapPanel idlePanel = (WrapPanel)ui["ActionPoolIdlePanel"];
+            WrapPanel movePanel = (WrapPanel)ui["ActionPoolMovePanel"];
+            WrapPanel fxPanel = (WrapPanel)ui["ActionPoolFxPanel"];
+            idlePanel.Children.Clear();
+            movePanel.Children.Clear();
+            fxPanel.Children.Clear();
             List<string> pool = cfg.GetStrings("actions", "pool");
+            Brush onBrush = Brush(cfg.GetStringAt("bubble.color1", "#4B6BFB"));
+            Brush offBrush = new SolidColorBrush(cChip);
+            int selected = 0;
             foreach (string key in PetWindow.ActionKeys)
             {
                 string action = key;
                 bool on = pool.Contains(key);
+                if (on) selected++;
+                WrapPanel target = idlePanel;
+                if (Array.IndexOf(MoveActionKeys, key) >= 0) target = movePanel;
+                else if (Array.IndexOf(FxActionKeys, key) >= 0) target = fxPanel;
                 Button chip = new Button();
-                chip.Style = (Style)root.Resources["Mini"];
-                chip.Content = Engine.ActionName(key);
+                chip.Content = (on ? "✓ " : "") + Engine.ActionName(key);
                 chip.FontSize = 10.5;
                 chip.Height = 26;
                 chip.Padding = new Thickness(9, 0, 9, 0);
-                chip.Margin = new Thickness(0, 0, 5, 5);
-                chip.Opacity = on ? 1.0 : 0.5;
-                chip.BorderThickness = new Thickness(on ? 2 : 0);
-                chip.BorderBrush = on ? Brush("#4B6BFB") : Brushes.Transparent;
+                chip.Margin = new Thickness(0, 0, 6, 6);
+                chip.Cursor = Cursors.Hand;
+                chip.Background = on ? onBrush : offBrush;
+                chip.Foreground = on ? Brushes.White : new SolidColorBrush(cFg2);
                 chip.ToolTip = on ? "闲时自动播放中（点击移出）" : "未参与自动播放（点击加入）";
+                chip.Template = (ControlTemplate)XamlReader.Parse(
+                    "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>"
+                    + "<Border x:Name='b' Background='{TemplateBinding Background}' CornerRadius='8' Padding='{TemplateBinding Padding}'>"
+                    + "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border>"
+                    + "<ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'>"
+                    + "<Setter TargetName='b' Property='Opacity' Value='0.85'/>"
+                    + "</Trigger></ControlTemplate.Triggers></ControlTemplate>");
                 chip.Click += delegate
                 {
                     List<string> current = cfg.GetStrings("actions", "pool");
@@ -1351,8 +1385,9 @@ namespace BalancePet
                     cfg.Save();
                     BuildActionPoolChips();
                 };
-                panel.Children.Add(chip);
+                target.Children.Add(chip);
             }
+            ((TextBlock)ui["ActionPoolCount"]).Text = "已选 " + selected.ToString(CultureInfo.InvariantCulture) + " / " + PetWindow.ActionKeys.Length.ToString(CultureInfo.InvariantCulture);
         }
 
         private void BuildRoleButtons()
