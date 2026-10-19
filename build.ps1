@@ -61,7 +61,7 @@ function Write-ResponseFile([string]$path, [bool]$withIcon) {
     if ($withIcon) { $lines += ('/win32icon:"' + $icon + '"') }
     $lines += ('/win32manifest:"' + (Join-Path $srcDir 'app.manifest') + '"')
     $lines += ('/out:"' + $exe + '"')
-    Get-ChildItem $srcDir -Filter *.cs | Sort-Object Name | ForEach-Object {
+    Get-ChildItem $srcDir -Filter *.cs | Where-Object { $_.Name -ne 'Setup.cs' } | Sort-Object Name | ForEach-Object {
         $lines += ('"' + $_.FullName + '"')
     }
     Set-Content -Path $path -Value $lines -Encoding ASCII
@@ -82,3 +82,30 @@ if ((-not (Test-Path $icon)) -and (-not $SkipIcon)) {
 }
 Remove-Item $response -ErrorAction SilentlyContinue
 Write-Host "built: $exe"
+
+# Installer: embeds balance-pet.exe so the user can choose an install folder.
+$setupExe = Join-Path $root 'balance-pet-setup.exe'
+$setupRsp = Join-Path $env:TEMP 'balance-pet-setup.rsp'
+$setupLines = @(
+    '/noconfig',
+    '/nostdlib',
+    '/langversion:5',
+    '/platform:anycpu',
+    '/target:winexe',
+    '/optimize+',
+    '/warn:4',
+    '/codepage:65001'
+)
+foreach ($reference in @('mscorlib.dll', 'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll')) {
+    $file = Resolve-FrameworkAssembly $reference
+    $setupLines += ('/r:"' + $file + '"')
+}
+if ((Test-Path $icon) -and (-not $SkipIcon)) { $setupLines += ('/win32icon:"' + $icon + '"') }
+$setupLines += ('/resource:"' + $exe + '",balance-pet.exe')
+$setupLines += ('/out:"' + $setupExe + '"')
+$setupLines += ('"' + (Join-Path $srcDir 'Setup.cs') + '"')
+Set-Content -Path $setupRsp -Value $setupLines -Encoding ASCII
+& $csc "@$setupRsp"
+if ($LASTEXITCODE -ne 0) { throw "setup compile failed with exit code $LASTEXITCODE" }
+Remove-Item $setupRsp -ErrorAction SilentlyContinue
+Write-Host "built: $setupExe"

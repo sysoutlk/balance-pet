@@ -34,8 +34,8 @@ application's folders; uninstalling means deleting the folder.
 
 ## Quick start
 
-1. Build with `build.cmd` (or grab `balance-pet.exe` from Releases).
-2. Run `balance-pet.exe`. `pet-config.json` is created on first launch.
+1. Install with `balance-pet-setup.exe` (choose any folder) or run the portable `balance-pet.exe`.
+2. Run `balance-pet.exe`. Runtime data (config, usage history, roles) lives in `%APPDATA%\BalancePet`; put an empty `portable.txt` next to the exe for fully portable mode.
 3. Right-click the pet, open the settings card and add your API keys under "余额接口".
 4. Optional: `scripts\install-desktop-shortcut.ps1`, `scripts\install-autostart.ps1`.
 

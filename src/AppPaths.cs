@@ -13,11 +13,36 @@ namespace BalancePet
             get { return AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/'); }
         }
 
-        public static string RolesDir { get { return Path.Combine(Root, "roles"); } }
+        /// <summary>
+        /// Where runtime data lives: %APPDATA%\BalancePet by default, so double-clicking the exe
+        /// anywhere never scatters pet-config/pet-state/roles next to it. A portable.txt next to
+        /// the exe switches everything back to the exe folder (green/portable mode).
+        /// </summary>
+        public static string DataRoot
+        {
+            get
+            {
+                try
+                {
+                    if (File.Exists(Path.Combine(Root, "portable.txt"))) return Root;
+                    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    if (string.IsNullOrEmpty(appData)) return Root;
+                    string dir = Path.Combine(appData, "BalancePet");
+                    Directory.CreateDirectory(dir);
+                    return dir;
+                }
+                catch
+                {
+                    return Root;
+                }
+            }
+        }
 
-        public static string ConfigPath { get { return Path.Combine(Root, "pet-config.json"); } }
+        public static string RolesDir { get { return Path.Combine(DataRoot, "roles"); } }
 
-        public static string StatePath { get { return Path.Combine(Root, "pet-state.json"); } }
+        public static string ConfigPath { get { return Path.Combine(DataRoot, "pet-config.json"); } }
+
+        public static string StatePath { get { return Path.Combine(DataRoot, "pet-state.json"); } }
 
         /// <summary>Character images the user dropped into roles\. None are bundled with the
         /// repository; the built-in vector mascot covers the empty case.</summary>
@@ -26,7 +51,7 @@ namespace BalancePet
         {
             get
             {
-                string dir = Path.Combine(Root, "props");
+                string dir = Path.Combine(DataRoot, "props");
                 try { Directory.CreateDirectory(dir); } catch { }
                 return dir;
             }
@@ -116,6 +141,55 @@ namespace BalancePet
             {
             }
             return files;
+        }
+
+        /// <summary>
+        /// One-time migration from the old portable layout: copy config, usage history, roles,
+        /// props and quips from the exe folder into the user data folder.
+        /// </summary>
+        public static void MigratePortableData()
+        {
+            try
+            {
+                string data = DataRoot;
+                if (string.Equals(data.TrimEnd('\\', '/'), Root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return;
+                if (File.Exists(Path.Combine(data, "pet-config.json"))) return;
+                string oldConfig = Path.Combine(Root, "pet-config.json");
+                if (!File.Exists(oldConfig)) return;
+                CopyFileIfMissing(oldConfig, Path.Combine(data, "pet-config.json"));
+                CopyFileIfMissing(Path.Combine(Root, "pet-state.json"), Path.Combine(data, "pet-state.json"));
+                CopyFileIfMissing(Path.Combine(Root, "quips.json"), Path.Combine(data, "quips.json"));
+                CopyDirIfMissing(Path.Combine(Root, "roles"), Path.Combine(data, "roles"));
+                CopyDirIfMissing(Path.Combine(Root, "props"), Path.Combine(data, "props"));
+            }
+            catch
+            {
+            }
+        }
+
+        private static void CopyFileIfMissing(string from, string to)
+        {
+            if (!File.Exists(from) || File.Exists(to)) return;
+            File.Copy(from, to, false);
+        }
+
+        private static void CopyDirIfMissing(string from, string to)
+        {
+            if (!Directory.Exists(from)) return;
+            if (Directory.Exists(to) && Directory.GetFileSystemEntries(to).Length > 0) return;
+            Directory.CreateDirectory(to);
+            string prefix = from.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            foreach (string dir in Directory.GetDirectories(from, "*", SearchOption.AllDirectories))
+            {
+                Directory.CreateDirectory(Path.Combine(to, dir.Substring(prefix.Length)));
+            }
+            foreach (string file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
+            {
+                string target = Path.Combine(to, file.Substring(prefix.Length));
+                string parent = Path.GetDirectoryName(target);
+                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                if (!File.Exists(target)) File.Copy(file, target, false);
+            }
         }
     }
 }

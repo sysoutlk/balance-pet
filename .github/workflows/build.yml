@@ -18,13 +18,16 @@ jobs:
         shell: pwsh
         run: |
           $process = Start-Process -FilePath ./balance-pet.exe -ArgumentList '--self-test' -Wait -PassThru
-          Get-Content ./self-test-report.txt
+          $report = Join-Path $env:APPDATA 'BalancePet\self-test-report.txt'
+          if (Test-Path $report) { Get-Content $report }
           if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: balance-pet-csc
-          path: balance-pet.exe
+          path: |
+            balance-pet.exe
+            balance-pet-setup.exe
 
   dotnet:
     name: .NET SDK (BalancePet.csproj)

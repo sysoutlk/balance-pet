@@ -24,4 +24,4 @@
   .\balance-pet.exe --smoke 4
   ```
 
-  并确认控制台输出与 `self-test-report.txt` / `smoke-report.txt` 正常。
+  并确认控制台输出与 `%APPDATA%\BalancePet\` 下的 `self-test-report.txt` / `smoke-report.txt` 正常。
