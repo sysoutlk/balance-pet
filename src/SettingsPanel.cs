@@ -232,8 +232,6 @@ namespace BalancePet
       </ScrollViewer.Resources>
       <StackPanel x:Name='ContentRoot' Width='510'>
         <DockPanel x:Name='Header' Background='Transparent'>
-          <Button x:Name='CloseBtn' DockPanel.Dock='Right' Content='×' Width='26' Height='26' Margin='0,0,8,0'
-                  Padding='0' FontSize='14' Style='{StaticResource Btn}' ToolTip='收起设置面板（Esc）'/>
           <Button x:Name='QuitBtn' DockPanel.Dock='Right' Content='退出桌宠' Width='76' Height='26' Margin='0' FontSize='11' Style='{StaticResource Btn}' Foreground='#E5484D' BorderBrush='#E5484D' BorderThickness='1' ToolTip='退出桌宠（结束进程）'/>
           <StackPanel Margin='0,2,0,0'>
             <TextBlock x:Name='TitleText' Text='余额桌宠' FontSize='15' FontWeight='Bold' Foreground='__FG__'/>
@@ -694,7 +692,7 @@ namespace BalancePet
                 "MixPanel",
                 "FxHost","FxHint","FxCanvas","FxCard","FxDot","FxTitle","FxAmount","FxRow","FxTail","BubbleShadowVal",
                 "PickThemeBtn","MixAddBtn",
-                "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn","CloseBtn"
+                "CloneAutoChk","CloneMaxBox","CloneAddBtn","CloneRemoveBtn","CloneCount","QuitBtn"
                 ,"ClonePauseSlider","ClonePauseVal","CloneJitterSlider","CloneJitterVal"
                 ,"CloneCycleChk","CloneMinBox"
             })
@@ -987,7 +985,6 @@ namespace BalancePet
             {
                 if (ConfirmDialog("退出桌宠", "退出后桌宠与余额提醒都会停止运行。", "退出")) engine.Quit();
             };
-            ((Button)ui["CloseBtn"]).Click += delegate { HidePanel(); };
         }
 
         /// <summary>选一个 JSON 文件导入台词：合并去重，不动已有台词。</summary>
