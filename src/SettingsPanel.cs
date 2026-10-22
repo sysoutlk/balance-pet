@@ -4869,6 +4869,25 @@ namespace BalancePet
                 : PublicPackName(pack.Name);
         }
 
+        private static ScrollViewer ScrollableOptions(UIElement content, double maxHeight)
+        {
+            ScrollViewer scroll = new ScrollViewer();
+            scroll.MaxHeight = maxHeight;
+            scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            scroll.CanContentScroll = true;
+            scroll.PanningMode = PanningMode.VerticalOnly;
+            scroll.Content = content;
+            return scroll;
+        }
+
+        private static void BringSelectedOptionIntoView(Popup popup, Button item)
+        {
+            if (popup == null || item == null) return;
+            popup.Dispatcher.BeginInvoke(new Action(delegate { item.BringIntoView(); }),
+                DispatcherPriority.Loaded);
+        }
+
         private void BuildCloneSlotRows()
         {
             StackPanel panel = (StackPanel)ui["CloneSlotRolePanel"];
@@ -4922,7 +4941,7 @@ namespace BalancePet
             card.BorderThickness = new Thickness(1);
             card.CornerRadius = new CornerRadius(10);
             card.Padding = new Thickness(4);
-            card.Child = list;
+            card.Child = ScrollableOptions(list, 280);
             popup.Child = card;
 
             string current = CloneSlotRole(slot);
@@ -4936,6 +4955,7 @@ namespace BalancePet
                     : PublicPackName(pack.Name));
                 roles.Add(role);
             }
+            Button selectedItem = null;
             for (int i = 0; i < roles.Count; i++)
             {
                 string role = roles[i];
@@ -4945,6 +4965,7 @@ namespace BalancePet
                 item.Padding = new Thickness(10, 0, 10, 0);
                 item.HorizontalContentAlignment = HorizontalAlignment.Left;
                 item.Content = (selected ? "● " : "   ") + labels[i];
+                if (selected) selectedItem = item;
                 item.Click += delegate
                 {
                     Dictionary<string, object> selectedRoles = cfg.GetObject("", "cloneSlots");
@@ -4968,6 +4989,7 @@ namespace BalancePet
             popup.PlacementTarget = button;
             popup.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             popup.IsOpen = true;
+            BringSelectedOptionIntoView(popup, selectedItem);
         }
 
         private string CloneRoleLabel()
@@ -5000,7 +5022,7 @@ namespace BalancePet
                 card.BorderThickness = new Thickness(1);
                 card.CornerRadius = new CornerRadius(10);
                 card.Padding = new Thickness(4);
-                card.Child = list;
+                card.Child = ScrollableOptions(list, 280);
                 popup.Child = card;
 
                 string currentMode = cfg.GetString("clones", "roleMode", "random");
@@ -5018,6 +5040,7 @@ namespace BalancePet
                     roles.Add(role);
                     labels.Add(label);
                 }
+                Button selectedItem = null;
                 for (int i = 0; i < labels.Count; i++)
                 {
                     string mode = modes[i];
@@ -5030,6 +5053,7 @@ namespace BalancePet
                     item.Padding = new Thickness(10, 0, 10, 0);
                     item.HorizontalContentAlignment = HorizontalAlignment.Left;
                     item.Content = (selected ? "● " : "   ") + labels[i];
+                    if (selected) selectedItem = item;
                     item.Click += delegate
                     {
                         cfg.Set("clones", "roleMode", mode);
@@ -5043,6 +5067,7 @@ namespace BalancePet
                 popup.PlacementTarget = button;
                 popup.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
                 popup.IsOpen = true;
+                BringSelectedOptionIntoView(popup, selectedItem);
             };
         }
 
@@ -5064,7 +5089,7 @@ namespace BalancePet
                 card.BorderThickness = new Thickness(1);
                 card.CornerRadius = new CornerRadius(11);
                 card.Padding = new Thickness(5);
-                card.Child = list;
+                card.Child = ScrollableOptions(list, 320);
                 popup.Child = card;
                 string current = cfg.GetStringAt(path, "");
                 for (int i = 0; i < values.Length; i++)
@@ -5181,7 +5206,7 @@ namespace BalancePet
                 card.BorderThickness = new Thickness(1);
                 card.CornerRadius = new CornerRadius(10);
                 card.Padding = new Thickness(4);
-                card.Child = list;
+                card.Child = ScrollableOptions(list, 320);
                 popup.Child = card;
                 string current = cfg.GetStringAt(path, "");
                 foreach (string value in values)

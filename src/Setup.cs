@@ -13,9 +13,9 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("余额桌宠安装程序")]
 [assembly: AssemblyProduct("余额桌宠")]
 [assembly: AssemblyDescription("余额桌宠安装程序")]
-[assembly: AssemblyVersion("1.2.2.0")]
-[assembly: AssemblyFileVersion("1.2.2.0")]
-[assembly: AssemblyInformationalVersion("1.2.2")]
+[assembly: AssemblyVersion("1.2.3.0")]
+[assembly: AssemblyFileVersion("1.2.3.0")]
+[assembly: AssemblyInformationalVersion("1.2.3")]
 
 internal static class Setup
 {
@@ -69,8 +69,9 @@ internal static class Setup
 
     private static Form BuildForm(string initialDir)
     {
+        string version = ProductVersion();
         Form form = new Form();
-        form.Text = "余额桌宠 安装程序";
+        form.Text = "余额桌宠 " + version + " 安装程序";
         form.FormBorderStyle = FormBorderStyle.FixedDialog;
         form.MaximizeBox = false;
         form.MinimizeBox = false;
@@ -85,6 +86,13 @@ internal static class Setup
         title.AutoSize = true;
         title.Location = new Point(22, 18);
         form.Controls.Add(title);
+
+        Label versionLabel = new Label();
+        versionLabel.Text = "版本 " + version;
+        versionLabel.ForeColor = Color.DimGray;
+        versionLabel.AutoSize = true;
+        versionLabel.Location = new Point(482, 21);
+        form.Controls.Add(versionLabel);
 
         Label subtitle = new Label();
         subtitle.Text = "选择上级目录，安装器会自动创建 BalancePet 文件夹。";
@@ -177,6 +185,19 @@ internal static class Setup
         form.Controls.Add(install);
         form.AcceptButton = install;
         return form;
+    }
+
+    private static string ProductVersion()
+    {
+        object[] values = Assembly.GetExecutingAssembly().GetCustomAttributes(
+            typeof(AssemblyInformationalVersionAttribute), false);
+        if (values.Length > 0)
+        {
+            string value = ((AssemblyInformationalVersionAttribute)values[0]).InformationalVersion;
+            if (!string.IsNullOrEmpty(value)) return value;
+        }
+        Version version = Assembly.GetExecutingAssembly().GetName().Version;
+        return version == null ? "" : version.ToString(3);
     }
 
     private static string Install(string dir, bool desktopShortcut, bool startMenuShortcut)

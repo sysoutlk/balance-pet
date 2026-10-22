@@ -21,7 +21,7 @@ namespace BalancePet
 {
     internal static class Program
     {
-        public const string Version = "1.2.2";
+        public const string Version = "1.2.3";
         public static readonly Random Rng = new Random();
         public static Config CurrentConfig;
         public static int DemoPageIndex;
