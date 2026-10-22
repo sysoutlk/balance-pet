@@ -28,6 +28,8 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
 - **Neutral compatibility profiles**: auto-detect layered PNG sequences and WebM + preview
   packages, compose foreground/background frames, expand delayed frames, and fall back to
   bundled preview GIFs when `ffmpeg` is unavailable.
+- **Batch pack import**: select a collection folder and every recognized child pack is
+  converted, validated and installed in one pass.
 
 ## Fully standalone
 

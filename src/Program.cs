@@ -80,25 +80,50 @@ namespace BalancePet
             string importPack = ValueOf(flags, "--import-pack");
             if (!string.IsNullOrEmpty(importPack))
             {
-                string note;
-                string error;
-                string role = PetPackInstaller.Install(cfg, importPack, out note, out error);
-                if (string.IsNullOrEmpty(role))
+                bool truncated;
+                List<string> candidates = PetPackInstaller.FindPackCandidates(importPack, out truncated);
+                List<string> sources = new List<string>();
+                if (candidates.Count == 0) sources.Add(importPack);
+                else sources.AddRange(candidates);
+                if (sources.Count > 1)
                 {
-                    Console.WriteLine("导入失败：" + error);
-                    return 1;
+                    Console.WriteLine("检测到 " + sources.Count + " 个素材包，开始批量导入"
+                        + (truncated ? "（目录过多，只扫描前 64 个）" : ""));
                 }
-                Console.WriteLine("已导入宠物包：" + role);
-                Console.WriteLine("路径：" + Path.Combine(AppPaths.RolesDir, role));
-                if (!string.IsNullOrEmpty(note)) Console.WriteLine("素材转换：" + note);
-                if (Has(flags, "--activate"))
+                int imported = 0;
+                int failed = 0;
+                string lastRole = "";
+                foreach (string source in sources)
                 {
-                    cfg.Set("", "role", role);
+                    string note;
+                    string error;
+                    string role = PetPackInstaller.Install(cfg, source, out note, out error);
+                    if (string.IsNullOrEmpty(role))
+                    {
+                        failed++;
+                        Console.WriteLine("导入失败：" + source + "：" + error);
+                        continue;
+                    }
+                    imported++;
+                    lastRole = role;
+                    Console.WriteLine("已导入宠物包：" + role);
+                    Console.WriteLine("路径：" + Path.Combine(AppPaths.RolesDir, role));
+                    if (!string.IsNullOrEmpty(note)) Console.WriteLine("素材转换：" + note);
+                }
+                if (sources.Count > 1)
+                {
+                    Console.WriteLine("批量导入完成：成功 " + imported + " 个"
+                        + (failed > 0 ? "，失败 " + failed + " 个" : ""));
+                }
+                if (Has(flags, "--activate") && !string.IsNullOrEmpty(lastRole))
+                {
+                    cfg.Set("", "role", lastRole);
                     cfg.SetAt("roles.random", false);
                     cfg.Save();
-                    Console.WriteLine("已设为当前宠物：" + role);
+                    Console.WriteLine("已设为当前宠物：" + lastRole);
                 }
-                return 0;
+                if (imported == 0) return 1;
+                return failed > 0 ? 2 : 0;
             }
             // 同目录放一个 quips.json 就能自带一套台词：启动时合并进来（随时可删，删了就没了）。
             string quipPack = System.IO.Path.Combine(AppPaths.DataRoot, "quips.json");

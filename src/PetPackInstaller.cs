@@ -178,6 +178,115 @@ namespace BalancePet
             }
         }
 
+        public static List<string> FindPackCandidates(string source, out bool truncated)
+        {
+            truncated = false;
+            List<string> candidates = new List<string>();
+            if (string.IsNullOrEmpty(source) || !Directory.Exists(source)) return candidates;
+            string root = Path.GetFullPath(source);
+            CollectPackCandidates(root, 0, candidates, ref truncated);
+            candidates.Sort(StringComparer.CurrentCultureIgnoreCase);
+            return candidates;
+        }
+
+        private static void CollectPackCandidates(string directory, int depth,
+            List<string> candidates, ref bool truncated)
+        {
+            if (depth > 8 || candidates.Count >= 64)
+            {
+                truncated = candidates.Count >= 64;
+                return;
+            }
+            if (IsBatchPackCandidate(directory))
+            {
+                if (!candidates.Contains(directory)) candidates.Add(directory);
+                return;
+            }
+            string[] children;
+            try
+            {
+                children = Directory.GetDirectories(directory);
+            }
+            catch
+            {
+                return;
+            }
+            Array.Sort(children, StringComparer.CurrentCultureIgnoreCase);
+            foreach (string child in children)
+            {
+                string name = Path.GetFileName(child);
+                if (ShouldSkipBatchDirectory(name)) continue;
+                try
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
+                }
+                catch
+                {
+                    continue;
+                }
+                CollectPackCandidates(child, depth + 1, candidates, ref truncated);
+                if (candidates.Count >= 64)
+                {
+                    truncated = true;
+                    return;
+                }
+            }
+        }
+
+        private static bool ShouldSkipBatchDirectory(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name[0] == '.' || name[0] == '_') return true;
+            return string.Equals(name, "sources", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "source", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "reference", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "references", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "node_modules", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "bin", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "obj", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsBatchPackCandidate(string directory)
+        {
+            try
+            {
+                if (File.Exists(Path.Combine(directory, "pet.json"))
+                    || File.Exists(Path.Combine(directory, "atlas.json"))
+                    || File.Exists(Path.Combine(directory, "spritesheet.json")))
+                    return true;
+                string actionFolder;
+                string actionName;
+                if (ActionFolderPackConverter.TryLocate(directory, out actionFolder, out actionName))
+                    return true;
+                if (HasDirectAnimationSet(directory)
+                    || HasDirectAnimationSet(Path.Combine(directory, "pet")))
+                    return true;
+                if (HasWebmAssets(directory)
+                    || HasWebmAssets(Path.Combine(directory, "assets")))
+                    return true;
+                return File.Exists(Path.Combine(directory, "actions.xml"))
+                    || File.Exists(Path.Combine(directory, "conf", "actions.xml"));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool HasDirectAnimationSet(string directory)
+        {
+            return Directory.Exists(directory)
+                && Directory.Exists(Path.Combine(directory, "Default"))
+                && Directory.Exists(Path.Combine(directory, "MOVE"));
+        }
+
+        private static bool HasWebmAssets(string directory)
+        {
+            return Directory.Exists(directory)
+                && File.Exists(Path.Combine(directory, "config.jsonc"))
+                && (Directory.Exists(Path.Combine(directory, "webm"))
+                    || Directory.Exists(Path.Combine(directory, "preview")));
+        }
+
         private static bool HasStateFolder(string source)
         {
             try

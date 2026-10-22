@@ -756,11 +756,11 @@ namespace BalancePet
                 </Border>
                 <TextBlock Text='导入宠物包' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
               </DockPanel>
-              <TextBlock Text='导入完整角色包、动作链和帧素材，并自动识别状态帧、XML 精灵、WebP 图集、通用动作文件夹和兼容素材包。'
+              <TextBlock Text='可选择单个素材包，也可选择包含多套素材的总目录；程序会自动识别并批量导入。'
                          FontSize='9.5' Foreground='__MUTED__' TextWrapping='Wrap' Margin='0,3,0,0'/>
               <DockPanel Margin='0,7,0,0'>
-                <Button x:Name='PackImportBtn' Content='选择宠物包…' Width='124' Style='{StaticResource Btn}'
-                        ToolTip='选择宠物包目录，程序会自动识别并导入'/>
+                <Button x:Name='PackImportBtn' Content='选择素材包或总目录…' Width='148' Style='{StaticResource Btn}'
+                        ToolTip='选择单个素材包或上级总目录，程序会自动识别并批量导入'/>
                 <TextBlock x:Name='PackStatus' Style='{StaticResource Lbl}' FontSize='10' Margin='7,0,0,0'
                            TextTrimming='CharacterEllipsis'/>
               </DockPanel>
@@ -1619,37 +1619,105 @@ namespace BalancePet
             Button importButton = ui.ContainsKey("PackImportBtn") ? ui["PackImportBtn"] as Button : null;
             if (importButton != null && !importButton.IsEnabled) return;
             System.Windows.Forms.FolderBrowserDialog dialog = new System.Windows.Forms.FolderBrowserDialog();
-            dialog.Description = "选择宠物包目录（自动识别角色配置、动作链、状态帧和各种序列素材）";
+            dialog.Description = "选择单个素材包或包含多套素材的总目录";
             if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
             string source = dialog.SelectedPath;
+            bool truncated;
+            List<string> candidates = PetPackInstaller.FindPackCandidates(source, out truncated);
+            List<string> sources = new List<string>();
+            if (candidates.Count == 0) sources.Add(source);
+            else sources.AddRange(candidates);
+            if (sources.Count > 1)
+            {
+                string question = "检测到 " + sources.Count.ToString(CultureInfo.InvariantCulture)
+                    + " 个素材包。\r\n是否全部导入？";
+                if (truncated) question += "\r\n目录过多，本次只处理扫描到的前 64 个。";
+                MessageBoxResult answer = MessageBox.Show(root, question, "批量导入素材",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (answer != MessageBoxResult.Yes) return;
+            }
             if (importButton != null) importButton.IsEnabled = false;
-            SetPackStatus("正在导入宠物包…");
+            SetPackStatus(sources.Count > 1
+                ? "正在批量导入 " + sources.Count.ToString(CultureInfo.InvariantCulture) + " 个素材包…"
+                : "正在导入宠物包…");
             Task.Factory.StartNew(delegate
             {
-                string note = "";
-                string error = "";
-                string id = PetPackInstaller.Install(cfg, source, out note, out error);
+                List<string> importedIds = new List<string>();
+                List<string> importedNotes = new List<string>();
+                List<string> failures = new List<string>();
+                foreach (string candidate in sources)
+                {
+                    string note = "";
+                    string error = "";
+                    string id = PetPackInstaller.Install(cfg, candidate, out note, out error);
+                    if (string.IsNullOrEmpty(id))
+                    {
+                        failures.Add(System.IO.Path.GetFileName(candidate.TrimEnd('\\', '/'))
+                            + "：" + error);
+                    }
+                    else
+                    {
+                        importedIds.Add(id);
+                        importedNotes.Add(note ?? "");
+                    }
+                }
                 root.Dispatcher.BeginInvoke(new Action(delegate
                 {
                     if (importButton != null) importButton.IsEnabled = true;
-                    if (string.IsNullOrEmpty(id))
+                    if (importedIds.Count == 0)
                     {
-                        SetPackStatus(error);
+                        SetPackStatus(failures.Count > 0 ? failures[0] : "没有可导入的素材包");
                         return;
                     }
-                    cfg.Set("", "role", id);
-                    cfg.SetAt("roles.random", false);
-                    cfg.Save();
-                    foreach (PetWindow pet in engine.Pets) pet.ApplyRole(id);
+                    string currentRole = cfg.GetString("", "role", "");
+                    if (sources.Count == 1 || string.IsNullOrEmpty(currentRole))
+                    {
+                        string activeId = importedIds[0];
+                        cfg.Set("", "role", activeId);
+                        cfg.SetAt("roles.random", false);
+                        cfg.Save();
+                        foreach (PetWindow pet in engine.Pets) pet.ApplyRole(activeId);
+                    }
                     BuildRoleButtons();
                     RefreshActionControls();
                     Update();
-                    PetPack imported = PetPack.TryLoad(cfg, id);
-                    int actionCount = imported == null ? 0 : imported.ActionKeys().Count;
-                    string status = "已导入宠物包：" + id + "（"
-                        + actionCount.ToString(CultureInfo.InvariantCulture) + " 个动作）";
-                    if (!string.IsNullOrEmpty(note)) status += "；" + note;
+                    string status;
+                    if (sources.Count == 1)
+                    {
+                        string id = importedIds[0];
+                        PetPack imported = PetPack.TryLoad(cfg, id);
+                        int actionCount = imported == null ? 0 : imported.ActionKeys().Count;
+                        status = "已导入宠物包：" + id + "（"
+                            + actionCount.ToString(CultureInfo.InvariantCulture) + " 个动作）";
+                        if (importedNotes.Count > 0 && !string.IsNullOrEmpty(importedNotes[0]))
+                            status += "；" + importedNotes[0];
+                    }
+                    else
+                    {
+                        status = "批量导入完成：成功 "
+                            + importedIds.Count.ToString(CultureInfo.InvariantCulture) + " 个";
+                        if (failures.Count > 0)
+                            status += "，失败 " + failures.Count.ToString(CultureInfo.InvariantCulture) + " 个";
+                        if (truncated) status += "；目录过多，只扫描了前 64 个";
+                        if (!string.IsNullOrEmpty(currentRole)) status += "；当前外观未切换";
+                    }
                     SetPackStatus(status);
+                    if (sources.Count > 1)
+                    {
+                        string detail = status;
+                        if (failures.Count > 0)
+                        {
+                            int shown = Math.Min(8, failures.Count);
+                            detail += Environment.NewLine + Environment.NewLine
+                                + string.Join(Environment.NewLine,
+                                    failures.GetRange(0, shown).ToArray());
+                            if (failures.Count > shown) detail += Environment.NewLine + "……";
+                        }
+                        MessageBox.Show(root, detail,
+                            failures.Count > 0 ? "批量导入完成，部分失败" : "批量导入完成",
+                            MessageBoxButton.OK,
+                            failures.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+                    }
                 }));
             });
         }
