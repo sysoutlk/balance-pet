@@ -17,11 +17,44 @@ namespace BalancePet
         public string Label = "";
         public double Percent;
         public string Detail = "";
+        public long ResetAtMs;
+        public string ResetText = "";
 
         /// <summary>窗口分两档：1 = 5 小时那档，2 = 7 天/每周/30 天那档（认不出的一律按长窗算）。</summary>
         public int Kind()
         {
             return Label.IndexOf("小时", StringComparison.Ordinal) >= 0 ? 1 : 2;
+        }
+
+        public string ResetShort()
+        {
+            if (ResetAtMs > 0)
+            {
+                DateTime when = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                    .AddMilliseconds(ResetAtMs).AddHours(8);
+                TimeSpan left = when - DataService.BeijingNow();
+                if (left.TotalSeconds <= 0) return "即将重置";
+                if (left.TotalDays >= 1)
+                    return ((int)left.TotalDays) + " 天 " + left.Hours + " 小时后重置";
+                if (left.TotalHours >= 1)
+                    return ((int)left.TotalHours) + " 小时 " + left.Minutes + " 分后重置";
+                return Math.Max(1, left.Minutes) + " 分钟后重置";
+            }
+            return ResetText;
+        }
+
+        public string ResetDisplay()
+        {
+            if (ResetAtMs <= 0) return ResetShort();
+            DateTime when = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                .AddMilliseconds(ResetAtMs).AddHours(8);
+            DateTime now = DataService.BeijingNow();
+            string clock = when.Date == now.Date
+                ? when.ToString("HH:mm", CultureInfo.InvariantCulture)
+                : (when.Date == now.Date.AddDays(1)
+                    ? "明天 " + when.ToString("HH:mm", CultureInfo.InvariantCulture)
+                    : when.ToString("MM-dd HH:mm", CultureInfo.InvariantCulture));
+            return clock + " · " + ResetShort();
         }
     }
 
@@ -47,6 +80,8 @@ namespace BalancePet
             {
                 if (sb.Length > 0) sb.Append(" · ");
                 sb.Append(window.Label + " " + window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%");
+                string reset = window.ResetShort();
+                if (!string.IsNullOrEmpty(reset)) sb.Append(" · " + reset);
             }
             return sb.Length == 0 ? "无窗口数据" : sb.ToString();
         }
@@ -82,7 +117,7 @@ namespace BalancePet
                 "MiniMax Coding Plan 额度（api.minimaxi.com）。"));
             list.Add(Def("opencode", "OpenCode Go", "https://opencode.ai/zen/go/v1/usage", "bearer", "generic",
                 "$10/月订阅，美元额度三个时间窗口。"));
-            list.Add(Def("aliyun", "阿里云 Token Plan / Coding Plan",
+            list.Add(Def("aliyun", "阿里云 Token Plan",
                 "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "bearer", "aliyun",
                 "先列出套餐可用模型，再查该模型的用量窗口；国际站可改 plans.aliyun.baseUrl。"));
             PlanDef custom = Def("custom", "自定义用量接口", "", "bearer", "generic",
@@ -358,8 +393,9 @@ namespace BalancePet
             PlanWindow item = new PlanWindow();
             item.Label = seconds > 0 ? SecondsLabel(seconds) : "额度";
             item.Percent = percent;
-            item.Detail = percent.ToString("0.#", CultureInfo.InvariantCulture) + "%"
-                + (resetAfter > 0 ? "  ·  " + DurationText(resetAfter) + "后重置" : "");
+            item.Detail = percent.ToString("0.#", CultureInfo.InvariantCulture) + "%";
+            if (resetAfter > 0) item.ResetAtMs = DataService.NowMs() + (long)(resetAfter * 1000);
+            else ApplyResetFromMap(item, window);
             state.Windows.Add(item);
         }
 
@@ -378,8 +414,8 @@ namespace BalancePet
                 window.Label = unit == 3 ? "5 小时" : (unit == 6 ? "每周" : "额度");
                 window.Percent = Json.ToNumber(Json.Get(limit, "percentage"), 0);
                 double resetMs = Json.ToNumber(Json.Get(limit, "nextResetTime"), 0);
-                window.Detail = window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%"
-                    + (resetMs > 0 ? "  ·  " + ResetText(resetMs / 1000.0) : "");
+                window.Detail = window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%";
+                window.ResetAtMs = NormalizeEpochMs(resetMs);
                 state.Windows.Add(window);
             }
         }
@@ -516,8 +552,8 @@ namespace BalancePet
             double seconds = FirstNumber(map, "limit_window_seconds", "window_seconds", "period_seconds", "windowSeconds") ?? 0;
             window.Label = seconds > 0 ? SecondsLabel(seconds) : (string.IsNullOrEmpty(hint) ? "用量" : hint);
             window.Percent = percent.Value;
-            string reset = ResetTextFromMap(map);
-            window.Detail = percent.Value.ToString("0.#", CultureInfo.InvariantCulture) + "%" + reset;
+            window.Detail = percent.Value.ToString("0.#", CultureInfo.InvariantCulture) + "%";
+            ApplyResetFromMap(window, map);
             return window;
         }
 
@@ -546,52 +582,52 @@ namespace BalancePet
             string reset = Convert.ToString(Json.Get(map, resetKey), CultureInfo.InvariantCulture);
             string usedText = (used.HasValue ? used.Value : limit.Value - (remaining.HasValue ? remaining.Value : 0)).ToString("0.##", CultureInfo.InvariantCulture);
             string limitText = limit.Value.ToString("0.##", CultureInfo.InvariantCulture);
-            window.Detail = usedText + " / " + limitText + "（" + percent.ToString("0.#", CultureInfo.InvariantCulture) + "%）"
-                + (string.IsNullOrEmpty(reset) ? "" : "  ·  " + ResetTextIso(reset));
+            window.Detail = usedText + " / " + limitText + "（" + percent.ToString("0.#", CultureInfo.InvariantCulture) + "%）";
+            ApplyReset(window, reset);
             state.Windows.Add(window);
         }
 
-        private static string ResetTextIso(string iso)
-        {
-            try
-            {
-                DateTime when = DateTime.Parse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
-                double seconds = (when - DateTime.UtcNow).TotalSeconds;
-                if (seconds <= 0) return "已重置";
-                return DurationText(seconds) + "后重置";
-            }
-            catch
-            {
-                return "重置 " + iso;
-            }
-        }
-
-        private static string ResetText(double epochSeconds)
-        {
-            double seconds = epochSeconds - (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
-            if (seconds <= 0) return "已重置";
-            return DurationText(seconds) + "后重置";
-        }
-
-        private static string ResetTextFromMap(Dictionary<string, object> map)
+        private static void ApplyResetFromMap(PlanWindow window, Dictionary<string, object> map)
         {
             foreach (string key in new string[] { "reset_at", "resetAt", "resetTime", "nextResetTime", "resetsAt", "reset_time" })
             {
                 object value = Json.Get(map, key);
                 if (value == null) continue;
-                string text = Convert.ToString(value, CultureInfo.InvariantCulture);
-                if (string.IsNullOrEmpty(text)) continue;
-                double epoch;
-                if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out epoch))
-                {
-                    if (epoch > 1e12) epoch = epoch / 1000.0;   // milliseconds
-                    return "  ·  " + ResetText(epoch);
-                }
-                return "  ·  " + ResetTextIso(text);
+                ApplyReset(window, Convert.ToString(value, CultureInfo.InvariantCulture));
+                break;
             }
+            if (window.ResetAtMs > 0 || !string.IsNullOrEmpty(window.ResetText)) return;
             double? resetAfter = NumberAmong(map, "reset_after_seconds", "resetAfterSeconds", "reset_in");
-            if (resetAfter.HasValue) return "  ·  " + DurationText(resetAfter.Value) + "后重置";
-            return "";
+            if (resetAfter.HasValue && resetAfter.Value > 0)
+                window.ResetAtMs = DataService.NowMs() + (long)(resetAfter.Value * 1000);
+        }
+
+        private static void ApplyReset(PlanWindow window, string value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            string text = value.Trim();
+            if (text.Length == 0) return;
+            double numeric;
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out numeric))
+            {
+                window.ResetAtMs = NormalizeEpochMs(numeric);
+                return;
+            }
+            DateTime when;
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out when))
+            {
+                window.ResetAtMs = (long)(when - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
+                return;
+            }
+            window.ResetText = text;
+        }
+
+        private static long NormalizeEpochMs(double value)
+        {
+            if (value >= 1e12) return (long)value;
+            if (value >= 1e9) return (long)(value * 1000);
+            return 0;
         }
 
         private static string DurationLabel(double duration, string unit)

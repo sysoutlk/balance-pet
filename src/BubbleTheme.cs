@@ -28,19 +28,21 @@ namespace BalancePet
         public Color Accent = Colors.RoyalBlue;
         public double ShadowOpacity = 0.28;
         public bool Dark;
+        public bool PreserveAlpha;
     }
 
     internal static class BubbleTheme
     {
-        public static ThemePalette Resolve(string theme)
+        public static ThemePalette Resolve(string theme, Config cfg = null)
         {
             if (string.Equals(theme, "system", StringComparison.OrdinalIgnoreCase))
             {
                 theme = SystemPrefersDark() ? "dark" : "light";
             }
-            if (string.Equals(theme, "glass", StringComparison.OrdinalIgnoreCase)) return Glass();
+            if (string.Equals(theme, "glass", StringComparison.OrdinalIgnoreCase)) return Glass(cfg);
             if (string.Equals(theme, "frost", StringComparison.OrdinalIgnoreCase)) return Frost();
-            if (string.Equals(theme, "monet", StringComparison.OrdinalIgnoreCase)) return Monet();
+            if (string.Equals(theme, "monet", StringComparison.OrdinalIgnoreCase)) return Monet(cfg);
+            if (string.Equals(theme, "dim", StringComparison.OrdinalIgnoreCase)) return DimDark();
             return string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase) ? Dark() : Light();
         }
 
@@ -97,16 +99,42 @@ namespace BalancePet
             return p;
         }
 
-        /// <summary>Liquid glass: very translucent card with a bright rim and a soft shadow.</summary>
-        private static ThemePalette Glass()
+        private static ThemePalette DimDark()
+        {
+            ThemePalette p = new ThemePalette();
+            p.Dark = true;
+            p.Card = Alpha("#252B3B", 247);
+            p.Border = Alpha("#FFFFFF", 42);
+            p.Title = FromHex("#EEF2FF");
+            p.Big = Colors.White;
+            p.Muted = FromHex("#A4AEC8");
+            p.RowValue = FromHex("#E8EDFB");
+            p.QuipBackground = FromHex("#333B55");
+            p.QuipText = FromHex("#D2DAF3");
+            p.Source = FromHex("#8A94AE");
+            p.Bar = FromHex("#4A5472");
+            p.BarEmpty = FromHex("#363F58");
+            p.ShadowOpacity = 0.38;
+            return p;
+        }
+
+        /// <summary>Liquid glass: translucent card with tunable opacity, highlight and rim.</summary>
+        private static ThemePalette Glass(Config cfg)
         {
             ThemePalette p = Light();
-            p.Card = Alpha("#FFFFFF", 190);
-            p.Border = Alpha("#FFFFFF", 150);
-            p.QuipBackground = Alpha("#FFFFFF", 120);
+            double opacity = cfg == null ? 0.745 : cfg.GetNumber("bubble", "glassOpacity", 0.745);
+            double highlight = cfg == null ? 0.47 : cfg.GetNumber("bubble", "glassHighlight", 0.47);
+            double border = cfg == null ? 0.59 : cfg.GetNumber("bubble", "glassBorder", 0.59);
+            opacity = Math.Max(0.15, Math.Min(1.0, opacity));
+            highlight = Math.Max(0, Math.Min(1.0, highlight));
+            border = Math.Max(0, Math.Min(1.0, border));
+            p.Card = Alpha("#FFFFFF", (byte)Math.Round(opacity * 255));
+            p.Border = Alpha("#FFFFFF", (byte)Math.Round(border * 255));
+            p.QuipBackground = Alpha("#FFFFFF", (byte)Math.Round(70 + highlight * 130));
             p.ShadowOpacity = 0.22;
-            p.Bar = Alpha("#7C87A8", 130);
-            p.BarEmpty = Alpha("#7C87A8", 55);
+            p.Bar = Alpha("#7C87A8", (byte)Math.Round(80 + highlight * 100));
+            p.BarEmpty = Alpha("#7C87A8", (byte)Math.Round(25 + highlight * 55));
+            p.PreserveAlpha = true;
             return p;
         }
 
@@ -122,10 +150,10 @@ namespace BalancePet
         }
 
         /// <summary>Monet: tint everything with the wallpaper's dominant colour.</summary>
-        private static ThemePalette Monet()
+        private static ThemePalette Monet(Config cfg)
         {
             double lightness;
-            Color baseColor = WallpaperColor(out lightness);
+            Color baseColor = MonetSourceColor(cfg, out lightness);
             double hue = Hue(baseColor);
             bool darkWallpaper = lightness < 0.5;
             ThemePalette p = darkWallpaper ? Dark() : Light();
@@ -144,6 +172,28 @@ namespace BalancePet
             p.Accent = Hsl(hue, 0.68, darkWallpaper ? 0.64 : 0.50);
             p.ShadowOpacity = darkWallpaper ? 0.42 : 0.26;
             return p;
+        }
+
+        private static Color MonetSourceColor(Config cfg, out double lightness)
+        {
+            lightness = 0.5;
+            string custom = cfg == null ? ""
+                : cfg.GetString("bubble", "monetCustomColor", "");
+            if (!string.IsNullOrEmpty(custom) && custom.StartsWith("#", StringComparison.Ordinal))
+            {
+                try
+                {
+                    Color color = (Color)ColorConverter.ConvertFromString(custom);
+                    double max = Math.Max(color.R, Math.Max(color.G, color.B)) / 255.0;
+                    double min = Math.Min(color.R, Math.Min(color.G, color.B)) / 255.0;
+                    lightness = (max + min) / 2.0;
+                    return color;
+                }
+                catch
+                {
+                }
+            }
+            return WallpaperColor(out lightness);
         }
 
         // ------------------------------------------------------------ 壁纸取色

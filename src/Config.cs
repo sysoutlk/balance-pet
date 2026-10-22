@@ -324,6 +324,7 @@ namespace BalancePet
     {
         public string FilePath;
         public Dictionary<string, object> Raw = new Dictionary<string, object>();
+        public event Action Saved;
 
         public static Config Load(string path)
         {
@@ -337,7 +338,37 @@ namespace BalancePet
 
         public void Save()
         {
-            Json.WriteObject(FilePath, Raw);
+            if (!Json.WriteObject(FilePath, Raw)) return;
+            Action handler = Saved;
+            if (handler != null) handler();
+        }
+
+        public Config Clone(string path)
+        {
+            Config clone = new Config();
+            clone.FilePath = path;
+            clone.Raw = CloneRaw(Raw);
+            clone.ApplyDefaults();
+            return clone;
+        }
+
+        public void CopyFrom(Config source)
+        {
+            if (source == null) return;
+            Raw = CloneRaw(source.Raw);
+        }
+
+        public string SerializeSnapshot()
+        {
+            return new JavaScriptSerializer().Serialize(Raw);
+        }
+
+        private static Dictionary<string, object> CloneRaw(Dictionary<string, object> source)
+        {
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            string json = serializer.Serialize(source ?? new Dictionary<string, object>());
+            return serializer.Deserialize<Dictionary<string, object>>(json)
+                ?? new Dictionary<string, object>();
         }
 
         /// <summary>Resolves a dotted section path ("providers.deepseek"), creating missing
@@ -497,7 +528,12 @@ namespace BalancePet
             SetDefault("", "statePath", "");
             SetDefault("", "apiKey", "");
             SetDefault("network", "proxy", "");
+            SetDefault("weather", "enabled", true);
+            SetDefault("weather", "city", "上海");
+            SetDefault("weather", "latitude", 0.0);
+            SetDefault("weather", "longitude", 0.0);
             SetDefault("ui", "title", "余额桌宠");   // 设置卡片标题（应用是多平台的，默认用通用名）
+            SetDefault("ui", "theme", "system");     // 设置卡片自身的深浅主题，与气泡独立
             SetDefault("frames", "activePerSecond", 25.0);   // 动作/散步时的帧率（高性能可拉到 60~120）
             SetDefault("frames", "idlePerSecond", 4.0);      // 闲置时的帧率（省电）
             SetDefault("fx", "enabled", true);               // 特效层（烟花/爱心/闪光/撒花）
@@ -507,6 +543,16 @@ namespace BalancePet
             SetDefault("props", "hatY", 0.04);
             SetDefault("", "role", "");
             SetDefault("roles", "random", true);
+            // 单图网格绑定：一张 PNG 也能呼吸/歪头/眨眼/看鼠标，不需要拆层。
+            SetDefault("rig", "mesh", false);
+            SetDefault("rig", "intensity", 1.0);
+            SetDefault("rig", "blink", true);
+            SetDefault("rig", "gaze", true);
+            SetDefault("rig", "emotion", false);   // 情绪符号先作为实验项，默认不打扰原图
+            SetDefault("rig", "faceX", 0.5);
+            SetDefault("rig", "faceY", 0.25);
+            SetDefault("rig", "faceW", 0.34);
+            SetDefault("rig", "faceH", 0.20);
             SetDefault("", "scale", 1.0);
             SetDefault("", "opacity", 1.0);
             SetDefault("", "maxClones", 6);
@@ -527,6 +573,18 @@ namespace BalancePet
             SetDefault("bubble", "effectReverse", false);
             SetDefault("bubble", "fontScale", 1.0);
             SetDefault("bubble", "width", 196.0);
+            SetDefault("bubble", "layout", "standard");
+            SetDefault("bubble", "customWidth", 228.0);
+            SetDefault("bubble", "customHeight", 220.0);
+            SetDefault("bubble", "customSplit", false);
+            SetDefault("bubble", "customHeader", true);
+            SetDefault("bubble", "customIcon", true);
+            SetDefault("bubble", "customHero", true);
+            SetDefault("bubble", "customDetail", true);
+            SetDefault("bubble", "customMetrics", true);
+            SetDefault("bubble", "customChart", true);
+            SetDefault("bubble", "customQuip", true);
+            SetDefault("bubble", "customFooter", true);
             SetDefault("bubble", "radius", 16.0);
             SetDefault("bubble", "opacity", 1.0);
             SetDefault("bubble", "shadow", 0.28);
@@ -536,13 +594,21 @@ namespace BalancePet
             SetDefault("bubble", "textColor", "");
             SetDefault("bubble", "font", "");         // "" = follow the system UI font
             SetDefault("bubble", "numberFont", "");   // "" = follow the same font
+            SetDefault("bubble", "glassOpacity", 0.745);
+            SetDefault("bubble", "glassHighlight", 0.47);
+            SetDefault("bubble", "glassBorder", 0.59);
+            SetDefault("bubble", "monetCustomColor", "");
             SetDefault("bubble", "trend", true);
+            SetDefault("bubble", "trendDays", 7.0);
             SetDefault("bubble", "tail", true);
 
             // Provider toggles. Only endpoints with a documented balance API are on-by-default
             // candidates; everything ships off until the user configures a key.
             SetDefault("providers.deepseek", "on", true);
             SetDefault("providers.deepseek", "apiKey", "");
+            SetDefault("providers.deepseek", "platformToken", "");
+            SetDefault("providers.deepseek", "showKeyUsage", true);
+            SetDefault("providers.deepseek", "usageRefreshSec", 180.0);
             SetDefault("providers.moonshot", "on", false);
             SetDefault("providers.moonshot", "apiKey", "");
             SetDefault("providers.moonshot", "baseUrl", "https://api.moonshot.cn");
@@ -613,10 +679,22 @@ namespace BalancePet
             SetDefault("clones", "auto", true);
             SetDefault("clones", "max", 6.0);
             SetDefault("clones", "min", 1.0);
+            if (GetNumber("clones", "max", 6) > Engine.SafeCloneLimit)
+            {
+                Set("clones", "max", (double)Engine.SafeCloneLimit);
+                Save();
+            }
+            if (GetNumber("clones", "min", 1) > Engine.SafeCloneLimit)
+            {
+                Set("clones", "min", (double)Engine.SafeCloneLimit);
+                Save();
+            }
             SetDefault("clones", "cycle", true);   // 到上限后慢慢收回，再慢慢涨回
             SetDefault("clones", "pauseMinSec", 60.0);
             SetDefault("clones", "pauseMaxSec", 180.0);
             SetDefault("clones", "jitter", 0.5);
+            SetDefault("clones", "roleMode", "random");
+            SetDefault("clones", "role", "");
             // 分裂间隔的随机幅度独立成百分比；由旧的 min/max 反推一次。
             if (GetNumberAt("clones.jitterVersion", 1) < 2)
             {
@@ -652,29 +730,24 @@ namespace BalancePet
             SetDefault("actions", "enabled", true);
             SetDefault("actions", "pauseMinSec", 14.0);
             SetDefault("actions", "pauseMaxSec", 25.0);
-            // 动作间隔上限从 2.6 倍收紧到 1.75 倍：由滑杆写出的旧比例一并迁移。
-            double pauseMin = GetNumberAt("actions.pauseMinSec", 14);
-            double pauseMax = GetNumberAt("actions.pauseMaxSec", 25);
-            if (pauseMin > 0 && Math.Abs(pauseMax - Math.Floor(pauseMin * 2.6)) <= 1)
-            {
-                SetAt("actions.pauseMaxSec", Math.Floor(pauseMin * 1.75));
-                Save();
-            }
             SetDefault("actions", "durationScale", 1.0);
-            SetDefault("actions", "durationJitter", 0.15);
-            SetDefault("actions", "pauseJitter", 0.5);
-            // 「间隔随机」独立成百分比：由旧的 min/max 反推，只迁移一次。
-            if (GetNumberAt("actions.pauseJitterVersion", 1) < 2)
+            SetDefault("actions", "durationJitter", ActionTiming.DurationJitter);
+            SetDefault("actions", "pauseJitter", ActionTiming.PauseJitter);
+            // Timing variation is now internal and intentionally not user-configurable.
+            bool timingChanged = false;
+            if (Math.Abs(GetNumberAt("actions.durationJitter", ActionTiming.DurationJitter)
+                    - ActionTiming.DurationJitter) > 0.001)
             {
-                double jMin = GetNumberAt("actions.pauseMinSec", 14);
-                double jMax = GetNumberAt("actions.pauseMaxSec", 25);
-                double jitter = jMin > 0 ? (jMax - jMin) / jMin : 0.5;
-                if (jitter < 0) jitter = 0;
-                if (jitter > 1.5) jitter = 1.5;
-                SetAt("actions.pauseJitter", Math.Round(jitter, 2));
-                SetAt("actions.pauseJitterVersion", 2.0);
-                Save();
+                SetAt("actions.durationJitter", ActionTiming.DurationJitter);
+                timingChanged = true;
             }
+            if (Math.Abs(GetNumberAt("actions.pauseJitter", ActionTiming.PauseJitter)
+                    - ActionTiming.PauseJitter) > 0.001)
+            {
+                SetAt("actions.pauseJitter", ActionTiming.PauseJitter);
+                timingChanged = true;
+            }
+            if (timingChanged) Save();
             SetDefault("actions", "pool", new string[]
             {
                 "hop", "bounce", "spin", "wobble", "nod", "shake", "wave", "clap",

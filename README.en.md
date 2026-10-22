@@ -23,8 +23,8 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
 - **Keys stored with Windows DPAPI** (decryptable only by the current user); no telemetry,
   nothing is uploaded anywhere.
 - **Content you can extend**: turn one static PNG into a frame-by-frame animated role,
-  particle actions (fireworks / hearts / sparkles / confetti), wearable props (hats),
-  import & export of quip packs, and per-provider / per-plan quota alerts.
+  particle actions (fireworks / hearts / sparkles / confetti), import & export of quip packs,
+  and per-provider / per-plan quota alerts.
 
 ## Fully standalone
 
@@ -63,3 +63,6 @@ dotnet build src\BalancePet.csproj -c Release   # optional, for SDK users
 ## License
 
 [MIT](LICENSE). No character artwork is bundled; drop your own PNGs into `roles\`.
+
+Product and API names are used only to describe compatibility. Their trademarks belong to
+their respective owners and do not imply partnership, authorization, or endorsement.

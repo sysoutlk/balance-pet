@@ -13,11 +13,10 @@
 /pet-log.txt
 *.log
 
-# 用户自备素材：角色立绘 / 装扮挂件 / 台词包（版权与隐私都归使用者，不进仓库）
+# 用户自备素材：角色立绘 / 台词包（版权与隐私都归使用者，不进仓库）
 /roles/*
 !/roles/README.md
-/props/*
-!/props/README.md
+/props/
 /quips.json
 
 # IDE / tooling

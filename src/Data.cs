@@ -156,16 +156,25 @@ namespace BalancePet
             if (Interlocked.Exchange(ref busy, 1) == 1) return;
             ThreadPool.QueueUserWorkItem(delegate
             {
+                bool succeeded = false;
                 try
                 {
                     Current = Build();
+                    succeeded = true;
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("data refresh failed: " + ex.Message);
                 }
                 finally
                 {
                     Interlocked.Exchange(ref busy, 0);
                 }
-                EventHandler handler = Updated;
-                if (handler != null) handler(this, EventArgs.Empty);
+                if (succeeded)
+                {
+                    EventHandler handler = Updated;
+                    if (handler != null) handler(this, EventArgs.Empty);
+                }
             });
         }
 
@@ -181,6 +190,10 @@ namespace BalancePet
             Snapshot snapshot = new Snapshot();
             snapshot.AtMs = NowMs();
             snapshot.PrimaryId = cfg.GetString("", "primaryProvider", "deepseek");
+            Dictionary<string, object> stateRoot = ReadState();
+            string todayKey = TodayKey();
+            RollState(stateRoot, todayKey);
+            WriteState(stateRoot);
 
             List<ProviderDef> defs = Providers.Effective(cfg);
             List<ProviderDef> enabled = new List<ProviderDef>();
@@ -213,7 +226,7 @@ namespace BalancePet
             {
                 List<Task<ProviderState>> list = new List<Task<ProviderState>>();
                 foreach (Task<ProviderState> task in tasks.Values) list.Add(task);
-                Task.WaitAll(list.ToArray(), 16000);
+                Task.WaitAll(list.ToArray(), 30000);
             }
 
             foreach (ProviderDef def in enabled)
@@ -260,13 +273,13 @@ namespace BalancePet
             foreach (ProviderDef def in defs) snapshot.Providers.Add(states[def.Id]);
 
             // Per-provider day tracking (opening / last / debit).
-            Dictionary<string, object> stateRoot = ReadState();
-            RollState(stateRoot, TodayKey());
             foreach (ProviderState p in snapshot.Providers)
             {
                 if (!p.Enabled || !p.Supported) continue;
                 ApplyProviderState(stateRoot, p.Id, p.Balance, null);
                 p.TodayUsage = ProviderUsage(stateRoot, p.Id, p.Balance);
+                p.LocalUsageSinceMs = ProviderUsageSince(stateRoot, p.Id);
+                if (p.UsageExact && p.TodayTotalUsage.HasValue) p.TodayUsage = p.TodayTotalUsage;
             }
             WriteState(stateRoot);
 
@@ -336,6 +349,28 @@ namespace BalancePet
         private static List<DayUsage> BuildHistory(Dictionary<string, object> stateRoot, ProviderState primary)
         {
             List<DayUsage> history = new List<DayUsage>();
+            if (primary != null && primary.UsageExact && primary.PlatformHistory.Count > 0)
+            {
+                string todayKey = TodayKey();
+                bool hasToday = false;
+                foreach (DayUsage item in primary.PlatformHistory)
+                {
+                    DayUsage copy = new DayUsage();
+                    copy.Day = item.Day;
+                    copy.Usage = item.Day == todayKey && primary.TodayTotalUsage.HasValue
+                        ? primary.TodayTotalUsage.Value : item.Usage;
+                    if (copy.Day == todayKey) hasToday = true;
+                    history.Add(copy);
+                }
+                if (!hasToday)
+                {
+                    DayUsage missingToday = new DayUsage();
+                    missingToday.Day = todayKey;
+                    missingToday.Usage = primary.TodayTotalUsage.HasValue ? primary.TodayTotalUsage.Value : 0;
+                    history.Add(missingToday);
+                }
+                return history;
+            }
             string primaryId = primary == null ? "" : primary.Id;
             foreach (object item in Json.AsArray(Json.Get(stateRoot, "history")))
             {
@@ -347,7 +382,7 @@ namespace BalancePet
                 usage.Usage = Json.ToNumber(Json.Get(entry, "usage"), 0);
                 if (!string.IsNullOrEmpty(usage.Day)) history.Add(usage);
             }
-            while (history.Count > 6) history.RemoveAt(0);
+            while (history.Count > 59) history.RemoveAt(0);
             DayUsage today = new DayUsage();
             today.Day = TodayKey();
             today.Usage = primary != null && primary.TodayUsage.HasValue ? primary.TodayUsage.Value : 0;
@@ -397,6 +432,7 @@ namespace BalancePet
         {
             string day = Convert.ToString(Json.Get(state, "day"), CultureInfo.InvariantCulture);
             if (day == today) return;
+            Log.Write("state roll " + (string.IsNullOrEmpty(day) ? "(none)" : day) + " -> " + today);
 
             Dictionary<string, object> providers = Json.AsObject(Json.Get(state, "providers"));
             if (providers.Count == 0)
@@ -422,18 +458,45 @@ namespace BalancePet
                 foreach (KeyValuePair<string, object> pair in providers)
                 {
                     Dictionary<string, object> node = Json.AsObject(pair.Value);
-                    double debit = Json.ToNumber(Json.Get(node, "debit"), 0);
-                    if (debit <= 0) continue;
+                    object lastValue = Json.Get(node, "last");
+                    double? last = lastValue == null ? (double?)null : Json.ToNumber(lastValue, 0);
+                    double usage = NodeUsage(node, last);
+                    if (usage <= 0) continue;
                     Dictionary<string, object> record = new Dictionary<string, object>();
                     record["day"] = day;
                     record["provider"] = pair.Key;
-                    record["usage"] = Math.Round(debit, 8);
+                    record["usage"] = Math.Round(usage, 8);
+                    record["opening"] = Json.ToNumber(Json.Get(node, "opening"), 0);
+                    record["closing"] = last.HasValue ? (object)last.Value : null;
+                    record["credit"] = Json.ToNumber(Json.Get(node, "credit"), 0);
                     history.Add(record);
                 }
             }
             while (history.Count > 60) history.RemoveAt(0);
 
             Dictionary<string, object> fresh = new Dictionary<string, object>();
+            bool previousDay = IsPreviousDay(day, today);
+            if (previousDay)
+            {
+                foreach (KeyValuePair<string, object> pair in providers)
+                {
+                    Dictionary<string, object> oldNode = Json.AsObject(pair.Value);
+                    object closingValue = Json.Get(oldNode, "last");
+                    if (closingValue == null) continue;
+                    double observedAt = Json.ToNumber(
+                        Json.Get(oldNode, "balanceAtMs"),
+                        Json.ToNumber(Json.Get(oldNode, "updatedAtMs"), 0));
+                    if (!ObservationNearMidnight(today, observedAt)) continue;
+                    double closing = Json.ToNumber(closingValue, 0);
+                    Dictionary<string, object> carried = new Dictionary<string, object>();
+                    carried["opening"] = closing;
+                    carried["last"] = closing;
+                    carried["carriedFrom"] = day;
+                    carried["observedFromMs"] = BeijingDayStartMs(today);
+                    carried["balanceAtMs"] = observedAt;
+                    fresh[pair.Key] = carried;
+                }
+            }
             state["day"] = today;
             state["providers"] = fresh;
             state["history"] = history.ToArray();
@@ -441,6 +504,7 @@ namespace BalancePet
 
         private static void ApplyProviderState(Dictionary<string, object> state, string providerId, double? balance, double? opening)
         {
+            long nowMs = NowMs();
             Dictionary<string, object> providers = Json.AsObject(Json.Get(state, "providers"));
             Dictionary<string, object> node = Json.AsObject(Json.Get(providers, providerId));
             providers[providerId] = node;
@@ -449,6 +513,7 @@ namespace BalancePet
             if (Json.Get(node, "opening") == null && (opening.HasValue || balance.HasValue))
             {
                 node["opening"] = opening.HasValue ? (object)opening.Value : (object)balance.Value;
+                node["observedFromMs"] = nowMs;
             }
             object lastValue = Json.Get(node, "last");
             double? last = lastValue == null ? (double?)null : Json.ToNumber(lastValue, 0);
@@ -468,22 +533,75 @@ namespace BalancePet
                     }
                 }
                 node["last"] = balance.Value;
+                node["balanceAtMs"] = nowMs;
             }
-            node["updatedAtMs"] = NowMs();
+            node["updatedAtMs"] = nowMs;
         }
 
         private static double? ProviderUsage(Dictionary<string, object> state, string providerId, double? balance)
         {
             Dictionary<string, object> node = Json.AsObject(Json.Get(Json.AsObject(Json.Get(state, "providers")), providerId));
+            return NodeUsage(node, balance);
+        }
+
+        private static long ProviderUsageSince(Dictionary<string, object> state, string providerId)
+        {
+            Dictionary<string, object> node = Json.AsObject(Json.Get(Json.AsObject(Json.Get(state, "providers")), providerId));
+            object value = Json.Get(node, "observedFromMs");
+            if (value == null) return 0;
+            try
+            {
+                return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static double NodeUsage(Dictionary<string, object> node, double? balance)
+        {
             double debit = Json.ToNumber(Json.Get(node, "debit"), 0);
+            double credit = Json.ToNumber(Json.Get(node, "credit"), 0);
             object openingValue = Json.Get(node, "opening");
             if (openingValue != null && balance.HasValue)
             {
                 double opening = Json.ToNumber(openingValue, 0);
-                double drop = opening - balance.Value;
-                if (drop > debit) debit = drop;
+                double net = opening + credit - balance.Value;
+                if (net > debit) debit = net;
             }
             return Math.Max(0, Math.Round(debit, 8));
+        }
+
+        private static bool IsPreviousDay(string previous, string today)
+        {
+            if (string.IsNullOrEmpty(previous) || string.IsNullOrEmpty(today)) return false;
+            DateTime before;
+            DateTime after;
+            if (!DateTime.TryParseExact(previous, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out before)) return false;
+            if (!DateTime.TryParseExact(today, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out after)) return false;
+            return after.Date == before.Date.AddDays(1);
+        }
+
+        private static bool ObservationNearMidnight(string today, double observedAtMs)
+        {
+            long observed = (long)observedAtMs;
+            if (observed <= 0) return false;
+            long midnight = BeijingDayStartMs(today);
+            long gap = midnight - observed;
+            return gap >= 0 && gap <= 5 * 60 * 1000L;
+        }
+
+        private static long BeijingDayStartMs(string day)
+        {
+            DateTime parsed;
+            if (!DateTime.TryParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out parsed)) return 0;
+            DateTime utc = DateTime.SpecifyKind(parsed.Date.AddHours(-8), DateTimeKind.Utc);
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            return (long)(utc - epoch).TotalMilliseconds;
         }
 
         // ------------------------------------------------------------ 峰谷（北京时间 UTC+8）
@@ -505,6 +623,21 @@ namespace BalancePet
         }
 
         /// <summary>标准计价时段的可读文本（由 PeakStart/PeakEnd 生成，不再两处手写）。</summary>
+        public static int PeakWindowCount
+        {
+            get { return PeakStart.Length; }
+        }
+
+        public static int PeakWindowStart(int index)
+        {
+            return PeakStart[index];
+        }
+
+        public static int PeakWindowEnd(int index)
+        {
+            return PeakEnd[index];
+        }
+
         public static string PeakWindowText()
         {
             StringBuilder sb = new StringBuilder();

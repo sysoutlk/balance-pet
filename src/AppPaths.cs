@@ -24,6 +24,12 @@ namespace BalancePet
             {
                 try
                 {
+                    string overrideRoot = Environment.GetEnvironmentVariable("BALANCE_PET_DATA_ROOT");
+                    if (!string.IsNullOrEmpty(overrideRoot))
+                    {
+                        Directory.CreateDirectory(overrideRoot);
+                        return overrideRoot.TrimEnd('\\', '/');
+                    }
                     if (File.Exists(Path.Combine(Root, "portable.txt"))) return Root;
                     string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                     if (string.IsNullOrEmpty(appData)) return Root;
@@ -41,6 +47,8 @@ namespace BalancePet
         public static string RolesDir { get { return Path.Combine(DataRoot, "roles"); } }
 
         public static string ConfigPath { get { return Path.Combine(DataRoot, "pet-config.json"); } }
+
+        public static string DraftConfigPath { get { return Path.Combine(DataRoot, "pet-config.draft.json"); } }
 
         public static string StatePath { get { return Path.Combine(DataRoot, "pet-state.json"); } }
 
@@ -88,7 +96,7 @@ namespace BalancePet
                 string path = Path.Combine(RolesDir, role);
                 if (File.Exists(path)) return path;
                 if (!Directory.Exists(path)) return "";
-                string[] patterns = new string[] { "*.png", "*.jpg", "*.jpeg", "*.bmp" };
+                string[] patterns = new string[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif" };
                 foreach (string pattern in patterns)
                 {
                     string[] files = Directory.GetFiles(path, pattern);
@@ -98,13 +106,18 @@ namespace BalancePet
                         return files[0];
                     }
                 }
-                foreach (string dir in Directory.GetDirectories(path))
+                string[] dirs = Directory.GetDirectories(path, "*", SearchOption.AllDirectories);
+                Array.Sort(dirs, StringComparer.OrdinalIgnoreCase);
+                foreach (string dir in dirs)
                 {
-                    string[] files = Directory.GetFiles(dir, "*.png");
-                    if (files.Length > 0)
+                    foreach (string pattern in patterns)
                     {
-                        Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                        return files[0];
+                        string[] files = Directory.GetFiles(dir, pattern);
+                        if (files.Length > 0)
+                        {
+                            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                            return files[0];
+                        }
                     }
                 }
             }
