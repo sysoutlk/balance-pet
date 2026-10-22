@@ -663,6 +663,12 @@ namespace BalancePet
         <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' Margin='0,0,0,4'>
           <Button x:Name='RoleEditBtn' Content='编辑' Width='56' Style='{StaticResource Mini}' ToolTip='管理模式：添加 / 删除角色素材'/>
         </StackPanel>
+        <DockPanel Margin='0,0,0,4'>
+          <Button x:Name='RoleDirBtn' Content='打开素材目录' Width='104' DockPanel.Dock='Right'
+                  Style='{StaticResource Mini}' ToolTip='打开配置与角色素材的实际保存目录'/>
+          <TextBlock x:Name='RoleLibrarySummary' FontSize='10' Foreground='__MUTED__'
+                     VerticalAlignment='Center' TextTrimming='CharacterEllipsis' Margin='1,0,8,0'/>
+        </DockPanel>
         <WrapPanel x:Name='RolePanel'/>
         <TextBlock x:Name='RigScopeHint' FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='1,4,0,2'
                    Text='单图动态是当前 PNG 的专属设置；选中一张单图后，可分别调整它的动态效果。'/>
@@ -1143,7 +1149,7 @@ namespace BalancePet
             }
             foreach (string name in new string[]
             {
-                "Header","TitleText","SubText","SaveSettingsBtn","SaveStateText","ActionGrid","ActionListHint","ActionListCard","ActionPoolCard","ActionPinCard","ActionPinChk","ActionPinHint","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","RigScopeHint","RigImageCard","RigRoleName","MeshRigChk","RigIntensitySlider","RigIntensityVal","RigFaceYSlider","RigFaceYVal","ScaleSlider","ScaleVal","ScaleAllBtn",
+                "Header","TitleText","SubText","SaveSettingsBtn","SaveStateText","ActionGrid","ActionListHint","ActionListCard","ActionPoolCard","ActionPinCard","ActionPinChk","ActionPinHint","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","RoleLibrarySummary","RoleDirBtn","RigScopeHint","RigImageCard","RigRoleName","MeshRigChk","RigIntensitySlider","RigIntensityVal","RigFaceYSlider","RigFaceYVal","ScaleSlider","ScaleVal","ScaleAllBtn",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapAutoChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus","PackImportBtn","PackStatus","RoleImportStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
@@ -1417,6 +1423,7 @@ namespace BalancePet
             ((Button)ui["QuipImportBtn"]).Click += delegate { ImportQuipsDialog(); };
             ((Button)ui["QuipExportBtn"]).Click += delegate { ExportQuipsDialog(); };
             ((Button)ui["RoleAddBtn"]).Click += delegate { AddRoleAssetDialog(); };
+            ((Button)ui["RoleDirBtn"]).Click += delegate { OpenRoleDirectory(); };
             ((Button)ui["AnimMakeBtn"]).Click += delegate { MakeAnimDialog(); };
             ((Button)ui["PackImportBtn"]).Click += delegate { ImportPackDialog(); };
             ((Slider)ui["SliverSlider"]).ValueChanged += delegate(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1590,6 +1597,20 @@ namespace BalancePet
             {
                 SetRoleImportStatus("图片素材导入失败");
                 MessageBox.Show(root, "添加失败：" + ex.Message, "添加角色素材", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenRoleDirectory()
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(AppPaths.RolesDir);
+                System.Diagnostics.Process.Start("explorer.exe", "\"" + AppPaths.RolesDir + "\"");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(root, "打开素材目录失败：" + ex.Message,
+                    "素材目录", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2642,6 +2663,17 @@ namespace BalancePet
             {
                 if (IsImportedPackRole(file)) imported.Add(file);
                 else plain.Add(file);
+            }
+            TextBlock summary = ui.ContainsKey("RoleLibrarySummary")
+                ? ui["RoleLibrarySummary"] as TextBlock : null;
+            if (summary != null)
+            {
+                summary.Text = files.Count == 0
+                    ? "素材库为空"
+                    : "素材库共 " + files.Count.ToString(CultureInfo.InvariantCulture)
+                        + " 项 · 导入包 " + imported.Count.ToString(CultureInfo.InvariantCulture)
+                        + " · 单图/动图 " + plain.Count.ToString(CultureInfo.InvariantCulture);
+                summary.ToolTip = AppPaths.RolesDir;
             }
 
             AddRoleSectionHeader(panel, "内置角色");

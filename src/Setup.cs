@@ -2,7 +2,8 @@
 // balance-pet.exe there and creates shortcuts. Built by build.ps1 with the in-box csc.
 //
 //   balance-pet-setup.exe                          interactive installer
-//   balance-pet-setup.exe --silent --dir=<path> [--no-shortcuts]
+//   balance-pet-setup.exe --silent --dir=<parent-or-install-dir>
+//       [--no-shortcuts] [--no-desktop-shortcut] [--no-start-menu-shortcut]
 using System;
 using System.Drawing;
 using System.IO;
@@ -12,9 +13,9 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("余额桌宠安装程序")]
 [assembly: AssemblyProduct("余额桌宠")]
 [assembly: AssemblyDescription("余额桌宠安装程序")]
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
-[assembly: AssemblyInformationalVersion("1.2.1")]
+[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyFileVersion("1.2.2.0")]
+[assembly: AssemblyInformationalVersion("1.2.2")]
 
 internal static class Setup
 {
@@ -22,13 +23,20 @@ internal static class Setup
     private static int Main(string[] args)
     {
         bool silent = false;
-        bool shortcuts = true;
+        bool desktopShortcut = true;
+        bool startMenuShortcut = true;
         string dir = "";
         foreach (string raw in args)
         {
             string arg = raw == null ? "" : raw.Trim();
             if (arg == "--silent" || arg == "/S") silent = true;
-            else if (arg == "--no-shortcuts") shortcuts = false;
+            else if (arg == "--no-shortcuts")
+            {
+                desktopShortcut = false;
+                startMenuShortcut = false;
+            }
+            else if (arg == "--no-desktop-shortcut") desktopShortcut = false;
+            else if (arg == "--no-start-menu-shortcut") startMenuShortcut = false;
             else if (arg.StartsWith("--dir=", StringComparison.OrdinalIgnoreCase)) dir = arg.Substring(6).Trim('"');
         }
         if (string.IsNullOrEmpty(dir))
@@ -41,7 +49,7 @@ internal static class Setup
         {
             try
             {
-                Install(dir, shortcuts);
+                Install(dir, desktopShortcut, startMenuShortcut);
                 return 0;
             }
             catch (Exception ex)
@@ -67,63 +75,98 @@ internal static class Setup
         form.MaximizeBox = false;
         form.MinimizeBox = false;
         form.StartPosition = FormStartPosition.CenterScreen;
-        form.ClientSize = new Size(470, 190);
+        form.ClientSize = new Size(590, 310);
+        form.AutoScaleMode = AutoScaleMode.Dpi;
         form.Font = new Font("Microsoft YaHei UI", 9f);
 
         Label title = new Label();
-        title.Text = "选择安装位置";
+        title.Text = "安装余额桌宠";
         title.Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
         title.AutoSize = true;
-        title.Location = new Point(20, 18);
+        title.Location = new Point(22, 18);
         form.Controls.Add(title);
+
+        Label subtitle = new Label();
+        subtitle.Text = "选择上级目录，安装器会自动创建 BalancePet 文件夹。";
+        subtitle.ForeColor = Color.DimGray;
+        subtitle.AutoSize = true;
+        subtitle.Location = new Point(22, 46);
+        form.Controls.Add(subtitle);
+
+        Label pathLabel = new Label();
+        pathLabel.Text = "安装到";
+        pathLabel.AutoSize = true;
+        pathLabel.Location = new Point(22, 76);
+        form.Controls.Add(pathLabel);
 
         TextBox path = new TextBox();
         path.Text = initialDir;
-        path.Location = new Point(20, 56);
-        path.Width = 336;
+        path.Location = new Point(22, 99);
+        path.Width = 444;
         form.Controls.Add(path);
 
         Button browse = new Button();
         browse.Text = "浏览…";
-        browse.Location = new Point(364, 54);
-        browse.Width = 86;
+        browse.Location = new Point(474, 97);
+        browse.Width = 92;
         browse.Height = 26;
         browse.Click += delegate
         {
             using (FolderBrowserDialog dialog = new FolderBrowserDialog())
             {
-                dialog.Description = "选择安装目录";
-                dialog.SelectedPath = path.Text;
-                if (dialog.ShowDialog(form) == DialogResult.OK) path.Text = dialog.SelectedPath;
+                dialog.Description = "选择 BalancePet 的上级目录，安装器会自动创建 BalancePet 子目录";
+                string current = "";
+                try { current = Path.GetDirectoryName(NormalizeInstallDir(path.Text)); }
+                catch { }
+                if (!string.IsNullOrEmpty(current) && Directory.Exists(current))
+                    dialog.SelectedPath = current;
+                if (dialog.ShowDialog(form) == DialogResult.OK)
+                    path.Text = NormalizeInstallDir(dialog.SelectedPath);
             }
         };
         form.Controls.Add(browse);
 
-        CheckBox shortcut = new CheckBox();
-        shortcut.Text = "创建桌面和开始菜单快捷方式";
-        shortcut.Checked = true;
-        shortcut.AutoSize = true;
-        shortcut.Location = new Point(20, 92);
-        form.Controls.Add(shortcut);
+        GroupBox shortcutGroup = new GroupBox();
+        shortcutGroup.Text = "快捷方式";
+        shortcutGroup.Location = new Point(22, 139);
+        shortcutGroup.Size = new Size(544, 58);
+        form.Controls.Add(shortcutGroup);
+
+        CheckBox desktopShortcut = new CheckBox();
+        desktopShortcut.Text = "创建桌面快捷方式";
+        desktopShortcut.Checked = true;
+        desktopShortcut.AutoSize = true;
+        desktopShortcut.Location = new Point(14, 22);
+        shortcutGroup.Controls.Add(desktopShortcut);
+
+        CheckBox startMenuShortcut = new CheckBox();
+        startMenuShortcut.Text = "创建开始菜单快捷方式";
+        startMenuShortcut.Checked = true;
+        startMenuShortcut.AutoSize = true;
+        startMenuShortcut.Location = new Point(210, 22);
+        shortcutGroup.Controls.Add(startMenuShortcut);
 
         Label hint = new Label();
-        hint.Text = "程序文件只有 balance-pet.exe；配置、角色素材等数据保存在 %APPDATA%\\BalancePet。";
+        hint.Text = "程序文件安装到上方目录。\r\n配置与角色素材保存在 %APPDATA%\\BalancePet。";
         hint.ForeColor = Color.DimGray;
-        hint.AutoSize = true;
-        hint.Location = new Point(20, 120);
+        hint.AutoSize = false;
+        hint.Location = new Point(22, 225);
+        hint.Size = new Size(544, 34);
         form.Controls.Add(hint);
 
         Button install = new Button();
         install.Text = "安装";
-        install.Location = new Point(320, 150);
+        install.Location = new Point(440, 266);
         install.Width = 130;
         install.Height = 30;
         install.Click += delegate
         {
             try
             {
-                Install(path.Text, shortcut.Checked);
-                MessageBox.Show(form, "安装完成：\n" + path.Text, "余额桌宠", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string installed = Install(path.Text, desktopShortcut.Checked,
+                    startMenuShortcut.Checked);
+                MessageBox.Show(form, "安装完成：\n" + installed, "余额桌宠",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 form.Close();
             }
             catch (Exception ex)
@@ -136,10 +179,9 @@ internal static class Setup
         return form;
     }
 
-    private static void Install(string dir, bool shortcuts)
+    private static string Install(string dir, bool desktopShortcut, bool startMenuShortcut)
     {
-        if (string.IsNullOrEmpty(dir)) throw new InvalidOperationException("安装路径不能为空。");
-        dir = Path.GetFullPath(dir);
+        dir = NormalizeInstallDir(dir);
         Directory.CreateDirectory(dir);
         string exePath = Path.Combine(dir, "balance-pet.exe");
         using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("balance-pet.exe"))
@@ -150,15 +192,29 @@ internal static class Setup
                 source.CopyTo(target);
             }
         }
-        if (!shortcuts) return;
-        CreateShortcut(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), exePath);
-        string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-        if (!string.IsNullOrEmpty(programs))
+        if (desktopShortcut)
+            CreateShortcut(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), exePath);
+        if (startMenuShortcut)
         {
-            string folder = Path.Combine(programs, "余额桌宠");
-            Directory.CreateDirectory(folder);
-            CreateShortcut(folder, exePath);
+            string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+            if (!string.IsNullOrEmpty(programs))
+            {
+                string folder = Path.Combine(programs, "余额桌宠");
+                Directory.CreateDirectory(folder);
+                CreateShortcut(folder, exePath);
+            }
         }
+        return dir;
+    }
+
+    private static string NormalizeInstallDir(string selected)
+    {
+        if (string.IsNullOrEmpty(selected)) throw new InvalidOperationException("安装路径不能为空。");
+        string full = Path.GetFullPath(selected);
+        string leaf = Path.GetFileName(full.TrimEnd('\\', '/'));
+        if (string.Equals(leaf, "BalancePet", StringComparison.OrdinalIgnoreCase))
+            return full;
+        return Path.Combine(full, "BalancePet");
     }
 
     private static void CreateShortcut(string folder, string exePath)

@@ -25,7 +25,9 @@
 
 ## 快速开始
 
-1. 安装：双击 `balance-pet-setup.exe` 选择安装目录（默认 `%LOCALAPPDATA%\Programs\BalancePet`），自动创建桌面和开始菜单快捷方式；也可以直接用便携版 `balance-pet.exe`。
+1. 安装：双击 `balance-pet-setup.exe` 选择上级目录，安装器会自动创建 `BalancePet` 子目录并安装
+   （默认 `%LOCALAPPDATA%\Programs\BalancePet`）；桌面和开始菜单快捷方式可以分别选择。
+   也可以直接使用便携版 `balance-pet.exe`。
 2. 从快捷方式或 `balance-pet.exe` 启动桌宠。运行数据默认保存在 `%APPDATA%\BalancePet`，不会写到 exe 所在目录；想完全便携，在 exe 同目录放一个空的 `portable.txt`。
 3. 右键桌宠打开设置卡片，在「余额接口」里填各平台 API Key 并点「应用」。
 4. 可选：运行 `scripts\install-autostart.ps1` 加入开机自启；便携用户也可以用 `scripts\install-desktop-shortcut.ps1` 建快捷方式。
@@ -154,6 +156,8 @@ Token 只保存在本机 `pet-config.json`，使用 Windows DPAPI 加密。平�
 详见 [roles/README.md](roles/README.md)。
 
 外观页的「选择图片或动图…」可直接导入 PNG / JPG / GIF / BMP（重名自动加序号并立刻换上）；每个自定义角色右上角都有删除按钮，确认后直接从 `roles\` 移除；在资源管理器里手动删掉文件后，切回外观页列表也会自动刷新。
+外观页顶部会显示素材库总数，并可通过「打开素材目录」直接打开
+`%APPDATA%\BalancePet\roles`，核对所有单图、动图和导入宠物包。
 
 ### 宠物包（自有格式）
 
