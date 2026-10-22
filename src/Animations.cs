@@ -117,11 +117,24 @@ namespace BalancePet
             GifBitmapDecoder decoder = new GifBitmapDecoder(new Uri(path), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             FrameSet set = new FrameSet();
             set.Fps = 10;
+            int canvasWidth;
+            int canvasHeight;
+            ReadGifCanvas(path, out canvasWidth, out canvasHeight);
+            BitmapSource canvas = null;
             foreach (BitmapFrame frame in decoder.Frames)
             {
-                BitmapSource source = frame;
+                int left;
+                int top;
+                int disposal;
+                ReadGifFrameInfo(frame, out left, out top, out disposal);
+                BitmapSource previousCanvas = canvas;
+                BitmapSource source = ComposeGifFrame(canvas, frame, left, top, canvasWidth, canvasHeight);
                 source.Freeze();
                 set.Frames.Add(source);
+                if (canvasWidth < 1 || canvasHeight < 1) canvas = null;
+                else if (disposal == 2) canvas = null;
+                else if (disposal == 3) canvas = previousCanvas;
+                else canvas = source;
             }
             // Prefer the per-frame delays the GIF carries (1/100 s units).
             try
@@ -143,6 +156,79 @@ namespace BalancePet
             anim.Default = set;
             anim.States["idle"] = set;
             return anim;
+        }
+
+        private static void ReadGifCanvas(string path, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            try
+            {
+                using (FileStream stream = File.OpenRead(path))
+                {
+                    byte[] header = new byte[10];
+                    if (stream.Read(header, 0, header.Length) != header.Length) return;
+                    width = header[6] | (header[7] << 8);
+                    height = header[8] | (header[9] << 8);
+                }
+            }
+            catch
+            {
+                width = 0;
+                height = 0;
+            }
+        }
+
+        private static void ReadGifFrameInfo(BitmapFrame frame, out int left, out int top, out int disposal)
+        {
+            left = 0;
+            top = 0;
+            disposal = 0;
+            try
+            {
+                BitmapMetadata metadata = frame.Metadata as BitmapMetadata;
+                if (metadata != null && metadata.ContainsQuery("/imgdesc/Left"))
+                {
+                    left = Convert.ToInt32(metadata.GetQuery("/imgdesc/Left"), CultureInfo.InvariantCulture);
+                }
+                if (metadata != null && metadata.ContainsQuery("/imgdesc/Top"))
+                {
+                    top = Convert.ToInt32(metadata.GetQuery("/imgdesc/Top"), CultureInfo.InvariantCulture);
+                }
+                if (metadata != null && metadata.ContainsQuery("/grctlext/Disposal"))
+                {
+                    disposal = Convert.ToInt32(metadata.GetQuery("/grctlext/Disposal"), CultureInfo.InvariantCulture);
+                }
+            }
+            catch
+            {
+                left = 0;
+                top = 0;
+                disposal = 0;
+            }
+        }
+
+        private static BitmapSource ComposeGifFrame(BitmapSource canvas, BitmapFrame frame,
+            int left, int top, int canvasWidth, int canvasHeight)
+        {
+            if (canvasWidth < 1 || canvasHeight < 1)
+            {
+                return frame;
+            }
+
+            DrawingVisual visual = new DrawingVisual();
+            using (DrawingContext context = visual.RenderOpen())
+            {
+                if (canvas != null)
+                {
+                    context.DrawImage(canvas, new Rect(0, 0, canvasWidth, canvasHeight));
+                }
+                context.DrawImage(frame, new Rect(left, top, frame.PixelWidth, frame.PixelHeight));
+            }
+            RenderTargetBitmap composed = new RenderTargetBitmap(
+                canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
+            composed.Render(visual);
+            return composed;
         }
 
         private static RoleAnim LoadFolder(Config cfg, string folder)

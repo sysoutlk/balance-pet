@@ -68,6 +68,15 @@ namespace BalancePet
         public bool IsCustom;
         public double? Balance;
         public double? TodayUsage;
+        public double? TodayKeyUsage;       // 平台实时：当前 API Key 今日费用
+        public double? TodayTotalUsage;     // 平台实时：全部 API Key 今日费用
+        public double? LifetimeUsage;       // 平台账户累计费用
+        public bool UsageExact;
+        public int UsageKeyCount;
+        public string UsageKeyName = "";
+        public string UsageError = "";
+        public long LocalUsageSinceMs;      // local balance tracking coverage start
+        public List<DayUsage> PlatformHistory = new List<DayUsage>();
         public List<string> Details = new List<string>();
         public string KeySource = "";       // where the API key came from, for the settings UI
         public string Error = "";
@@ -86,7 +95,12 @@ namespace BalancePet
 
     internal static class Providers
     {
-        public static string Version = "1.1.0";
+        public static string Version = "1.2.0";
+        private static readonly object PlatformUsageCacheLock = new object();
+        private static string platformUsageCacheToken = "";
+        private static string platformUsageCacheDay = "";
+        private static long platformUsageCacheAtMs;
+        private static PlatformUsageSnapshot platformUsageCache;
 
         /// <summary>这个平台的计价是否分标准/优惠时段（错峰优惠）：只有 DeepSeek 是。</summary>
         public static bool HasPeakPricing(string id)
@@ -320,6 +334,7 @@ namespace BalancePet
                 state.Ok = state.Balance.HasValue;
                 if (!state.Ok && string.IsNullOrEmpty(state.Error)) state.Error = "响应里没有余额字段";
                 if (!state.Ok) Log.Write("provider " + def.Id + " parse failed: " + Snippet(body));
+                if (state.Ok && def.Id == "deepseek") ApplyDeepSeekPlatformUsage(cfg, state, key);
             }
             catch (Exception ex)
             {
@@ -497,6 +512,424 @@ namespace BalancePet
                 return;
             }
             state.Error = "未知的提供商";
+        }
+
+        private sealed class PlatformUsageSnapshot
+        {
+            public bool CostOk;
+            public double? TodayKeyUsage;
+            public double? TodayTotalUsage;
+            public double? LifetimeUsage;
+            public int KeyCount;
+            public string KeyName = "";
+            public string Error = "";
+            public List<DayUsage> History = new List<DayUsage>();
+        }
+
+        private static void ApplyDeepSeekPlatformUsage(Config cfg, ProviderState state, string apiKey)
+        {
+            string stored = cfg.GetString("providers.deepseek", "platformToken", "");
+            string token = NormalizePlatformToken(Secret.Unprotect(stored));
+            if (string.IsNullOrEmpty(token)) return;
+
+            string day = DataService.TodayKey();
+            long now = DataService.NowMs();
+            double refreshSec = cfg.GetNumberAt("providers.deepseek.usageRefreshSec", 180);
+            if (refreshSec < 30) refreshSec = 30;
+            if (refreshSec > 3600) refreshSec = 3600;
+            lock (PlatformUsageCacheLock)
+            {
+                if (platformUsageCache != null
+                    && platformUsageCacheDay == day
+                    && platformUsageCacheToken == token
+                    && now - platformUsageCacheAtMs < (long)(refreshSec * 1000))
+                {
+                    CopyPlatformUsage(platformUsageCache, state);
+                    return;
+                }
+            }
+
+            PlatformUsageSnapshot snapshot;
+            try
+            {
+                snapshot = QueryDeepSeekPlatformUsage(cfg, token, apiKey, state.Currency);
+            }
+            catch (Exception ex)
+            {
+                state.UsageError = ex.Message;
+                Log.Write("deepseek platform usage failed: " + ex.Message);
+                return;
+            }
+            lock (PlatformUsageCacheLock)
+            {
+                platformUsageCacheToken = token;
+                platformUsageCacheDay = day;
+                platformUsageCacheAtMs = now;
+                platformUsageCache = snapshot;
+            }
+            CopyPlatformUsage(snapshot, state);
+        }
+
+        private static void CopyPlatformUsage(PlatformUsageSnapshot source, ProviderState state)
+        {
+            state.UsageExact = source.CostOk;
+            state.TodayKeyUsage = source.TodayKeyUsage;
+            state.TodayTotalUsage = source.TodayTotalUsage;
+            state.LifetimeUsage = source.LifetimeUsage;
+            state.UsageKeyCount = source.KeyCount;
+            state.UsageKeyName = source.KeyName;
+            state.UsageError = source.Error;
+            state.PlatformHistory = new List<DayUsage>();
+            foreach (DayUsage item in source.History)
+            {
+                DayUsage copy = new DayUsage();
+                copy.Day = item.Day;
+                copy.Usage = item.Usage;
+                state.PlatformHistory.Add(copy);
+            }
+        }
+
+        private static PlatformUsageSnapshot QueryDeepSeekPlatformUsage(Config cfg, string token, string apiKey, string currency)
+        {
+            long start;
+            long end;
+            HistoryWindow(30, out start, out end);
+            string costPath = "/api/v0/usage/by_api_key/cost?start="
+                + start.ToString(CultureInfo.InvariantCulture)
+                + "&end=" + end.ToString(CultureInfo.InvariantCulture)
+                + "&tz=28800&bucket=86400";
+
+            Task<string> costTask = Task.Factory.StartNew(delegate { return GetPlatform(cfg, costPath, token); });
+            Task<string> keysTask = Task.Factory.StartNew(delegate { return GetPlatform(cfg, "/api/v0/users/get_api_keys", token); });
+            Task<string> summaryTask = Task.Factory.StartNew(delegate { return GetPlatform(cfg, "/api/v0/users/get_user_summary", token); });
+            Task.WaitAll(new Task[] { costTask, keysTask, summaryTask }, 14000);
+
+            PlatformUsageSnapshot snapshot = new PlatformUsageSnapshot();
+            string costBody = PlatformTaskResult(costTask, "近30天按 Key 成本");
+            List<Dictionary<string, object>> keyRows = null;
+            if (keysTask.IsCompleted && !keysTask.IsFaulted && !keysTask.IsCanceled)
+            {
+                keyRows = ParsePlatformKeys(ParsePlatformEnvelope(keysTask.Result));
+                snapshot.KeyCount = keyRows.Count;
+            }
+
+            object costBiz = ParsePlatformEnvelope(costBody);
+            Dictionary<string, double> dailyTotals;
+            Dictionary<string, Dictionary<string, double>> dailyByKey;
+            List<Dictionary<string, object>> costKeys;
+            ParsePlatformCost(costBiz, start, end, currency, out dailyTotals, out dailyByKey, out costKeys);
+            snapshot.CostOk = true;
+            if (snapshot.KeyCount == 0) snapshot.KeyCount = costKeys.Count;
+            string todayKey = DataService.TodayKey();
+            double todayTotal;
+            snapshot.TodayTotalUsage = dailyTotals.TryGetValue(todayKey, out todayTotal)
+                ? Math.Round(todayTotal, 8) : 0;
+            List<string> historyDays = new List<string>(dailyTotals.Keys);
+            historyDays.Sort(StringComparer.Ordinal);
+            foreach (string day in historyDays)
+            {
+                DayUsage item = new DayUsage();
+                item.Day = day;
+                item.Usage = Math.Round(dailyTotals[day], 8);
+                snapshot.History.Add(item);
+            }
+
+            Dictionary<string, object> currentKey = FindCurrentKey(apiKey, keyRows, costKeys);
+            if (currentKey != null)
+            {
+                string tracking = KeyField(currentKey, "tracking_id", "trackingId");
+                string name = KeyField(currentKey, "name");
+                snapshot.KeyName = name;
+                Dictionary<string, double> keyDay;
+                double current;
+                if (!string.IsNullOrEmpty(tracking)
+                    && dailyByKey.TryGetValue(todayKey, out keyDay)
+                    && keyDay.TryGetValue(tracking, out current))
+                {
+                    snapshot.TodayKeyUsage = Math.Round(current, 8);
+                }
+                else
+                {
+                    snapshot.TodayKeyUsage = 0;
+                }
+            }
+            else
+            {
+                snapshot.Error = "当前 API Key 未在平台 Key 列表中匹配";
+            }
+
+            if (summaryTask.IsCompleted && !summaryTask.IsFaulted && !summaryTask.IsCanceled)
+            {
+                try
+                {
+                    snapshot.LifetimeUsage = ParseLifetimeCost(ParsePlatformEnvelope(summaryTask.Result), currency);
+                }
+                catch (Exception ex)
+                {
+                    if (string.IsNullOrEmpty(snapshot.Error)) snapshot.Error = "累计消耗：" + ex.Message;
+                }
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(snapshot.Error)) snapshot.Error = "账户累计消耗查询超时";
+            }
+            return snapshot;
+        }
+
+        private static string PlatformTaskResult(Task<string> task, string label)
+        {
+            if (!task.IsCompleted) throw new TimeoutException(label + "查询超时");
+            if (task.IsCanceled) throw new InvalidOperationException(label + "查询已取消");
+            if (task.IsFaulted)
+            {
+                Exception error = task.Exception == null ? null : task.Exception.GetBaseException();
+                throw new InvalidOperationException(label + "：" + (error == null ? "查询失败" : error.Message));
+            }
+            return task.Result;
+        }
+
+        private static object ParsePlatformEnvelope(string body)
+        {
+            object parsed = Json.ReadAny(body);
+            Dictionary<string, object> root = parsed as Dictionary<string, object>;
+            if (root == null) throw new InvalidOperationException("平台响应不是 JSON 对象");
+            int code = (int)Json.ToNumber(Json.Get(root, "code"), 0);
+            if (code != 0)
+            {
+                if (code == 40002 || code == 40003) throw new InvalidOperationException("平台 Token 无效或已过期");
+                throw new InvalidOperationException("平台接口错误 code=" + code.ToString(CultureInfo.InvariantCulture));
+            }
+            Dictionary<string, object> data = Json.AsObject(Json.Get(root, "data"));
+            int bizCode = (int)Json.ToNumber(Json.Get(data, "biz_code"), 0);
+            if (bizCode != 0)
+            {
+                if (bizCode == 40002 || bizCode == 40003) throw new InvalidOperationException("平台 Token 无效或已过期");
+                string message = Convert.ToString(Json.Get(data, "biz_msg"), CultureInfo.InvariantCulture);
+                throw new InvalidOperationException("平台业务错误 " + bizCode.ToString(CultureInfo.InvariantCulture)
+                    + (string.IsNullOrEmpty(message) ? "" : "：" + message));
+            }
+            return Json.Get(data, "biz_data");
+        }
+
+        private static List<Dictionary<string, object>> ParsePlatformKeys(object biz)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+            List<object> rows = Json.AsArray(biz);
+            Dictionary<string, object> map = biz as Dictionary<string, object>;
+            if (map != null)
+            {
+                object nested = GetAny(map, "api_keys", "apiKeys", "keys", "items", "list");
+                rows = Json.AsArray(nested);
+            }
+            foreach (object row in rows)
+            {
+                Dictionary<string, object> item = row as Dictionary<string, object>;
+                if (item != null) result.Add(item);
+            }
+            return result;
+        }
+
+        private static void ParsePlatformCost(object biz, long start, long end, string wantedCurrency,
+            out Dictionary<string, double> dailyTotals,
+            out Dictionary<string, Dictionary<string, double>> dailyByKey,
+            out List<Dictionary<string, object>> keys)
+        {
+            dailyTotals = new Dictionary<string, double>(StringComparer.Ordinal);
+            dailyByKey = new Dictionary<string, Dictionary<string, double>>(StringComparer.Ordinal);
+            keys = new List<Dictionary<string, object>>();
+            Dictionary<string, object> root = Json.AsObject(biz);
+            List<object> groups = Json.AsArray(Json.Get(root, "data"));
+            Dictionary<string, object> selectedGroup = null;
+            foreach (object groupValue in groups)
+            {
+                Dictionary<string, object> group = groupValue as Dictionary<string, object>;
+                if (group == null) continue;
+                if (selectedGroup == null) selectedGroup = group;
+                string currency = Convert.ToString(Json.Get(group, "currency"), CultureInfo.InvariantCulture);
+                if (!string.IsNullOrEmpty(wantedCurrency)
+                    && string.Equals(currency, wantedCurrency, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedGroup = group;
+                    break;
+                }
+            }
+            if (selectedGroup == null) return;
+            foreach (object seriesValue in Json.AsArray(Json.Get(selectedGroup, "series")))
+            {
+                Dictionary<string, object> series = seriesValue as Dictionary<string, object>;
+                if (series == null) continue;
+                Dictionary<string, object> keyInfo = Json.AsObject(Json.Get(series, "api_key"));
+                string tracking = KeyField(keyInfo, "tracking_id", "trackingId", "id", "name");
+                bool knownKey = false;
+                foreach (Dictionary<string, object> existing in keys)
+                {
+                    if (KeyField(existing, "tracking_id", "trackingId", "id", "name") == tracking)
+                    {
+                        knownKey = true;
+                        break;
+                    }
+                }
+                if (!string.IsNullOrEmpty(tracking) && !knownKey)
+                {
+                    keys.Add(keyInfo);
+                }
+                foreach (object bucketValue in Json.AsArray(Json.Get(series, "buckets")))
+                {
+                    Dictionary<string, object> bucket = bucketValue as Dictionary<string, object>;
+                    if (bucket == null) continue;
+                    long time = (long)Json.ToNumber(Json.Get(bucket, "time"), 0);
+                    if (time < start || time >= end) continue;
+                    double amount = Json.ToNumber(Json.Get(bucket, "cost"), 0);
+                    if (amount <= 0) continue;
+                    string day = BeijingDayKey(time);
+                    double oldDay;
+                    dailyTotals.TryGetValue(day, out oldDay);
+                    dailyTotals[day] = oldDay + amount;
+                    if (!string.IsNullOrEmpty(tracking))
+                    {
+                        Dictionary<string, double> keyDay;
+                        if (!dailyByKey.TryGetValue(day, out keyDay))
+                        {
+                            keyDay = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                            dailyByKey[day] = keyDay;
+                        }
+                        double oldKey;
+                        keyDay.TryGetValue(tracking, out oldKey);
+                        keyDay[tracking] = oldKey + amount;
+                    }
+                }
+            }
+        }
+
+        private static double? ParseLifetimeCost(object biz, string wantedCurrency)
+        {
+            Dictionary<string, object> root = Json.AsObject(biz);
+            double? fallback = null;
+            foreach (object itemValue in Json.AsArray(Json.Get(root, "total_costs")))
+            {
+                Dictionary<string, object> item = itemValue as Dictionary<string, object>;
+                if (item == null) continue;
+                string currency = Convert.ToString(Json.Get(item, "currency"), CultureInfo.InvariantCulture);
+                double value = Math.Round(Json.ToNumber(GetAny(item, "amount", "cost", "total"), 0), 8);
+                if (!fallback.HasValue) fallback = value;
+                if (string.Equals(currency, wantedCurrency, StringComparison.OrdinalIgnoreCase)) return value;
+            }
+            return fallback;
+        }
+
+        private static Dictionary<string, object> FindCurrentKey(string configuredKey,
+            List<Dictionary<string, object>> keyRows, List<Dictionary<string, object>> costKeys)
+        {
+            if (keyRows != null)
+            {
+                foreach (Dictionary<string, object> row in keyRows)
+                {
+                    if (KeyMatches(configuredKey, row)) return row;
+                }
+                if (keyRows.Count == 1) return keyRows[0];
+            }
+            if (costKeys != null)
+            {
+                foreach (Dictionary<string, object> row in costKeys)
+                {
+                    if (KeyMatches(configuredKey, row)) return row;
+                }
+                if (costKeys.Count == 1) return costKeys[0];
+            }
+            return null;
+        }
+
+        private static bool KeyMatches(string configured, Dictionary<string, object> keyInfo)
+        {
+            string key = NormalizeKey(configured).Replace(" ", "");
+            string sensitive = KeyField(keyInfo, "sensitive_id", "sensitiveId", "key", "api_key", "apiKey");
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(sensitive)) return false;
+            sensitive = sensitive.Replace(" ", "");
+            if (string.Equals(key, sensitive, StringComparison.OrdinalIgnoreCase)) return true;
+            if (sensitive.IndexOf("***", StringComparison.Ordinal) >= 0)
+            {
+                int mark = sensitive.LastIndexOf("***", StringComparison.Ordinal) + 3;
+                sensitive = sensitive.Substring(mark).Trim('-', '.', '*');
+            }
+            if (sensitive.Length >= 4 && key.EndsWith(sensitive, StringComparison.OrdinalIgnoreCase)) return true;
+            if (sensitive.Length >= 4 && sensitive.EndsWith(key, StringComparison.OrdinalIgnoreCase)) return true;
+            return key.Length >= 6 && sensitive.EndsWith(key.Substring(key.Length - 6), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string KeyField(Dictionary<string, object> data, params string[] names)
+        {
+            object value = GetAny(data, names);
+            return value == null ? "" : Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
+
+        private static object GetAny(Dictionary<string, object> data, params string[] names)
+        {
+            if (data == null) return null;
+            foreach (string name in names)
+            {
+                object value;
+                if (data.TryGetValue(name, out value) && value != null) return value;
+            }
+            return null;
+        }
+
+        private static string NormalizePlatformToken(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return "";
+            string text = token.Trim().Trim('"', '\'');
+            if (text.StartsWith("{", StringComparison.Ordinal))
+            {
+                Dictionary<string, object> parsed = Json.ReadAny(text) as Dictionary<string, object>;
+                string value = KeyField(parsed, "value", "token", "access_token", "accessToken");
+                if (!string.IsNullOrEmpty(value)) text = value.Trim();
+            }
+            if (text.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) text = text.Substring(7).Trim();
+            return text;
+        }
+
+        private static string GetPlatform(Config cfg, string path, string token)
+        {
+            string url = "https://platform.deepseek.com" + path;
+            HttpClient client = Http.For(cfg, 15);
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+            request.Headers.TryAddWithoutValidation("Accept", "application/json");
+            request.Headers.TryAddWithoutValidation("Origin", "https://platform.deepseek.com");
+            request.Headers.TryAddWithoutValidation("Referer", "https://platform.deepseek.com/usage");
+            request.Headers.TryAddWithoutValidation("x-app-version", "1.0.0");
+            request.Headers.TryAddWithoutValidation("x-client-platform", "web");
+            request.Headers.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                + "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+            HttpResponseMessage response = client.SendAsync(request).Result;
+            string body = response.Content.ReadAsStringAsync().Result;
+            if (!response.IsSuccessStatusCode)
+            {
+                int code = (int)response.StatusCode;
+                if (code == 401 || code == 403) throw new InvalidOperationException("平台 Token 无效或已过期");
+                if (code == 429) throw new InvalidOperationException("平台用量接口请求过于频繁");
+                throw new InvalidOperationException("平台用量接口 HTTP " + code.ToString(CultureInfo.InvariantCulture));
+            }
+            return body;
+        }
+
+        private static void HistoryWindow(int days, out long start, out long end)
+        {
+            if (days < 1) days = 1;
+            if (days > 30) days = 30;
+            DateTime beijing = DataService.BeijingNow();
+            DateTime firstDay = beijing.Date.AddDays(1 - days);
+            DateTime localMidnight = new DateTime(firstDay.Year, firstDay.Month, firstDay.Day, 0, 0, 0, DateTimeKind.Unspecified);
+            DateTime utc = DateTime.SpecifyKind(localMidnight.AddHours(-8), DateTimeKind.Utc);
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            start = (long)(utc - epoch).TotalSeconds;
+            end = start + days * 86400L;
+        }
+
+        private static string BeijingDayKey(long time)
+        {
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            return epoch.AddSeconds(time).AddHours(8).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
 
         private static void AddDetail(ProviderState state, string label, double? value)

@@ -17,6 +17,7 @@ namespace BalancePet
 {
     internal sealed class Engine
     {
+        public const int SafeCloneLimit = 20;
         private readonly Config cfg;
         private readonly DispatcherTimer timer = new DispatcherTimer();
         public readonly DataService Data;
@@ -31,6 +32,7 @@ namespace BalancePet
         private DateTime lastBumpQuipAt = DateTime.MinValue;
         private sealed class SuspendedPet
         {
+            public int Slot;
             public string Role;
             public double Scale;
             public double X;
@@ -63,6 +65,7 @@ namespace BalancePet
 
         public void Start()
         {
+            Log.Write("start data-root=" + AppPaths.DataRoot);
             panel.Build();
             BuildPets();
             Data.Updated += OnDataUpdated;
@@ -75,9 +78,9 @@ namespace BalancePet
             timer.Start();
             if (Demo && Pets.Count > 0)
             {
-                bubblePage = 0;
+                bubblePage = Program.DemoPageIndex;
                 bubbleQuip = QuipFor("greeting");
-                ShowView(Pets[0], BuildPage(0), 3600);
+                ShowView(Pets[0], BuildPage(bubblePage), 3600);
                 demoActionAt = DateTime.UtcNow.AddSeconds(1);
             }
         }
@@ -204,6 +207,7 @@ namespace BalancePet
         {
             double speed = cfg.GetNumber("walk", "speedPxPerSec", 72);
             bool sleeping = pet.Sleeping;
+            bool pinnedMode = !string.IsNullOrEmpty(pet.PinnedActionKey());
             AdvanceFrames(pet, dt, sleeping);
 
             if (pet.Mode == "drag")
@@ -226,7 +230,7 @@ namespace BalancePet
                 if (pet.X + pet.Width > area.Right) { pet.X = area.Right - pet.Width; pet.VelocityX = -pet.VelocityX * bounce; }
                 if (pet.Y < area.Top) { pet.Y = area.Top; pet.VelocityY = -pet.VelocityY * bounce; }
                 if (pet.Y + pet.Height > area.Bottom) { pet.Y = area.Bottom - pet.Height; pet.VelocityY = -pet.VelocityY * bounce; }
-                pet.Spin.Angle += pet.VelocityX * dt * 0.06;
+                if (!pet.IsPetPack) pet.Spin.Angle += pet.VelocityX * dt * 0.06;
                 pet.ApplyPosition();
                 double speedNow = Math.Sqrt(pet.VelocityX * pet.VelocityX + pet.VelocityY * pet.VelocityY);
                 if (speedNow < stopSpeed)
@@ -235,6 +239,13 @@ namespace BalancePet
                     pet.SetIdleAfterThrow();   // 扔到哪就停哪，不再被吸到屏幕边上
                     ScheduleEdgeHide(pet, now);
                 }
+                return;
+            }
+
+            if (pinnedMode)
+            {
+                UpdatePinnedAction(pet, now);
+                pet.ApplyPosition();
                 return;
             }
 
@@ -283,12 +294,20 @@ namespace BalancePet
                 else
                 {
                     double rate = pet.SpeedFactor >= 2 ? 16 : 9;
-                    pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
-                    if (pet.SpeedFactor >= 2) pet.Spin.Angle = pet.Facing * 7;
+                    if (!pet.IsPetPack)
+                    {
+                        pet.Bob.Y = Math.Abs(Math.Sin(now.TimeOfDay.TotalSeconds * rate)) * -3;
+                        if (pet.SpeedFactor >= 2) pet.Spin.Angle = pet.Facing * 7;
+                    }
+                    else
+                    {
+                        pet.Bob.Y = 0;
+                        pet.Spin.Angle = 0;
+                    }
                     if (now >= pet.NextActionAt && cfg.GetFlag("actions", "enabled", true)
                         && !(panel != null && panel.IsVisible))
                     {
-                        string walkingAction = PickWalkingAction();
+                        string walkingAction = PickWalkingAction(pet);
                         if (string.IsNullOrEmpty(walkingAction))
                         {
                             // 动作池为空或全是原地动作：别每帧重试。
@@ -317,8 +336,13 @@ namespace BalancePet
 
             // idle
             pet.Spin.Angle = 0;
-            pet.Bob.Y = Math.Sin(now.TimeOfDay.TotalSeconds * 1.4 + pet.Phase) * (sleeping ? 0.8 : 1.6);
-            if (pet.EdgeHidden)
+            pet.Bob.Y = pet.IsPetPack ? 0 : Math.Sin(now.TimeOfDay.TotalSeconds * 1.4 + pet.Phase) * (sleeping ? 0.8 : 1.6);
+            if (pinnedMode && (pet.EdgeHidden || pet.Tuck > 0.01))
+            {
+                pet.Untuck();
+                pet.EdgeHideAt = DateTime.MaxValue;
+            }
+            if (!pinnedMode && pet.EdgeHidden)
             {
                 if (!EdgeHideEnabled(pet))
                 {
@@ -328,7 +352,7 @@ namespace BalancePet
                 // Stays tucked in (with its own animation) until the user drags it out.
                 return;
             }
-            if (pet.Dropped && EdgeHideEnabled(pet))
+            if (!pinnedMode && pet.Dropped && EdgeHideEnabled(pet))
             {
                 // Dropped against an edge: tuck in right away instead of waiting for the timer.
                 pet.Dropped = false;
@@ -336,32 +360,70 @@ namespace BalancePet
                 return;
             }
             pet.Dropped = false;
-            if (pet.Tuck > 0.01) return;   // mid-tuck: no walking, no random actions
+            if (!pinnedMode && pet.Tuck > 0.01) return;   // mid-tuck: no walking, no random actions
             RefreshEdgeAttachment(pet);
-            if (EdgeHideEnabled(pet))
+            if (!pinnedMode && !string.IsNullOrEmpty(pet.EdgeSide))
             {
-                if (pet.EdgeHideAt == DateTime.MaxValue)
+                pet.StopActionForEdge();
+                if (EdgeHideEnabled(pet) && pet.EdgeHideAt == DateTime.MaxValue)
                 {
                     ScheduleEdgeHide(pet, now);
                 }
-                else if (now >= pet.EdgeHideAt)
+                else if (EdgeHideEnabled(pet) && now >= pet.EdgeHideAt)
                 {
                     pet.StartEdgeSlide(true);
-                    return;
                 }
+                return;
             }
-            if (sleeping) return;
-            if (now >= pet.NextWalkAt && cfg.GetFlag("walk", "enabled", true))
+            if (sleeping && !pinnedMode) return;
+            if (!pinnedMode && now >= pet.NextWalkAt && cfg.GetFlag("walk", "enabled", true))
             {
                 pet.StartWalk();
                 return;
             }
+            if (pinnedMode && pet.NextActionAt > now) pet.NextActionAt = now;
             if (now >= pet.NextActionAt && cfg.GetFlag("actions", "enabled", true))
             {
                 // 调设置/看预览时先不自动演，免得动作和气泡打断操作。
-                if (panel != null && panel.IsVisible) return;
+                if (!pinnedMode && panel != null && panel.IsVisible) return;
                 pet.StartAction("random");
+                if (string.IsNullOrEmpty(pet.LastActionKey)) pet.NextActionAt = now.AddSeconds(30);
             }
+        }
+
+        private void UpdatePinnedAction(PetWindow pet, DateTime now)
+        {
+            string pinned = pet.PinnedActionKey();
+            if (string.IsNullOrEmpty(pinned)) return;
+            pet.Untuck();
+            pet.EdgeSide = "";
+            pet.EdgeHidden = false;
+            pet.EdgeHideAt = DateTime.MaxValue;
+            pet.NextWalkAt = DateTime.MaxValue;
+            pet.NextActionAt = now;
+            if (pet.Mode != "idle") pet.SetIdle();
+
+            if (!string.Equals(pet.Action, pinned, StringComparison.Ordinal))
+            {
+                pet.Action = "";
+                pet.StartAction("random");
+                return;
+            }
+
+            double total = (pet.ActionUntil - pet.ActionStart).TotalSeconds;
+            double progress = total <= 0
+                ? 1
+                : Math.Min(1, (now - pet.ActionStart).TotalSeconds / total);
+            AnimateAction(pet, now, progress);
+            if (now < pet.ActionUntil) return;
+
+            pet.Action = "";
+            pet.Spin.Angle = 0;
+            pet.Squash.ScaleX = 1;
+            pet.Squash.ScaleY = 1;
+            pet.Bob.X = 0;
+            pet.Bob.Y = 0;
+            pet.StartAction("random");
         }
 
         /// <summary>
@@ -423,6 +485,10 @@ namespace BalancePet
                     double push = Math.Max(pushA, pushB);
                     if (push >= 450 && (now - lastBumpQuipAt).TotalSeconds > 9 && Program.Rng.NextDouble() < 0.7)
                     {
+                        a.SetEmotion("startle", 1.8);
+                        b.SetEmotion("angry", 2.2);
+                        a.PlayPackOneShot("bump", 1.1);
+                        b.PlayPackOneShot("bump", 1.1);
                         string quip = QuipFor("bump");
                         if (!string.IsNullOrEmpty(quip))
                         {
@@ -519,17 +585,29 @@ namespace BalancePet
             }
             else if (pet.Mode == "edge")
             {
-                state = pet.Tuck >= 0.5 ? "peek" : "walk";
+                if (pet.IsPetPack)
+                {
+                    string edgeState = pet.HasPackState("edge") ? "edge" : "walk";
+                    state = pet.Tuck >= 0.5 && pet.HasPackState("peek") ? "peek" : edgeState;
+                }
+                else
+                {
+                    state = pet.Tuck >= 0.5 ? "peek" : "walk";
+                }
                 rate = 1.3;
             }
             else if (pet.Mode == "thrown")
             {
-                state = "spin";
+                if (!pet.IsPetPack) state = "spin";
+                else if (pet.HasPackState("fall")) state = "fall";
+                else if (pet.HasPackState("spin")) state = "spin";
+                else if (pet.HasPackState("drag")) state = "drag";
+                else state = "walk";
                 rate = 1.5;
             }
             else if (pet.Mode == "drag")
             {
-                state = "walk";
+                state = !pet.IsPetPack || pet.HasPackState("drag") ? "drag" : "walk";
                 rate = 1.5;
             }
             else if (sleeping)
@@ -539,7 +617,9 @@ namespace BalancePet
             }
             else if (pet.EdgeHidden)
             {
-                state = "peek";
+                if (!pet.IsPetPack) state = "peek";
+                else if (pet.HasPackState("peek")) state = "peek";
+                else state = pet.HasPackState("edge") ? "edge" : "idle";
                 rate = 0.7;
             }
             pet.SetAnimState(state);
@@ -595,6 +675,7 @@ namespace BalancePet
         // ------------------------------------------------------------ 动作动画
         private void AnimateAction(PetWindow pet, DateTime now, double p)
         {
+            if (pet.IsPetPack) return;
             switch (pet.Action)
             {
                 case "hop":
@@ -742,31 +823,27 @@ namespace BalancePet
 
         private void ScheduleNextAction(PetWindow pet, DateTime now)
         {
-            double baseSec = cfg.GetNumber("actions", "pauseMinSec", 14);
-            double jitter = cfg.GetNumber("actions", "pauseJitter", 0.5);
-            if (baseSec < 3) baseSec = 3;
-            if (jitter < 0) jitter = 0;
-            if (jitter > 3) jitter = 3;
-            double wait = baseSec * (1 + Program.Rng.NextDouble() * jitter);
-            if (wait < 3) wait = 3;
-            pet.NextActionAt = now.AddSeconds(wait);
+            pet.NextActionAt = now.AddSeconds(ActionTiming.PauseSeconds(cfg));
         }
 
         /// <summary>散步时只叠加不抢位置的姿态动作；pace/peek/follow 这类会改坐标的动作
         /// 仍然留给原地表演，避免和行走路径打架。</summary>
-        private static bool CanWalkAction(string key)
+        private static bool CanWalkAction(PetWindow pet, string key)
         {
+            if (pet.IsPetPack) return pet.UsesPackActions && pet.PackActionCanWalk(key);
             return key != "pace" && key != "peek" && key != "follow" && key != "lie" && key != "sleep";
         }
 
-        private string PickWalkingAction()
+        private string PickWalkingAction(PetWindow pet)
         {
+            if (pet.IsPetPack) return pet.UsesPackActions ? pet.PickPackAction(true) : "";
             List<string> usable = new List<string>();
             foreach (string key in cfg.GetStrings("actions", "pool"))
             {
-                if (CanWalkAction(key)) usable.Add(key);
+                if (CanWalkAction(pet, key)) usable.Add(key);
             }
             if (usable.Count == 0) return "";
+            if (usable.Count > 1) usable.Remove(pet.LastActionKey);
             return usable[Program.Rng.Next(usable.Count)];
         }
 
@@ -776,7 +853,7 @@ namespace BalancePet
             pet.Action = "";
             // pace/peek 会自己移动，结束后回到动作起点；其它动作不重置位置，
             // 否则散步途中做完动作会被拽回原地。
-            if (!keepWalking && (finished == "pace" || finished == "peek"))
+            if (!keepWalking && !pet.IsPetPack && (finished == "pace" || finished == "peek"))
             {
                 pet.X = pet.ActionOriginX;
                 pet.ApplyPosition();
@@ -806,6 +883,11 @@ namespace BalancePet
 
         private void ScheduleEdgeHide(PetWindow pet, DateTime now)
         {
+            if (!string.IsNullOrEmpty(pet.PinnedActionKey()))
+            {
+                pet.EdgeHideAt = DateTime.MaxValue;
+                return;
+            }
             if (!EdgeHideEnabled(pet) || pet.EdgeHidden)
             {
                 pet.EdgeHideAt = DateTime.MaxValue;
@@ -850,14 +932,24 @@ namespace BalancePet
         {
             PetWindow pet = sender as PetWindow;
             if (pet == null) return;
-            if (pet.EdgeHidden)
+            bool snapped = pet.EdgeHidden || pet.Tuck > 0.01 || !string.IsNullOrEmpty(pet.EdgeSide);
+            if (snapped)
             {
-                // 收起的桌宠不再响应点击（防误触）：拖它才会出来。
+                // Snapped pets can still show pages, but never untuck or play a click action.
+                string edgeQuip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
+                int edgePage = pet.PageIndex % PageCount();
+                pet.PageIndex = (edgePage + 1) % PageCount();
+                bubbleIsMessage = false;
+                bubbleIsAlert = false;
+                bubblePage = edgePage;
+                bubbleQuip = edgeQuip;
+                ShowView(pet, BuildPage(edgePage), BubbleSeconds());
                 return;
             }
-            if (pet.Tuck > 0.5) return;   // 正在收起时点击也不打断
             RefreshEdgeAttachment(pet);   // a click stops it in place instead of re-attaching
             ScheduleEdgeHide(pet, DateTime.UtcNow);
+            pet.SetEmotion("happy", 2.5);
+            pet.PlayPackOneShot("click", 1.8);
             string quip = QuipFor(pet.Sleeping ? "sleep" : "greeting");
             int page = pet.PageIndex % PageCount();
             pet.PageIndex = (page + 1) % PageCount();
@@ -932,13 +1024,22 @@ namespace BalancePet
             if (pet.EdgeHidden) RevealPet(pet);
             if (pet.Mode == "walk")
             {
-                if (key == "random") key = PickWalkingAction();
-                else if (!CanWalkAction(key)) return;
+                if (key == "random") key = PickWalkingAction(pet);
+                else if (!CanWalkAction(pet, key)) return;
                 if (string.IsNullOrEmpty(key)) return;
                 pet.NextActionAt = DateTime.MaxValue;
             }
             pet.StartAction(key);
             if (string.IsNullOrEmpty(pet.LastActionKey)) return;
+            string done = pet.LastActionKey;
+            if (done == "fireworks" || done == "hearts" || done == "sparkles" || done == "confetti"
+                || done == "wave" || done == "greet")
+            {
+                pet.SetEmotion("happy", 3.0);
+            }
+            else if (done == "sleep" || done == "lie") pet.SetEmotion("sleepy", 5.0);
+            else if (done == "startle") pet.SetEmotion("startle", 1.5);
+            else if (done == "shy") pet.SetEmotion("shy", 2.5);
             if (speak && cfg.GetFlag("alert", "quipsOn", true))
             {
                 ShowBubbleText(pet, QuipFor(pet.LastActionKey));
@@ -949,13 +1050,24 @@ namespace BalancePet
         public int CloneCap()
         {
             double max = cfg.GetNumberAt("clones.max", cfg.GetNumber("", "maxClones", 6));
-            return (int)max;   // 宠物总数上限；0 或负数 = 不限
+            int configured = (int)max;
+            if (configured <= 0) return SafeCloneLimit;
+            return Math.Min(configured, SafeCloneLimit);
+        }
+
+        public int ConfiguredCloneCap()
+        {
+            double max = cfg.GetNumberAt("clones.max", cfg.GetNumber("", "maxClones", 6));
+            int configured = (int)max;
+            return configured <= 0 ? 0 : Math.Min(configured, SafeCloneLimit);
         }
 
         public int CloneFloor()
         {
             int floor = (int)cfg.GetNumberAt("clones.min", 1);
-            return floor < 1 ? 1 : floor;
+            int cap = CloneCap();
+            if (floor < 1) floor = 1;
+            return floor > cap ? cap : floor;
         }
 
         /// <summary>Picks the look for a new pet: random when roles.random is on (clones prefer
@@ -1077,9 +1189,13 @@ namespace BalancePet
             }
             PetWindow source = Pets[Program.Rng.Next(Pets.Count)];
             PetWindow pet = new PetWindow(cfg);
+            int cloneSlot = revive == null ? NextFreeCloneSlot() : revive.Slot;
+            pet.Slot = cloneSlot;
             if (revive != null)
             {
-                Log.Write("clone revive role=" + (revive.Role == "" ? "__mascot" : revive.Role) + " scale=" + revive.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                Log.Write("clone revive slot=" + cloneSlot.ToString(CultureInfo.InvariantCulture)
+                    + " role=" + (revive.Role == "" ? "__mascot" : revive.Role)
+                    + " scale=" + revive.Scale.ToString("0.###", CultureInfo.InvariantCulture));
                 // 循环涨落收回的分身原样回来：同一角色、同一大小、同一位置，
                 // 不会再随机换一只新的。
                 pet.ApplyRole(revive.Role);
@@ -1092,8 +1208,10 @@ namespace BalancePet
             }
             else
             {
-                pet.ApplyRole(PickRole(source.Role));
-                Log.Write("clone new role=" + (pet.Role == "" ? "__mascot" : pet.Role) + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                pet.ApplyRole(PickCloneRole(source.Role, cloneSlot));
+                Log.Write("clone new slot=" + cloneSlot.ToString(CultureInfo.InvariantCulture)
+                    + " role=" + (pet.Role == "" ? "__mascot" : pet.Role)
+                    + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
                 pet.ResizePet();
                 pet.Place(source.X + 60 + Program.Rng.Next(0, 60), source.Y - 30 - Program.Rng.Next(0, 60));
             }
@@ -1102,6 +1220,43 @@ namespace BalancePet
             pet.Show();
             pet.SetIdle();
             ScheduleEdgeHide(pet, DateTime.UtcNow);
+        }
+
+        private int NextFreeCloneSlot()
+        {
+            HashSet<int> used = new HashSet<int>();
+            foreach (PetWindow pet in Pets) used.Add(pet.Slot);
+            for (int slot = 1; ; slot++)
+            {
+                if (!used.Contains(slot)) return slot;
+            }
+        }
+
+        private string PickCloneRole(string sourceRole, int slot)
+        {
+            string mode = cfg.GetString("clones", "roleMode", "random");
+            if (string.Equals(mode, "slots", StringComparison.OrdinalIgnoreCase))
+            {
+                Dictionary<string, object> selected = cfg.GetObject("", "cloneSlots");
+                object value;
+                if (selected.TryGetValue(slot.ToString(CultureInfo.InvariantCulture), out value))
+                {
+                    string chosen = value == null ? "" : Convert.ToString(value, CultureInfo.InvariantCulture);
+                    return string.Equals(chosen, "@current", StringComparison.OrdinalIgnoreCase)
+                        ? sourceRole
+                        : chosen;
+                }
+                return sourceRole;
+            }
+            if (string.Equals(mode, "manual", StringComparison.OrdinalIgnoreCase))
+            {
+                return cfg.GetString("clones", "role", "");
+            }
+            if (string.Equals(mode, "current", StringComparison.OrdinalIgnoreCase))
+            {
+                return sourceRole;
+            }
+            return PickRole(sourceRole);
         }
 
         public void RemoveClone()
@@ -1116,9 +1271,12 @@ namespace BalancePet
             PetWindow pet = Pets[Pets.Count - 1];
             if (suspend)
             {
-                Log.Write("clone suspend role=" + (pet.Role == "" ? "__mascot" : pet.Role) + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
+                Log.Write("clone suspend slot=" + pet.Slot.ToString(CultureInfo.InvariantCulture)
+                    + " role=" + (pet.Role == "" ? "__mascot" : pet.Role)
+                    + " scale=" + pet.Scale.ToString("0.###", CultureInfo.InvariantCulture));
                 suspended.Add(new SuspendedPet
                 {
+                    Slot = pet.Slot,
                     Role = pet.Role,
                     Scale = pet.Scale,
                     X = pet.EdgeHidden ? pet.EdgeShownX : pet.X,
@@ -1166,6 +1324,7 @@ namespace BalancePet
         private void ShowAlert(PetWindow pet, string title, string text, string note)
         {
             if (pet == null) return;
+            pet.SetEmotion("worried", 8.0);
             bubbleIsMessage = true;
             bubbleIsAlert = true;
             alertTitle = title;
@@ -1199,9 +1358,8 @@ namespace BalancePet
             Snapshot data = Data.Current;
             ProviderState primary = data.Primary;
             BubbleView view = new BubbleView();
-            view.Title = primary == null ? "DeepSeek 余额" : primary.Name + " 余额";
-            view.Big = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
-            view.BigColor = "#203170";
+            view.Mode = "message";
+            view.Title = primary == null ? "提示" : primary.Name + " · 提示";
             view.Quip = text;
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
@@ -1218,6 +1376,7 @@ namespace BalancePet
         {
             Snapshot data = Data.Current;
             BubbleView view = new BubbleView();
+            view.Mode = "alert";
             view.Title = string.IsNullOrEmpty(title) ? "提醒" : title;
             view.Big = text;
             view.BigSize = 15;
@@ -1227,10 +1386,50 @@ namespace BalancePet
                 view.Note = note;
                 view.NoteError = true;
             }
+            if (!string.IsNullOrEmpty(title)
+                && title.IndexOf("今日预算", StringComparison.Ordinal) >= 0)
+            {
+                view.AlertUsed = FirstMoneyValue(text);
+                view.AlertLimit = LastMoneyValue(note);
+            }
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
             view.Source = SourceLine(data);
             return view;
+        }
+
+        private static double? FirstMoneyValue(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            int symbol = text.IndexOf('¥');
+            if (symbol < 0) symbol = text.IndexOf('￥');
+            return symbol < 0 ? (double?)null : MoneyValueAt(text, symbol + 1);
+        }
+
+        private static double? LastMoneyValue(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            double? result = null;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] != '¥' && text[i] != '￥') continue;
+                double? value = MoneyValueAt(text, i + 1);
+                if (value.HasValue) result = value;
+            }
+            return result;
+        }
+
+        private static double? MoneyValueAt(string text, int start)
+        {
+            int index = start;
+            while (index < text.Length && char.IsWhiteSpace(text[index])) index++;
+            int begin = index;
+            while (index < text.Length && (char.IsDigit(text[index]) || text[index] == '.')) index++;
+            double value;
+            return index > begin
+                && double.TryParse(text.Substring(begin, index - begin),
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                ? (double?)value : null;
         }
 
         private string SourceLine(Snapshot data)
@@ -1238,13 +1437,11 @@ namespace BalancePet
             string stamp = data.AtMs > 0
                 ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(data.AtMs).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)
                 : "--";
-            ProviderState primary = data.Primary;
-            string sourceText = primary == null ? "无接口" : primary.SourceText;
-            if (data.OkCount > 1) sourceText = data.OkCount + " 个接口";
-            return sourceText + " · " + stamp + " 更新";
+            if (stamp == "--") return "未更新";
+            return data.OkCount > 1 ? data.OkCount + " 接口 · " + stamp : stamp;
         }
 
-        /// <summary>Four DeepSeek-centric views, cycled by clicking the pet.</summary>
+        /// <summary>Single-topic views (balance, usage, trend, peak, providers and plans).</summary>
         private BubbleView BuildPage(int index)
         {
             Snapshot data = Data.Current;
@@ -1253,135 +1450,291 @@ namespace BalancePet
             if (index < 0 || index >= keys.Count) index = 0;
             string page = keys[index];
             BubbleView view = new BubbleView();
+            view.Quip = bubbleQuip;
             view.PageIndex = index;
             view.PageCount = keys.Count;
-            view.Quip = bubbleQuip;
             view.PeakText = PeakBubbleText();
             view.PeakNow = data.IsPeak;
             view.Source = SourceLine(data);
+            bool exactDeepSeekUsage = primary != null && primary.Id == "deepseek"
+                && primary.UsageExact && primary.TodayTotalUsage.HasValue;
+            bool showKeyUsage = cfg.GetFlagAt("providers.deepseek.showKeyUsage", true);
 
             if (page == "balance")
             {
+                view.Mode = "balance";
                 view.Title = primary == null ? "余额" : primary.Name + " 余额";
                 view.Big = primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency);
+                view.BigSize = 30;
                 if (primary != null && primary.Details.Count > 0)
                 {
                     view.Sub = string.Join(" · ", primary.Details.ToArray());
                 }
-                view.Rows.Add(new KeyValuePair<string, string>("今日已用",
-                    primary == null ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency)));
-                view.ShowTrend = true;
-                view.Trend = data.History;
+                string localUsageNote = LocalUsageNote(primary);
                 if (primary != null && !primary.Ok && !string.IsNullOrEmpty(primary.Error))
                 {
-                    view.Note = primary.Error;
+                    view.Note = string.IsNullOrEmpty(localUsageNote)
+                        ? primary.Error : primary.Error + "；" + localUsageNote;
                     view.NoteError = true;
+                }
+                else if (!string.IsNullOrEmpty(localUsageNote))
+                {
+                    view.Note = localUsageNote;
                 }
                 return view;
             }
 
             if (page == "today")
             {
-                view.Title = "今日消耗";
+                view.Mode = "spend";
+                view.Title = primary == null ? "消耗统计" : primary.Name + " 消耗";
                 view.Big = primary == null ? "--" : Fmt.Money(primary.TodayUsage, primary.Currency);
-                view.Rows.Add(new KeyValuePair<string, string>("当前余额",
-                    primary == null ? "--" : Fmt.Money(primary.Balance, primary.Currency)));
+                view.BigSize = 28;
                 double yesterday = 0;
                 double sum = 0;
                 int days = 0;
                 List<DayUsage> history = data.History;
-                for (int i = 0; i < history.Count; i++)
+                Dictionary<string, double> usageByDay = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (DayUsage item in history)
                 {
-                    if (i == history.Count - 2) yesterday = history[i].Usage;
-                    if (i < history.Count - 1)
+                    if (item != null && !string.IsNullOrEmpty(item.Day))
+                        usageByDay[item.Day] = item.Usage;
+                }
+                DateTime todayDate = DataService.BeijingNow().Date;
+                string yesterdayKey = todayDate.AddDays(-1)
+                    .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                usageByDay.TryGetValue(yesterdayKey, out yesterday);
+                for (int offset = 1; offset <= 7; offset++)
+                {
+                    string key = todayDate.AddDays(-offset)
+                        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    double value;
+                    if (usageByDay.TryGetValue(key, out value))
                     {
-                        sum += history[i].Usage;
+                        sum += value;
                         days++;
                     }
                 }
-                view.Rows.Add(new KeyValuePair<string, string>("昨日", Fmt.Money(yesterday, primary == null ? "CNY" : primary.Currency)));
-                if (days > 0)
+                string currency = primary == null ? "CNY" : primary.Currency;
+                view.Trend = new List<DayUsage>();
+                foreach (DayUsage item in data.History)
                 {
-                    view.Rows.Add(new KeyValuePair<string, string>("近 7 日均值", Fmt.Money(sum / days, primary == null ? "CNY" : primary.Currency)));
+                    if (item == null || string.IsNullOrEmpty(item.Day)) continue;
+                    DayUsage copy = new DayUsage();
+                    copy.Day = item.Day;
+                    copy.Usage = item.Usage;
+                    view.Trend.Add(copy);
                 }
-                view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
+                view.TrendCurrency = currency;
+                view.TrendExact = exactDeepSeekUsage;
+                if (exactDeepSeekUsage)
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>("全部 Key",
+                        Fmt.Money(primary.TodayTotalUsage, primary.Currency)));
+                    if (showKeyUsage)
+                    {
+                        view.Rows.Add(new KeyValuePair<string, string>("当前 Key",
+                            primary.TodayKeyUsage.HasValue ? Fmt.Money(primary.TodayKeyUsage, primary.Currency) : "未匹配"));
+                    }
+                    view.Sub = "官方精确成本";
+                }
+                else
+                {
+                    view.Rows.Add(new KeyValuePair<string, string>("昨日",
+                        Fmt.Money(yesterday, currency)));
+                    if (days > 0)
+                    {
+                        view.Rows.Add(new KeyValuePair<string, string>("近 7 日均",
+                            Fmt.Money(sum / days, currency)));
+                    }
+                    view.Sub = "本机估算";
+                }
+                if (!exactDeepSeekUsage && primary != null && primary.Id == "deepseek")
+                {
+                    string platformNote = string.IsNullOrEmpty(primary.UsageError)
+                        ? "官方余额接口不含分 Key 用量；填写平台 Token 后可读取精确成本"
+                        : "平台成本查询失败：" + primary.UsageError;
+                    string localUsageNote = LocalUsageNote(primary);
+                    view.Note = string.IsNullOrEmpty(localUsageNote)
+                        ? platformNote
+                        : platformNote + "；" + localUsageNote;
+                    view.NoteError = !string.IsNullOrEmpty(primary.UsageError);
+                }
+                else if (exactDeepSeekUsage && !string.IsNullOrEmpty(primary.UsageError))
+                {
+                    view.Note = primary.UsageError;
+                }
+                else
+                {
+                    string localUsageNote = LocalUsageNote(primary);
+                    if (!string.IsNullOrEmpty(localUsageNote)) view.Note = localUsageNote;
+                }
+                return view;
+            }
+
+            if (page == "trend")
+            {
+                view.Mode = "trend";
+                int days = (int)cfg.GetNumberAt("bubble.trendDays", 7);
+                if (days != 14 && days != 30) days = 7;
+                Dictionary<string, double> byDay = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (DayUsage item in data.History)
+                {
+                    if (item != null && !string.IsNullOrEmpty(item.Day)) byDay[item.Day] = item.Usage;
+                }
+                double total = 0;
+                DateTime today = DataService.BeijingNow().Date;
+                for (int offset = days - 1; offset >= 0; offset--)
+                {
+                    double value;
+                    if (byDay.TryGetValue(today.AddDays(-offset).ToString("yyyy-MM-dd",
+                            CultureInfo.InvariantCulture), out value))
+                        total += value;
+                }
+                string currency = primary == null ? "CNY" : primary.Currency;
+                view.Title = "近 " + days.ToString(CultureInfo.InvariantCulture) + " 天趋势";
+                view.Big = Fmt.Money(total, currency);
+                view.BigSize = 21;
+                view.Sub = Fmt.Money(total / days, currency)
+                    + (primary != null && primary.UsageExact ? " · 官方" : " · 本机");
                 view.ShowTrend = true;
-                view.Trend = history;
+                view.Trend = data.History;
+                view.TrendCurrency = currency;
+                view.TrendExact = primary != null && primary.UsageExact;
+                string localUsageNote = LocalUsageNote(primary);
+                if (!string.IsNullOrEmpty(localUsageNote)) view.Note = localUsageNote;
                 return view;
             }
 
             if (page == "peak")
             {
-                view.Title = "计价时段（北京时间）";
-                view.Big = data.IsPeak ? "标准时段" : "优惠时段（半价）";
+                view.Mode = "status";
+                view.Title = "计价时段";
+                view.Big = data.IsPeak ? "标准价" : "优惠价";
                 view.BigSize = 21;
                 view.BigColor = data.IsPeak ? "#e0433f" : "#2fa24c";
-                view.Rows.Add(new KeyValuePair<string, string>("当前计价", data.IsPeak ? "标准价（原价，×2）" : "优惠价（半价）"));
-                view.Rows.Add(new KeyValuePair<string, string>("标准时段", DataService.PeakWindowText()));
-                view.Rows.Add(new KeyValuePair<string, string>("优惠时段", "其余时段（含周末与节假日）"));
-                view.Rows.Add(new KeyValuePair<string, string>("当前时间", DataService.BeijingNow().ToString("HH:mm:ss", CultureInfo.InvariantCulture)));
-                view.Rows.Add(new KeyValuePair<string, string>("距切换", CountdownText(data.NextChangeAtMs)));
+                view.Sub = CountdownText(data.NextChangeAtMs);
                 return view;
             }
 
-            if (page == "providers")
+            if (page.StartsWith("provider:", StringComparison.Ordinal))
             {
-                view.Title = "余额接口";
-                view.Big = data.OkCount + " / " + EnabledCount(data);
-                view.BigSize = 22;
-                foreach (ProviderState provider in data.Providers)
+                view.Mode = "provider";
+                int providerIndex;
+                if (!int.TryParse(page.Substring("provider:".Length), NumberStyles.Integer,
+                        CultureInfo.InvariantCulture, out providerIndex)
+                    || providerIndex < 0 || providerIndex >= data.Providers.Count)
+                    return view;
+                ProviderState provider = data.Providers[providerIndex];
+                view.Title = provider.Name;
+                view.BigSize = 25;
+                if (!provider.Supported)
                 {
-                    if (!provider.Enabled) continue;
-                    if (!provider.Supported)
-                    {
-                        view.Rows.Add(new KeyValuePair<string, string>(provider.Name, "无公开接口"));
-                        continue;
-                    }
-                    view.Rows.Add(new KeyValuePair<string, string>(provider.Name,
-                        provider.Ok ? Fmt.Money(provider.Balance, provider.Currency) : "查询失败"));
+                    view.Big = "无公开接口";
+                    view.BigSize = 19;
+                    view.Sub = "当前平台不提供余额查询";
                 }
-                view.Rows.Add(new KeyValuePair<string, string>("更新时间", StampOf(data.AtMs)));
+                else if (!provider.Ok)
+                {
+                    view.Big = "查询失败";
+                    view.BigSize = 21;
+                    view.BigColor = "#e0433f";
+                    view.Note = provider.Error;
+                    view.NoteError = true;
+                }
+                else
+                {
+                    view.Big = Fmt.Money(provider.Balance, provider.Currency);
+                    view.Sub = provider.SourceText;
+                }
                 return view;
             }
 
-            // Page 4: coding-plan usage windows (5-hour / weekly).
-            view.Title = "套餐额度";
-            view.BigSize = 20;
-            int okPlans = 0;
-            foreach (PlanState plan in data.Plans)
+            if (page.StartsWith("plan:", StringComparison.Ordinal))
             {
-                if (plan.Ok) okPlans++;
-            }
-            view.Big = okPlans + " / " + data.Plans.Count + " 套餐在线";
-            foreach (PlanState plan in data.Plans)
-            {
-                if (!plan.Ok)
+                view.Mode = "quota";
+                string[] parts = page.Split(':');
+                int planIndex;
+                if (parts.Length < 3
+                    || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out planIndex)
+                    || planIndex < 0 || planIndex >= data.Plans.Count)
+                    return view;
+                PlanState plan = data.Plans[planIndex];
+                if (parts[2] == "status" || !plan.Ok || plan.Windows.Count == 0)
                 {
-                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name,
-                        plan.Unsupported ? "不可查询" : "查询失败"));
-                    continue;
+                    view.Title = plan.Name;
+                    view.Big = plan.Unsupported ? "不可查询" : "查询失败";
+                    view.BigSize = 20;
+                    view.BigColor = plan.Unsupported ? "" : "#e0433f";
+                    view.Note = string.IsNullOrEmpty(plan.ErrorDetail) ? plan.Error : plan.ErrorDetail;
+                    view.NoteError = !plan.Unsupported;
+                    return view;
                 }
-                foreach (PlanWindow window in plan.Windows)
-                {
-                    view.Rows.Add(new KeyValuePair<string, string>(plan.Name + " · " + window.Label,
-                        window.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%"));
-                }
+                int windowIndex;
+                if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out windowIndex)
+                    || windowIndex < 0 || windowIndex >= plan.Windows.Count)
+                    return view;
+                PlanWindow planWindow = plan.Windows[windowIndex];
+                view.Title = plan.Name + " · " + planWindow.Label;
+                view.Big = planWindow.Percent.ToString("0.#", CultureInfo.InvariantCulture) + "%";
+                view.BigSize = 26;
+                view.BigColor = planWindow.Percent >= 90 ? "#e0433f"
+                    : (planWindow.Percent >= 70 ? "#d88214" : "#2fa24c");
+                view.Sub = planWindow.Detail;
+                view.ResetText = planWindow.ResetDisplay();
+                return view;
             }
             return view;
+        }
+
+        private static string LocalUsageNote(ProviderState provider)
+        {
+            if (provider == null || provider.UsageExact || provider.LocalUsageSinceMs <= 0) return "";
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime started = epoch.AddMilliseconds(provider.LocalUsageSinceMs).AddHours(8);
+            DateTime today = DataService.BeijingNow().Date;
+            if (started.Date == today)
+            {
+                return "本机从 " + started.ToString("HH:mm", CultureInfo.InvariantCulture)
+                    + " 开始统计；此前未运行期间无法还原";
+            }
+            return "本机只统计程序运行期间，停机期间无法还原";
         }
 
         /// <summary>
         /// 点击气泡循环的页签：计价时段页只在支持错峰计价的主接口（DeepSeek）时出现，
         /// 套餐页有启用套餐时才有——页数随数据变化，索引用取模兜底。
         /// </summary>
-        private static List<string> PageKeys(Snapshot data)
+        private List<string> PageKeys(Snapshot data)
         {
             List<string> keys = new List<string>();
             keys.Add("balance");
             keys.Add("today");
+            if (data.History.Count > 0 && cfg.GetFlag("bubble", "trend", true))
+                keys.Add("trend");
             if (data.HasPeak) keys.Add("peak");
-            keys.Add("providers");
-            if (data.Plans.Count > 0) keys.Add("plans");
+            ProviderState primary = data.Primary;
+            for (int i = 0; i < data.Providers.Count; i++)
+            {
+                ProviderState provider = data.Providers[i];
+                if (!provider.Enabled || ReferenceEquals(provider, primary)) continue;
+                keys.Add("provider:" + i.ToString(CultureInfo.InvariantCulture));
+            }
+            for (int i = 0; i < data.Plans.Count; i++)
+            {
+                PlanState plan = data.Plans[i];
+                if (!plan.Enabled) continue;
+                if (!plan.Ok || plan.Windows.Count == 0)
+                {
+                    keys.Add("plan:" + i.ToString(CultureInfo.InvariantCulture) + ":status");
+                    continue;
+                }
+                for (int window = 0; window < plan.Windows.Count; window++)
+                {
+                    keys.Add("plan:" + i.ToString(CultureInfo.InvariantCulture) + ":"
+                        + window.ToString(CultureInfo.InvariantCulture));
+                }
+            }
             return keys;
         }
 
@@ -1390,14 +1743,15 @@ namespace BalancePet
             return PageKeys(Data.Current).Count;
         }
 
-        private static int EnabledCount(Snapshot data)
+        internal int DiagnosticPageCount()
         {
-            int count = 0;
-            foreach (ProviderState provider in data.Providers)
-            {
-                if (provider.Enabled && provider.Supported) count++;
-            }
-            return count;
+            return PageCount();
+        }
+
+        internal BubbleView DiagnosticBuildPage(int index, string quip)
+        {
+            bubbleQuip = quip;
+            return BuildPage(index);
         }
 
         private static string StampOf(long timeMs)
@@ -1411,11 +1765,9 @@ namespace BalancePet
             long leftMs = nextChangeAtMs - DataService.NowMs();
             if (leftMs < 0) leftMs = 0;
             TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
-            if (left.TotalHours >= 1)
-            {
-                return ((int)left.TotalHours) + " 小时 " + left.Minutes + " 分 " + left.Seconds + " 秒";
-            }
-            return left.Minutes + " 分 " + left.Seconds + " 秒";
+            return ((int)left.TotalHours).ToString(CultureInfo.InvariantCulture)
+                + ":" + left.Minutes.ToString("00", CultureInfo.InvariantCulture)
+                + ":" + left.Seconds.ToString("00", CultureInfo.InvariantCulture);
         }
 
         public string QuipFor(string key)
@@ -1451,13 +1803,7 @@ namespace BalancePet
         {
             Snapshot data = Data.Current;
             if (!data.HasPeak) return "";
-            long leftMs = data.NextChangeAtMs - DataService.NowMs();
-            if (leftMs < 0) leftMs = 0;
-            TimeSpan left = TimeSpan.FromMilliseconds(leftMs);
-            string countdown = left.TotalHours >= 1
-                ? ((int)left.TotalHours) + ":" + left.Minutes.ToString("00") + ":" + left.Seconds.ToString("00")
-                : left.Minutes + ":" + left.Seconds.ToString("00");
-            return (data.IsPeak ? "标准计价 · 价格 ×2" : "优惠计价 · 半价") + "  还有 " + countdown;
+            return data.IsPeak ? "标准价 ×2" : "优惠 50%";
         }
 
         public static string ActionName(string key)
@@ -1528,14 +1874,40 @@ namespace BalancePet
             CheckAlerts(data);
             if (Bubble.Visibility == Visibility.Visible)
             {
-                Bubble.ApplyStyle(cfg);
-                BubbleView view;
-                if (bubbleIsAlert) view = BuildAlertView(alertTitle, alertText, alertNote);
-                else if (bubbleIsMessage) view = BuildMessageView(bubbleQuip);
-                else view = BuildPage(bubblePage);
-                Bubble.UpdateFrom(view);
+                Bubble.UpdateFrom(BuildActiveBubbleView());
             }
             if (panel.IsVisible) panel.UpdateDataText();
+        }
+
+        public void RefreshBubblePresentation()
+        {
+            if (Bubble.Visibility == Visibility.Visible)
+            {
+                Bubble.UpdateFrom(BuildActiveBubbleView());
+                Bubble.Position(true);
+            }
+        }
+
+        public void CommitDraftConfig(Config draft)
+        {
+            if (draft == null) return;
+            cfg.CopyFrom(draft);
+            cfg.Save();
+            Bubble.ApplyStyle(cfg);
+            foreach (PetWindow pet in Pets)
+            {
+                pet.ResizePet();
+                pet.RefreshProp();
+            }
+            Data.Refresh();
+        }
+
+        private BubbleView BuildActiveBubbleView()
+        {
+            Bubble.ApplyStyle(cfg);
+            if (bubbleIsAlert) return BuildAlertView(alertTitle, alertText, alertNote);
+            if (bubbleIsMessage) return BuildMessageView(bubbleQuip);
+            return BuildPage(bubblePage);
         }
 
         private void CheckAlerts(Snapshot data)
@@ -1575,6 +1947,11 @@ namespace BalancePet
                     if (provider.TodayUsage.Value >= budget && !budgetLatched.Contains(key))
                     {
                         budgetLatched.Add(key);
+                        Log.Write("budget alert " + provider.Id
+                            + " balance=" + (provider.Balance.HasValue
+                                ? provider.Balance.Value.ToString("0.00", CultureInfo.InvariantCulture) : "--")
+                            + " today=" + provider.TodayUsage.Value.ToString("0.00", CultureInfo.InvariantCulture)
+                            + " budget=" + budget.ToString("0.00", CultureInfo.InvariantCulture));
                         headlines.Add(Fmt.Money(provider.TodayUsage, provider.Currency));
                         titles.Add(provider.Name + " 今日预算");
                         notes.Add(provider.Name + " 今日已用超过预算 " + Fmt.Money(budget, provider.Currency));

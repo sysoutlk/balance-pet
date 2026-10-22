@@ -7,8 +7,10 @@
 //   balance-pet.exe --self-test         headless data check, writes self-test-report.txt
 //   balance-pet.exe --make-icon <file>  export the built-in mascot as a .ico
 //   balance-pet.exe --make-anim <file>  turn a static picture into a frame-by-frame role
+//   balance-pet.exe --import-pack <dir> [--activate] install a pet pack
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -19,9 +21,10 @@ namespace BalancePet
 {
     internal static class Program
     {
-        public const string Version = "1.1.0";
+        public const string Version = "1.2.0";
         public static readonly Random Rng = new Random();
         public static Config CurrentConfig;
+        public static int DemoPageIndex;
 
         private const string HelpText =
             "balance-pet " + Version + "\n" +
@@ -33,6 +36,8 @@ namespace BalancePet
             "  balance-pet.exe --self-test         不弹窗口，检查数据源并写 self-test-report.txt\n" +
             "  balance-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
             "  balance-pet.exe --make-anim <图片>  把一张静态图生成逐帧动画角色（--name 角色名 --width 像素）\n" +
+            "  balance-pet.exe --import-pack <目录> [--activate]\n" +
+            "                                        导入宠物包并输出角色 id；加 --activate 立即切换\n" +
             "  balance-pet.exe --version           显示版本\n";
 
         [STAThread]
@@ -40,6 +45,12 @@ namespace BalancePet
         {
             try { Console.OutputEncoding = Encoding.UTF8; } catch { }
             Native.AttachConsole(Native.ATTACH_PARENT_PROCESS);
+            int demoPage;
+            if (int.TryParse(Environment.GetEnvironmentVariable("BALANCE_PET_DEMO_PAGE"),
+                    NumberStyles.Integer, CultureInfo.InvariantCulture, out demoPage))
+            {
+                DemoPageIndex = Math.Max(0, demoPage);
+            }
 
             List<string> flags = new List<string>(args);
             if (Has(flags, "--help") || Has(flags, "-h") || Has(flags, "/?"))
@@ -66,6 +77,29 @@ namespace BalancePet
             AppPaths.MigratePortableData();
             Config cfg = Config.Load(AppPaths.ConfigPath);
             CurrentConfig = cfg;
+            string importPack = ValueOf(flags, "--import-pack");
+            if (!string.IsNullOrEmpty(importPack))
+            {
+                string note;
+                string error;
+                string role = PetPackInstaller.Install(cfg, importPack, out note, out error);
+                if (string.IsNullOrEmpty(role))
+                {
+                    Console.WriteLine("导入失败：" + error);
+                    return 1;
+                }
+                Console.WriteLine("已导入宠物包：" + role);
+                Console.WriteLine("路径：" + Path.Combine(AppPaths.RolesDir, role));
+                if (!string.IsNullOrEmpty(note)) Console.WriteLine("素材转换：" + note);
+                if (Has(flags, "--activate"))
+                {
+                    cfg.Set("", "role", role);
+                    cfg.SetAt("roles.random", false);
+                    cfg.Save();
+                    Console.WriteLine("已设为当前宠物：" + role);
+                }
+                return 0;
+            }
             // 同目录放一个 quips.json 就能自带一套台词：启动时合并进来（随时可删，删了就没了）。
             string quipPack = System.IO.Path.Combine(AppPaths.DataRoot, "quips.json");
             if (System.IO.File.Exists(quipPack) && cfg.ImportQuips(quipPack) > 0)
@@ -91,6 +125,10 @@ namespace BalancePet
 
             Application app = new Application();
             app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            app.DispatcherUnhandledException += delegate(object sender, DispatcherUnhandledExceptionEventArgs e)
+            {
+                Log.Write("UI unhandled: " + e.Exception);
+            };
             Engine engine = new Engine(cfg, Has(flags, "--demo"));
             engine.Start();
             if (Has(flags, "--settings")) engine.ShowPanel();

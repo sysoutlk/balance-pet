@@ -33,6 +33,17 @@ namespace BalancePet
         private Canvas propLayer;           // 装扮层（帽子等挂件，画在角色上面）
         private Image propImage;            // 当前挂件
         private string propLoaded = "";     // 已加载的挂件路径，避免反复解码
+        private Canvas emotionLayer;        // 情绪符号层（汗滴、zzz、爱心等）
+        private FrameworkElement emotionVisual;
+        private string emotion = "";
+        private double emotionUntil;
+        private double emotionClock;
+        private TranslateTransform emotionFloat;
+        private MeshPetView meshView;       // 单图网格绑定
+        private PackDirector packDirector;  // 数据驱动宠物包
+        private PetPack pack;
+        private string packOverride = "";
+        private DateTime packOverrideUntil = DateTime.MinValue;
         private FxLayer fx;                 // 特效层（烟花/爱心/闪光/撒花）
         private RoleAnim animation;
         private WhaleAnimator whale;
@@ -56,6 +67,7 @@ namespace BalancePet
         public double TuckOffset;           // 贴边时的位移小动作（正值 = 更深地缩进边缘）
 
         public string Role = "";
+        public int Slot;                    // 0 = main pet, 1..N = clone slots
         public double Scale = 1.0;
         public double BaseWidth = Mascot.BaseWidth;
         public double BaseHeight = Mascot.BaseHeight;
@@ -149,14 +161,23 @@ namespace BalancePet
         private void AttachVisual(FrameworkElement element)
         {
             visual = element;
+            meshView = element as MeshPetView;
             visual.RenderTransform = group;
             visual.RenderTransformOrigin = new Point(0.5, 0.5);
+            visual.HorizontalAlignment = HorizontalAlignment.Center;
+            visual.VerticalAlignment = VerticalAlignment.Center;
             // 视觉树：角色 → 装扮层（帽子等）→ 特效层（烟花等，在独立窗口里）
             host = new Grid();
+            host.ClipToBounds = false;
             host.Children.Add(visual);
             propLayer = new Canvas();
             propLayer.IsHitTestVisible = false;
             host.Children.Add(propLayer);
+            emotionLayer = new Canvas();
+            emotionLayer.IsHitTestVisible = false;
+            host.Children.Add(emotionLayer);
+            emotion = "";
+            emotionVisual = null;
             Content = host;
             RefreshProp();
         }
@@ -211,6 +232,8 @@ namespace BalancePet
 
         private void UseMascot()
         {
+            packDirector = null;
+            pack = null;
             Role = "";
             Scale = RoleScale("");
             BaseWidth = Mascot.BaseWidth;
@@ -224,6 +247,34 @@ namespace BalancePet
         /// is missing (fresh clones have no character art).</summary>
         public bool ApplyRole(string role)
         {
+            PetPack pack = PetPack.TryLoad(cfg, role);
+            if (pack != null)
+            {
+                try
+                {
+                    PackDirector director = new PackDirector(cfg, role, pack);
+                    if (!string.IsNullOrEmpty(director.CurrentClip))
+                    {
+                        Role = role;
+                        Scale = RoleScale(role);
+                        BaseWidth = director.BaseWidth;
+                        BaseHeight = director.BaseHeight;
+                        animation = null;
+                        whale = null;
+                        activeSet = null;
+                        animState = "idle";
+                        packDirector = director;
+                        this.pack = pack;
+                        AttachVisual(director.Visual);
+                        ResizePet();
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("pack apply failed: " + role + " " + ex.Message);
+                }
+            }
             RoleAnim loaded = RoleAnim.Load(cfg, role);
             if (loaded == null)
             {
@@ -239,9 +290,22 @@ namespace BalancePet
                     UseMascot();
                     return false;
                 }
-                Image image = new Image();
-                image.Stretch = Stretch.Fill;
-                image.Source = first;
+                FrameworkElement view;
+                bool mesh = RigSettings.GetFlag(cfg, role, "mesh", false)
+                    && !loaded.Animated
+                    && string.Equals(Path.GetExtension(role), ".png", StringComparison.OrdinalIgnoreCase);
+                if (mesh)
+                {
+                    Log.Write("mesh rig role=" + role);
+                    view = new MeshPetView(first, cfg, role);
+                }
+                else
+                {
+                    Image image = new Image();
+                    image.Stretch = Stretch.Fill;
+                    image.Source = first;
+                    view = image;
+                }
                 Role = role;
                 Scale = RoleScale(role);
                 BaseWidth = first.PixelWidth;
@@ -250,7 +314,9 @@ namespace BalancePet
                 whale = null;
                 activeSet = null;
                 animState = "idle";
-                AttachVisual(image);
+                packDirector = null;
+                pack = null;
+                AttachVisual(view);
                 ResizePet();
                 return true;
             }
@@ -288,12 +354,75 @@ namespace BalancePet
             get { return fx != null && fx.Busy; }
         }
 
+        public bool IsPetPack { get { return pack != null; } }
+        public bool UsesPackActions { get { return pack != null && pack.HasActions; } }
+
+        public bool HasPackState(string state)
+        {
+            return pack != null && !string.IsNullOrEmpty(state) && pack.States.ContainsKey(state);
+        }
+
+        public List<string> PackActionPool()
+        {
+            if (pack == null) return new List<string>();
+            Dictionary<string, object> section = cfg.GetObject("packPools", Role);
+            object stored = Json.Get(section, "pool");
+            if (stored == null) return pack.DefaultActionPool();
+            List<string> result = new List<string>();
+            foreach (object item in Json.AsArray(stored))
+            {
+                string key = Convert.ToString(item, CultureInfo.InvariantCulture);
+                if (!string.IsNullOrEmpty(key) && pack.Action(key) != null && !result.Contains(key)) result.Add(key);
+            }
+            return result;
+        }
+
+        public string PickPackAction(bool walking)
+        {
+            if (pack == null || !pack.HasActions) return "";
+            return pack.PickAction(Program.Rng, walking, PackActionPool(), LastActionKey);
+        }
+
+        public string PinnedActionKey()
+        {
+            if (pack != null)
+            {
+                return ActionPinSettings.ValidAction(cfg, Role, pack, null);
+            }
+            return ActionPinSettings.ValidAction(cfg, Role, null, new List<string>(ActionKeys));
+        }
+
+        public bool PackActionCanWalk(string action)
+        {
+            PackAction item = pack == null ? null : pack.Action(action);
+            return item != null && item.Walking;
+        }
+
         /// <summary>Selects the animation state (idle / walk / one action key / sleep ...).</summary>
         public void SetAnimState(string state)
         {
             if (state == animState) return;
             animState = state;
             activeSet = null;
+            if (packDirector != null
+                && (string.IsNullOrEmpty(packOverride) || DateTime.UtcNow >= packOverrideUntil))
+            {
+                packDirector.SetState(state);
+            }
+        }
+
+        /// <summary>播放一次宠物包里的短动作（例如 click / wave），结束后回到当前状态。</summary>
+        public void PlayPackOneShot(string state, double seconds)
+        {
+            if (packDirector == null || string.IsNullOrEmpty(state)) return;
+            if (pack != null)
+            {
+                PackAction action = pack.Action(state);
+                if (action != null && action.Seconds > 0) seconds = action.Seconds;
+            }
+            packOverride = state;
+            packOverrideUntil = DateTime.UtcNow.AddSeconds(Math.Max(0.3, seconds));
+            packDirector.SetState(state);
         }
 
         /// <summary>Advances the frame animation (or the vector mascot) by one tick.</summary>
@@ -302,6 +431,23 @@ namespace BalancePet
             animTime += dt;
             UpdateFx(dt);
             UpdateTuckMotion(dt);
+            UpdateEmotion(dt);
+            if (packDirector != null)
+            {
+                bool overrideActive = !string.IsNullOrEmpty(packOverride) && DateTime.UtcNow < packOverrideUntil;
+                if (!overrideActive && !string.IsNullOrEmpty(packOverride))
+                {
+                    packOverride = "";
+                    packDirector.SetState(animState);
+                }
+                packDirector.Update(dt, speed);
+                return;
+            }
+            if (meshView != null)
+            {
+                meshView.Update(dt, animState, Sleeping, Tuck, EdgeSide);
+                return;
+            }
             if (whale != null)
             {
                 whale.Update(animTime, speed);
@@ -318,6 +464,117 @@ namespace BalancePet
             BitmapSource frame = set.Advance(dt, speed);
             Image image = visual as Image;
             if (image != null && frame != null && !ReferenceEquals(image.Source, frame)) image.Source = frame;
+        }
+
+        /// <summary>显示一个不依赖角色素材的情绪符号；seconds 后自动淡出。</summary>
+        public void SetEmotion(string kind, double seconds)
+        {
+            if (string.IsNullOrEmpty(kind))
+            {
+                ClearEmotion();
+                return;
+            }
+            if (!cfg.GetFlagAt("rig.emotion", false)) return;
+            emotion = kind;
+            emotionUntil = emotionClock + Math.Max(0.8, seconds);
+            if (emotionLayer == null) return;
+            emotionLayer.Children.Clear();
+            emotionVisual = BuildEmotion(kind);
+            if (emotionVisual == null) return;
+            emotionFloat = new TranslateTransform();
+            emotionVisual.RenderTransform = emotionFloat;
+            emotionLayer.Children.Add(emotionVisual);
+            emotionLayer.Visibility = Visibility.Visible;
+            UpdateEmotion(0);
+        }
+
+        private void ClearEmotion()
+        {
+            emotion = "";
+            emotionVisual = null;
+            if (emotionLayer != null)
+            {
+                emotionLayer.Children.Clear();
+                emotionLayer.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void UpdateEmotion(double dt)
+        {
+            emotionClock += dt;
+            if (string.IsNullOrEmpty(emotion) || emotionVisual == null || emotionLayer == null) return;
+            double remain = emotionUntil - emotionClock;
+            if (remain <= 0)
+            {
+                ClearEmotion();
+                return;
+            }
+            emotionLayer.Visibility = Tuck > 0.05 ? Visibility.Collapsed : Visibility.Visible;
+            double alpha = Math.Min(1.0, remain / 0.35);
+            emotionVisual.Opacity = alpha;
+            if (emotionFloat != null) emotionFloat.Y = Math.Sin(emotionClock * 3.2) * 2.0;
+
+            double size = emotionVisual is TextBlock ? ((TextBlock)emotionVisual).FontSize : 0;
+            double left = Width * 0.70 - size * 0.5;
+            double top = Height * 0.12 - size * 0.5;
+            if (emotion == "shy")
+            {
+                left = 0;
+                top = 0;
+            }
+            Canvas.SetLeft(emotionVisual, left);
+            Canvas.SetTop(emotionVisual, top);
+        }
+
+        private FrameworkElement BuildEmotion(string kind)
+        {
+            if (kind == "shy") return BuildBlush();
+            string symbol;
+            string colour;
+            switch (kind)
+            {
+                case "happy": symbol = "♥"; colour = "#FF5A8A"; break;
+                case "worried": symbol = "💧"; colour = "#4FA3FF"; break;
+                case "sleepy": symbol = "Zzz"; colour = "#8FA8E8"; break;
+                case "angry": symbol = "💢"; colour = "#FF5A5A"; break;
+                case "curious": symbol = "?"; colour = "#FFC857"; break;
+                case "startle": symbol = "!"; colour = "#FF5A5A"; break;
+                default: return null;
+            }
+            TextBlock text = new TextBlock();
+            text.Text = symbol;
+            text.FontSize = Math.Max(16, Width * 0.17);
+            text.FontWeight = FontWeights.Bold;
+            text.Foreground = BrushOf(colour);
+            text.FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI, Microsoft YaHei UI");
+            text.IsHitTestVisible = false;
+            return text;
+        }
+
+        private FrameworkElement BuildBlush()
+        {
+            Canvas blush = new Canvas();
+            blush.Width = Width;
+            blush.Height = Height;
+            double w = Math.Max(8, Width * 0.11);
+            double h = Math.Max(4, Height * 0.035);
+            for (int i = 0; i < 2; i++)
+            {
+                System.Windows.Shapes.Ellipse dot = new System.Windows.Shapes.Ellipse();
+                dot.Width = w;
+                dot.Height = h;
+                dot.Fill = BrushOf("#FF8FA8");
+                dot.Opacity = 0.75;
+                Canvas.SetLeft(dot, Width * (i == 0 ? 0.24 : 0.53));
+                Canvas.SetTop(dot, Height * (i == 0 ? 0.31 : 0.31));
+                blush.Children.Add(dot);
+            }
+            return blush;
+        }
+
+        private static Brush BrushOf(string hex)
+        {
+            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
         }
 
         public void ResizePet()
@@ -384,6 +641,11 @@ namespace BalancePet
             bool sideways = EdgeSide == "left" || EdgeSide == "right";
             Width = sideways ? baseH : baseW;
             Height = sideways ? baseW : baseH;
+            if (host != null)
+            {
+                host.Width = Width;
+                host.Height = Height;
+            }
             if (propLayer != null)
             {
                 // 贴边过程中把装扮层收起来（不然帽子会孤零零飘着）
@@ -528,20 +790,27 @@ namespace BalancePet
                 EdgeHidden = false;
             }
             Bob.Y = 0;
-            int min = (int)cfg.GetNumber("walk", "pauseMinSec", 8);
-            int max = (int)cfg.GetNumber("walk", "pauseMaxSec", 26);
-            if (max <= min) max = min + 1;
-            NextWalkAt = DateTime.UtcNow.AddSeconds(Program.Rng.Next(min, max));
-            double actionBase = cfg.GetNumber("actions", "pauseMinSec", 14);
-            double actionJitter = cfg.GetNumber("actions", "pauseJitter", 0.5);
-            if (actionJitter < 0) actionJitter = 0;
-            if (actionJitter > 3) actionJitter = 3;
-            double actionWait = actionBase * (1 + Program.Rng.NextDouble() * actionJitter);
-            if (actionWait < 3) actionWait = 3;
-            NextActionAt = DateTime.UtcNow.AddSeconds(actionWait);
+            DateTime now = DateTime.UtcNow;
+            if (!string.IsNullOrEmpty(PinnedActionKey()))
+            {
+                NextWalkAt = DateTime.MaxValue;
+                NextActionAt = now;
+            }
+            else
+            {
+                int min = (int)cfg.GetNumber("walk", "pauseMinSec", 8);
+                int max = (int)cfg.GetNumber("walk", "pauseMaxSec", 26);
+                if (max <= min) max = min + 1;
+                NextWalkAt = now.AddSeconds(Program.Rng.Next(min, max));
+                double actionWait = ActionTiming.PauseSeconds(cfg);
+                NextActionAt = now.AddSeconds(actionWait);
+            }
             // 手动拖拽由 SetIdleAfterDrag() 强制执行吸附；其它路径只有打开
             // 「自动贴边」时才会在靠近边缘后吸附。
-            if (allowSnap && cfg.GetFlag("snap", "enabled", true) && cfg.GetFlag("snap", "auto", false)) Snap();
+            if (allowSnap
+                && string.IsNullOrEmpty(PinnedActionKey())
+                && cfg.GetFlag("snap", "enabled", true)
+                && cfg.GetFlag("snap", "auto", false)) Snap();
         }
 
         /// <summary>用户手动把桌宠拖到边缘后松手：无论「自动贴边」开关如何，都执行吸附。</summary>
@@ -605,12 +874,31 @@ namespace BalancePet
             EdgeShownX = X;
             EdgeShownY = Y;
             EdgeHidden = false;
+            StopActionForEdge();
+        }
+
+        /// <summary>Snapped pets stay in edge/peek state and never keep an action running.</summary>
+        public void StopActionForEdge()
+        {
+            Action = "";
+            LastActionKey = "";
+            ActionStart = DateTime.MinValue;
+            ActionUntil = DateTime.MinValue;
+            packOverride = "";
+            packOverrideUntil = DateTime.MinValue;
+            Spin.Angle = 0;
+            Squash.ScaleX = 1;
+            Squash.ScaleY = 1;
+            Bob.X = 0;
+            Bob.Y = 0;
+            if (fx != null) fx.Stop();
         }
 
         /// <summary>Slides the pet out of (or back from) the screen edge it is snapped to.</summary>
         public void StartEdgeSlide(bool hide)
         {
             if (string.IsNullOrEmpty(EdgeSide)) return;
+            StopActionForEdge();
             if (hide)
             {
                 EdgeShownX = X;
@@ -686,22 +974,41 @@ namespace BalancePet
             return true;
         }
 
+        private static string PickRandomAction(List<string> pool, string avoid)
+        {
+            if (pool == null || pool.Count == 0) return "";
+            List<string> candidates = new List<string>(pool);
+            if (candidates.Count > 1) candidates.Remove(avoid);
+            return candidates.Count == 0 ? "" : candidates[Program.Rng.Next(candidates.Count)];
+        }
+
         public void StartAction(string action)
         {
+            if (IsPetPack)
+            {
+                StartPackAction(action);
+                return;
+            }
+            string avoid = LastActionKey;
+            LastActionKey = "";
+            bool pinned = false;
             if (action == "random")
             {
-                List<string> pool = cfg.GetStrings("actions", "pool");
-                if (pool.Count == 0) return;
-                action = pool[Program.Rng.Next(pool.Count)];
+                string fixedAction = PinnedActionKey();
+                if (!string.IsNullOrEmpty(fixedAction))
+                {
+                    action = fixedAction;
+                    pinned = true;
+                }
+                else
+                {
+                    List<string> pool = cfg.GetStrings("actions", "pool");
+                    action = PickRandomAction(pool, avoid);
+                    if (string.IsNullOrEmpty(action)) return;
+                }
             }
             DateTime now = DateTime.UtcNow;
-            double durationScale = cfg.GetNumber("actions", "durationScale", 1.0);
-            double durationJitter = cfg.GetNumber("actions", "durationJitter", 0.15);
-            if (durationJitter < 0) durationJitter = 0;
-            if (durationJitter > 0.8) durationJitter = 0.8;
-            durationScale *= 1 + (Program.Rng.NextDouble() * 2 - 1) * durationJitter;
-            if (durationScale < 0.2) durationScale = 0.2;
-            if (durationScale > 6) durationScale = 6;
+            double durationScale = ActionTiming.DurationScale(cfg, pinned);
             ActionOriginX = X;
             LastActionKey = action;
             switch (action)
@@ -750,6 +1057,39 @@ namespace BalancePet
                 ActionUntil = now.AddTicks((long)((ActionUntil - now).Ticks * durationScale));
             }
             ActionStart = now;
+        }
+
+        private void StartPackAction(string action)
+        {
+            string avoid = LastActionKey;
+            LastActionKey = "";
+            if (pack == null) return;
+            bool pinned = false;
+            if (action == "random")
+            {
+                string fixedAction = PinnedActionKey();
+                if (!string.IsNullOrEmpty(fixedAction))
+                {
+                    action = fixedAction;
+                    pinned = true;
+                }
+                else
+                {
+                    action = pack.PickAction(Program.Rng, false, PackActionPool(), avoid);
+                }
+            }
+            if (string.IsNullOrEmpty(action)) return;
+            PackAction item = pack.Action(action);
+            if (item == null) return;
+            if (Mode == "walk" && !item.Walking) return;
+            DateTime now = DateTime.UtcNow;
+            double durationScale = ActionTiming.DurationScale(cfg, pinned);
+            ActionOriginX = X;
+            LastActionKey = action;
+            Action = action;
+            ActionStart = now;
+            ActionUntil = now.AddSeconds(Math.Max(0.2, item.Seconds * durationScale));
+            if (pinned && packDirector != null) packDirector.RestartState(action);
         }
 
         private void OnSourceInitialized(object sender, EventArgs e)
