@@ -25,6 +25,9 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
 - **Content you can extend**: turn one static PNG into a frame-by-frame animated role,
   particle actions (fireworks / hearts / sparkles / confetti), import & export of quip packs,
   and per-provider / per-plan quota alerts.
+- **Neutral compatibility profiles**: auto-detect layered PNG sequences and WebM + preview
+  packages, compose foreground/background frames, expand delayed frames, and fall back to
+  bundled preview GIFs when `ffmpeg` is unavailable.
 
 ## Fully standalone
 

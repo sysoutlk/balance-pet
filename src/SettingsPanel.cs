@@ -750,7 +750,7 @@ namespace BalancePet
                 </Border>
                 <TextBlock Text='导入宠物包' FontSize='11.5' FontWeight='SemiBold' Foreground='__FG2__'/>
               </DockPanel>
-              <TextBlock Text='导入完整角色包、动作链和帧素材，并自动识别状态帧、XML 精灵、WebP 图集和通用动作文件夹。'
+              <TextBlock Text='导入完整角色包、动作链和帧素材，并自动识别状态帧、XML 精灵、WebP 图集、通用动作文件夹和兼容素材包。'
                          FontSize='9.5' Foreground='__MUTED__' TextWrapping='Wrap' Margin='0,3,0,0'/>
               <DockPanel Margin='0,7,0,0'>
                 <Button x:Name='PackImportBtn' Content='选择宠物包…' Width='124' Style='{StaticResource Btn}'

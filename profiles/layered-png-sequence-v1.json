@@ -1,0 +1,7 @@
+{
+  "id": "layered-png-sequence-v1",
+  "displayName": "分层 PNG 序列素材包",
+  "defaultPackId": "layered-png-sequence",
+  "kind": "layeredPngSequence",
+  "version": 1
+}

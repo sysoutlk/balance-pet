@@ -13,11 +13,16 @@
     <NoWarn>$(NoWarn);CS0649</NoWarn>
     <AssemblyTitle>余额桌宠</AssemblyTitle>
     <Product>余额桌宠</Product>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
   <ItemGroup>
     <!-- The installer has its own Main() and is built separately by build.ps1. -->
     <Compile Remove="Setup.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\profiles\*.json">
+      <LogicalName>BalancePet.Profiles.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <!-- Provides net48 reference assemblies so this project builds on machines (and CI images)

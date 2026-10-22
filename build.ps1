@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $srcDir = Join-Path $root 'src'
+$profilesDir = Join-Path $root 'profiles'
 $icon = Join-Path $root 'assets\app.ico'
 $exe = Join-Path $root 'balance-pet.exe'
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
@@ -60,6 +61,12 @@ function Write-ResponseFile([string]$path, [bool]$withIcon) {
     }
     if ($withIcon) { $lines += ('/win32icon:"' + $icon + '"') }
     $lines += ('/win32manifest:"' + (Join-Path $srcDir 'app.manifest') + '"')
+    if (Test-Path $profilesDir) {
+        Get-ChildItem $profilesDir -Filter *.json | Sort-Object Name | ForEach-Object {
+            $resourceName = 'BalancePet.Profiles.' + $_.Name
+            $lines += ('/resource:"' + $_.FullName + '","' + $resourceName + '"')
+        }
+    }
     $lines += ('/out:"' + $exe + '"')
     Get-ChildItem $srcDir -Filter *.cs | Where-Object { $_.Name -ne 'Setup.cs' } | Sort-Object Name | ForEach-Object {
         $lines += ('"' + $_.FullName + '"')

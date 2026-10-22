@@ -32,6 +32,15 @@ namespace BalancePet
             string manifest = Path.Combine(source, "pet.json");
             bool hasManifest = File.Exists(manifest);
             bool hasState = HasStateFolder(source);
+            ImportFormatProfile importProfile = null;
+            string importProfileSource = "";
+            string importProfileName = "imported-pet";
+            bool hasImportProfile = false;
+            if (!hasManifest && !hasState)
+            {
+                hasImportProfile = GenericPackImporter.TryDetect(
+                    source, out importProfile, out importProfileSource, out importProfileName);
+            }
             string xmlActions = "";
             string xmlImages = "";
             string xmlName = "xml-sprite";
@@ -44,17 +53,20 @@ namespace BalancePet
             string actionFolder = "";
             string actionFolderName = "action-folder-pet";
             bool hasActionFolderPack = false;
-            hasXmlSpritePack = XmlSpritePackConverter.TryLocate(
-                source, out xmlActions, out xmlImages, out xmlName);
-            if (!hasXmlSpritePack && !hasSpriteAtlasPack)
+            if (!hasImportProfile && !hasManifest && !hasState)
             {
-                hasActionFolderPack = ActionFolderPackConverter.TryLocate(
-                    source, out actionFolder, out actionFolderName);
+                hasXmlSpritePack = XmlSpritePackConverter.TryLocate(
+                    source, out xmlActions, out xmlImages, out xmlName);
+                if (!hasXmlSpritePack && !hasSpriteAtlasPack)
+                {
+                    hasActionFolderPack = ActionFolderPackConverter.TryLocate(
+                        source, out actionFolder, out actionFolderName);
+                }
             }
             if (!hasManifest && !hasState && !hasXmlSpritePack
-                && !hasSpriteAtlasPack && !hasActionFolderPack)
+                && !hasSpriteAtlasPack && !hasActionFolderPack && !hasImportProfile)
             {
-                error = "目录里没有 pet.json、状态帧目录、XML 精灵、WebP 图集或动作文件夹";
+                error = "目录里没有可识别的宠物包、状态帧、通用素材或兼容导入格式";
                 return null;
             }
 
@@ -78,10 +90,11 @@ namespace BalancePet
                 }
             }
 
-            string id = hasXmlSpritePack ? xmlName
-                : (hasSpriteAtlasPack ? spriteAtlasName
-                    : (hasActionFolderPack ? actionFolderName
-                        : Path.GetFileName(source.TrimEnd('\\', '/'))));
+            string id = hasImportProfile ? importProfileName
+                : (hasXmlSpritePack ? xmlName
+                    : (hasSpriteAtlasPack ? spriteAtlasName
+                        : (hasActionFolderPack ? actionFolderName
+                            : Path.GetFileName(source.TrimEnd('\\', '/')))));
             if (raw != null)
             {
                 string declared = Convert.ToString(Json.Get(raw, "id"), CultureInfo.InvariantCulture);
@@ -108,7 +121,16 @@ namespace BalancePet
 
             try
             {
-                if (hasXmlSpritePack)
+                if (hasImportProfile)
+                {
+                    if (!GenericPackImporter.Convert(importProfile, importProfileSource,
+                            target, out note, out error))
+                    {
+                        if (!TryDelete(target)) error += "；临时目录未能清理：" + target;
+                        return null;
+                    }
+                }
+                else if (hasXmlSpritePack)
                 {
                     if (!XmlSpritePackConverter.Convert(xmlActions, xmlImages, target, out note, out error))
                     {

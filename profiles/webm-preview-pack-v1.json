@@ -1,0 +1,7 @@
+{
+  "id": "webm-preview-pack-v1",
+  "displayName": "WebM + 预览图素材包",
+  "defaultPackId": "webm-preview-pack",
+  "kind": "webmPreviewPack",
+  "version": 1
+}
