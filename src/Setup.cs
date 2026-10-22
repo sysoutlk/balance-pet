@@ -13,9 +13,9 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("余额桌宠安装程序")]
 [assembly: AssemblyProduct("余额桌宠")]
 [assembly: AssemblyDescription("余额桌宠安装程序")]
-[assembly: AssemblyVersion("1.2.3.0")]
-[assembly: AssemblyFileVersion("1.2.3.0")]
-[assembly: AssemblyInformationalVersion("1.2.3")]
+[assembly: AssemblyVersion("1.2.4.0")]
+[assembly: AssemblyFileVersion("1.2.4.0")]
+[assembly: AssemblyInformationalVersion("1.2.4")]
 
 internal static class Setup
 {

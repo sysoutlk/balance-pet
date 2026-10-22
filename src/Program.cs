@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -21,7 +22,7 @@ namespace BalancePet
 {
     internal static class Program
     {
-        public const string Version = "1.2.3";
+        public const string Version = "1.2.4";
         public static readonly Random Rng = new Random();
         public static Config CurrentConfig;
         public static int DemoPageIndex;
@@ -36,6 +37,7 @@ namespace BalancePet
             "  balance-pet.exe --self-test         不弹窗口，检查数据源并写 self-test-report.txt\n" +
             "  balance-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
             "  balance-pet.exe --make-anim <图片>  把一张静态图生成逐帧动画角色（--name 角色名 --width 像素）\n" +
+            "  balance-pet.exe --hardware-render   清除软件渲染回退标记，重新尝试硬件渲染\n" +
             "  balance-pet.exe --import-pack <目录> [--activate]\n" +
             "                                        导入宠物包并输出角色 id；加 --activate 立即切换\n" +
             "  balance-pet.exe --version           显示版本\n";
@@ -148,13 +150,46 @@ namespace BalancePet
                 return 0;
             }
 
+            string softwareRenderMarker = Path.Combine(AppPaths.DataRoot, "render-software.txt");
+            bool softwareRenderFallback = File.Exists(softwareRenderMarker);
+            if (Has(flags, "--hardware-render") && softwareRenderFallback)
+            {
+                try { File.Delete(softwareRenderMarker); } catch { }
+                softwareRenderFallback = false;
+            }
+            if (softwareRenderFallback)
+            {
+                System.Windows.Media.RenderOptions.ProcessRenderMode =
+                    System.Windows.Interop.RenderMode.SoftwareOnly;
+                Log.Write("render mode: software fallback");
+            }
             Application app = new Application();
             app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            bool restartForSoftwareRendering = false;
+            Engine engine = null;
             app.DispatcherUnhandledException += delegate(object sender, DispatcherUnhandledExceptionEventArgs e)
             {
-                Log.Write("UI unhandled: " + e.Exception);
+                string detail = e.Exception.ToString();
+                Log.Write("UI unhandled: " + detail);
+                if (IsFatalRenderFailure(e.Exception))
+                {
+                    e.Handled = true;
+                    if (!softwareRenderFallback)
+                    {
+                        try { File.WriteAllText(softwareRenderMarker, DateTime.UtcNow.ToString("o"), Encoding.UTF8); }
+                        catch { }
+                        restartForSoftwareRendering = true;
+                        Log.Write("render failure detected; restarting with software rendering");
+                    }
+                    else
+                    {
+                        Log.Write("render failure persisted in software rendering mode");
+                    }
+                    if (engine != null) engine.Quit();
+                    else app.Shutdown();
+                }
             };
-            Engine engine = new Engine(cfg, Has(flags, "--demo"));
+            engine = new Engine(cfg, Has(flags, "--demo"));
             engine.Start();
             if (Has(flags, "--settings")) engine.ShowPanel();
 
@@ -183,7 +218,39 @@ namespace BalancePet
             app.Run();
             try { instanceMutex.ReleaseMutex(); }
             catch { }
+            if (restartForSoftwareRendering)
+            {
+                try
+                {
+                    Thread.Sleep(350);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = System.Reflection.Assembly.GetExecutingAssembly().Location,
+                        WorkingDirectory = AppPaths.Root,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("software rendering restart failed: " + ex.Message);
+                }
+            }
             return 0;
+        }
+
+        private static bool IsFatalRenderFailure(Exception ex)
+        {
+            if (ex == null) return false;
+            if (ex is OutOfMemoryException) return true;
+            COMException com = ex as COMException;
+            if (com != null)
+            {
+                int hresult = com.HResult;
+                if (hresult == unchecked((int)0x88980406)
+                    || hresult == unchecked((int)0x88980003))
+                    return true;
+            }
+            return IsFatalRenderFailure(ex.InnerException);
         }
 
         private static int SelfTest(Config cfg)

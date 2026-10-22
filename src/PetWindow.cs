@@ -1098,7 +1098,42 @@ namespace BalancePet
             int extended = Native.GetWindowLong(Handle, Native.GWL_EXSTYLE);
             extended = extended | Native.WS_EX_NOACTIVATE | Native.WS_EX_TOOLWINDOW;
             Native.SetWindowLong(Handle, Native.GWL_EXSTYLE, extended);
-            Closed += delegate { if (fx != null) fx.Close(); };   // 桌宠关了，特效窗也别留着
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            ReleaseResources();
+        }
+
+        private void ReleaseResources()
+        {
+            try
+            {
+                if (fx != null)
+                {
+                    fx.Close();
+                    fx = null;
+                }
+            }
+            catch
+            {
+            }
+            packDirector = null;
+            pack = null;
+            animation = null;
+            whale = null;
+            activeSet = null;
+            visual = null;
+            if (host != null) host.Children.Clear();
+            host = null;
+            if (propLayer != null) propLayer.Children.Clear();
+            propLayer = null;
+            propImage = null;
+            if (emotionLayer != null) emotionLayer.Children.Clear();
+            emotionLayer = null;
+            emotionVisual = null;
+            Content = null;
         }
 
         private void OnMouseDown(object sender, MouseButtonEventArgs e)

@@ -30,6 +30,8 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
   bundled preview GIFs when `ffmpeg` is unavailable.
 - **Batch pack import**: select a collection folder and every recognized child pack is
   converted, validated and installed in one pass.
+- **Render-failure recovery**: if the WPF composition thread fails, transparent windows are
+  closed cleanly, software-render mode is recorded, and the app restarts automatically.
 
 ## Fully standalone
 

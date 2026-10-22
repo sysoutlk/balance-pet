@@ -64,6 +64,7 @@ namespace BalancePet
             layerA.Source = first;
             layerA.Opacity = 1;
             SetBaseSize(currentSet.Frames[0]);
+            TrimFrameCaches(current, null);
         }
 
         private void SetBaseSize(BitmapSource frame)
@@ -132,6 +133,7 @@ namespace BalancePet
             layerB.Opacity = 0;
             layerB.Visibility = Visibility.Collapsed;
             SetBaseSize(set.Frames[0]);
+            TrimFrameCaches(current, null);
             Log.Write("pack state " + state + " clip=" + name + " restart");
         }
 
@@ -149,6 +151,7 @@ namespace BalancePet
                 layerA.Opacity = 1;
                 SetBaseSize(currentSet.Frames[0]);
                 elapsed = 0;
+                TrimFrameCaches(current, null);
                 return;
             }
             next = clip;
@@ -159,6 +162,7 @@ namespace BalancePet
             incoming.Visibility = Visibility.Visible;
             fade = 0;
             elapsed = 0;
+            TrimFrameCaches(current, next);
         }
 
         private FrameSet LoadSet(PackClip clip)
@@ -178,6 +182,25 @@ namespace BalancePet
                 clip.Height = set.Frames[0].PixelHeight;
             }
             return set;
+        }
+
+        private void TrimFrameCaches(PackClip keepA, PackClip keepB)
+        {
+            int releasedFrames = 0;
+            foreach (PackClip clip in pack.Clips.Values)
+            {
+                if (ReferenceEquals(clip, keepA) || ReferenceEquals(clip, keepB)) continue;
+                if (clip.Frames == null) continue;
+                releasedFrames += clip.Frames.Frames.Count;
+                clip.Frames = null;
+            }
+            if (releasedFrames <= 0) return;
+            Log.Write("pack cache released frames=" + releasedFrames);
+            // Large GIF actions live mostly in WPF media memory rather than the managed heap.
+            // A full optimized collection after a substantial release prevents long sessions
+            // from accumulating every action ever played.
+            if (releasedFrames >= 24)
+                GC.Collect(2, GCCollectionMode.Optimized, false);
         }
 
         public void Update(double dt)
@@ -220,6 +243,8 @@ namespace BalancePet
                     active.Opacity = 1;
                     idle.Opacity = 0;
                     idle.Visibility = Visibility.Collapsed;
+                    idle.Source = null;
+                    TrimFrameCaches(current, null);
                 }
                 return;
             }

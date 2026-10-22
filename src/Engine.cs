@@ -1278,6 +1278,8 @@ namespace BalancePet
             }
             Pets.RemoveAt(Pets.Count - 1);
             pet.Close();
+            pet = null;
+            GC.Collect(2, GCCollectionMode.Optimized, false);
         }
 
         // ------------------------------------------------------------ 气泡
