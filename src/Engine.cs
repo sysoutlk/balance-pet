@@ -130,7 +130,6 @@ namespace BalancePet
         private void WirePet(PetWindow pet)
         {
             pet.Clicked += OnPetClicked;
-            pet.DoubleClicked += OnPetDoubleClicked;
             pet.ContextRequested += OnPetContextRequested;
             pet.WheelZoomed += OnPetWheelZoomed;
             pet.Hovered += OnPetHovered;
@@ -958,12 +957,6 @@ namespace BalancePet
             bubblePage = page;
             bubbleQuip = quip;
             ShowView(pet, BuildPage(page), BubbleSeconds());
-        }
-
-        private void OnPetDoubleClicked(object sender, EventArgs e)
-        {
-            // 双击 = 打开/收起设置卡片（随机动作交给设置里的按钮与自动动作）。
-            TogglePanel(sender as PetWindow);
         }
 
         private void OnPetContextRequested(object sender, EventArgs e)

@@ -1171,7 +1171,7 @@ namespace BalancePet
                 Mode = "idle";
                 if (suppressNextClick)
                 {
-                    // The second press of a double click: the DoubleClicked handler already ran.
+                    // The second press of a double click must not fire another single-click action.
                     suppressNextClick = false;
                     return;
                 }
@@ -1205,8 +1205,7 @@ namespace BalancePet
         private void OnDoubleClick(object sender, MouseButtonEventArgs e)
         {
             suppressNextClick = true;
-            EventHandler handler = DoubleClicked;
-            if (handler != null) handler(this, EventArgs.Empty);
+            e.Handled = true;
         }
 
         private void OnRightClick(object sender, MouseButtonEventArgs e)
@@ -1224,7 +1223,6 @@ namespace BalancePet
         }
 
         public event EventHandler Clicked;
-        public event EventHandler DoubleClicked;
         public event EventHandler ContextRequested;
         public event EventHandler Hovered;
         public event EventHandler Moved;
