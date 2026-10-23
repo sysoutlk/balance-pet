@@ -246,7 +246,7 @@ namespace BalancePet
                 if (!string.IsNullOrEmpty(legacy))
                 {
                     source = "pet-config.json";
-                    return legacy.Trim();
+                    return Secret.Unprotect(legacy).Trim();
                 }
             }
             return "";
@@ -328,6 +328,14 @@ namespace BalancePet
                         return state;
                     }
                     url = EndpointFor(cfg, def);
+                    if (def.Id == "deepseek"
+                        && url.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0
+                        && !LooksLikeDeepSeekKey(key))
+                    {
+                        state.Error = "DeepSeek API Key 格式不正确（应以 sk- 开头）";
+                        state.ErrorDetail = state.Error;
+                        return state;
+                    }
                 }
                 string body = Get(cfg, url, auth, key);
                 Parse(def, cfg, body, state);
@@ -378,6 +386,17 @@ namespace BalancePet
             return text.Length <= 400 ? text : text.Substring(0, 400) + "…";
         }
 
+        private static bool LooksLikeDeepSeekKey(string key)
+        {
+            if (string.IsNullOrEmpty(key) || key.Length < 8) return false;
+            if (!key.StartsWith("sk-", StringComparison.OrdinalIgnoreCase)) return false;
+            foreach (char ch in key)
+            {
+                if (char.IsWhiteSpace(ch) || char.IsControl(ch)) return false;
+            }
+            return true;
+        }
+
         private static string EndpointFor(Config cfg, ProviderDef def)
         {
             if (def.Id == "deepseek") return cfg.GetString("", "dataUrl", "https://api.deepseek.com/user/balance");
@@ -411,12 +430,15 @@ namespace BalancePet
             {
                 int code = (int)response.StatusCode;
                 string message;
-                if (code == 401 || code == 403) message = "密钥无效或权限不足";
+                if (code == 400) message = "请求参数或 API Key 格式不正确";
+                else if (code == 401 || code == 403) message = "密钥无效或权限不足";
                 else if (code == 404) message = "接口不存在";
                 else if (code == 429) message = "请求过于频繁，稍后再试";
                 else if (code == 451) message = "网络出口被服务方限制（HTTP 451），请更换线路/节点或设置 network.proxy";
                 else message = "请求失败";
                 string detail = ErrorMessageOf(body);
+                if (string.IsNullOrEmpty(detail) && !string.IsNullOrEmpty(body))
+                    detail = Snippet(body);
                 string text = "HTTP " + code + " · " + message;
                 if (!string.IsNullOrEmpty(detail)) text += "（" + detail + "）";
                 throw new ProviderException(text, body);
