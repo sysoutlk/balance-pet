@@ -12,7 +12,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace BalancePet
@@ -386,6 +388,19 @@ namespace BalancePet
             return text.Length <= 400 ? text : text.Substring(0, 400) + "…";
         }
 
+        private static string ErrorBodyDetail(string body)
+        {
+            if (string.IsNullOrEmpty(body)) return "";
+            string text = body;
+            if (text.IndexOf('<') >= 0)
+            {
+                text = Regex.Replace(text, "<[^>]*>", " ");
+                text = WebUtility.HtmlDecode(text);
+                text = Regex.Replace(text, "\\s+", " ").Trim();
+            }
+            return Snippet(text);
+        }
+
         private static bool LooksLikeDeepSeekKey(string key)
         {
             if (string.IsNullOrEmpty(key) || key.Length < 8) return false;
@@ -414,8 +429,8 @@ namespace BalancePet
         private static string Get(Config cfg, string url, string auth, string key)
         {
             HttpClient client = Http.For(cfg, 12);
-            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "balance-pet/" + Version);
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("User-Agent", "balance-pet/" + Version);
             if (auth == "bearer" && !string.IsNullOrEmpty(key))
             {
                 request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
@@ -438,7 +453,7 @@ namespace BalancePet
                 else message = "请求失败";
                 string detail = ErrorMessageOf(body);
                 if (string.IsNullOrEmpty(detail) && !string.IsNullOrEmpty(body))
-                    detail = Snippet(body);
+                    detail = ErrorBodyDetail(body);
                 string text = "HTTP " + code + " · " + message;
                 if (!string.IsNullOrEmpty(detail)) text += "（" + detail + "）";
                 throw new ProviderException(text, body);
