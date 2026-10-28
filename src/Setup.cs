@@ -4,18 +4,21 @@
 //   balance-pet-setup.exe                          interactive installer
 //   balance-pet-setup.exe --silent --dir=<parent-or-install-dir>
 //       [--no-shortcuts] [--no-desktop-shortcut] [--no-start-menu-shortcut]
+//       [--exact-dir] [--wait-pid=<pid>] [--relaunch]
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("余额桌宠安装程序")]
 [assembly: AssemblyProduct("余额桌宠")]
 [assembly: AssemblyDescription("余额桌宠安装程序")]
-[assembly: AssemblyVersion("1.2.6.0")]
-[assembly: AssemblyFileVersion("1.2.6.0")]
-[assembly: AssemblyInformationalVersion("1.2.6")]
+[assembly: AssemblyVersion("1.2.7.0")]
+[assembly: AssemblyFileVersion("1.2.7.0")]
+[assembly: AssemblyInformationalVersion("1.2.7")]
 
 internal static class Setup
 {
@@ -25,6 +28,9 @@ internal static class Setup
         bool silent = false;
         bool desktopShortcut = true;
         bool startMenuShortcut = true;
+        bool relaunch = false;
+        bool exactDir = false;
+        int waitPid = 0;
         string dir = "";
         foreach (string raw in args)
         {
@@ -37,6 +43,10 @@ internal static class Setup
             }
             else if (arg == "--no-desktop-shortcut") desktopShortcut = false;
             else if (arg == "--no-start-menu-shortcut") startMenuShortcut = false;
+            else if (arg == "--exact-dir") exactDir = true;
+            else if (arg == "--relaunch") relaunch = true;
+            else if (arg.StartsWith("--wait-pid=", StringComparison.OrdinalIgnoreCase))
+                int.TryParse(arg.Substring(11), out waitPid);
             else if (arg.StartsWith("--dir=", StringComparison.OrdinalIgnoreCase)) dir = arg.Substring(6).Trim('"');
         }
         if (string.IsNullOrEmpty(dir))
@@ -49,11 +59,23 @@ internal static class Setup
         {
             try
             {
-                Install(dir, desktopShortcut, startMenuShortcut);
+                if (waitPid > 0) WaitForProcessExit(waitPid, 45000);
+                string installed = Install(dir, desktopShortcut, startMenuShortcut, exactDir);
+                if (relaunch)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = Path.Combine(installed, "balance-pet.exe"),
+                        WorkingDirectory = installed,
+                        UseShellExecute = true
+                    });
+                }
+                WriteUpdateLog("install ok dir=" + installed + " relaunch=" + relaunch);
                 return 0;
             }
             catch (Exception ex)
             {
+                WriteUpdateLog("install failed dir=" + dir + " error=" + ex);
                 Console.Error.WriteLine("install failed: " + ex.Message);
                 return 1;
             }
@@ -172,7 +194,7 @@ internal static class Setup
             try
             {
                 string installed = Install(path.Text, desktopShortcut.Checked,
-                    startMenuShortcut.Checked);
+                    startMenuShortcut.Checked, false);
                 MessageBox.Show(form, "安装完成：\n" + installed, "余额桌宠",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 form.Close();
@@ -200,17 +222,61 @@ internal static class Setup
         return version == null ? "" : version.ToString(3);
     }
 
-    private static string Install(string dir, bool desktopShortcut, bool startMenuShortcut)
+    private static string Install(string dir, bool desktopShortcut, bool startMenuShortcut,
+        bool exactDir)
     {
-        dir = NormalizeInstallDir(dir);
+        dir = exactDir ? NormalizeExactDir(dir) : NormalizeInstallDir(dir);
         Directory.CreateDirectory(dir);
         string exePath = Path.Combine(dir, "balance-pet.exe");
-        using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("balance-pet.exe"))
+        string tempPath = exePath + ".new";
+        string backupPath = exePath + ".old";
+        try
         {
-            if (source == null) throw new InvalidOperationException("安装包不完整：缺少 balance-pet.exe，请重新下载。");
-            using (FileStream target = File.Create(exePath))
+            using (Stream source = Assembly.GetExecutingAssembly().GetManifestResourceStream("balance-pet.exe"))
             {
-                source.CopyTo(target);
+                if (source == null) throw new InvalidOperationException("安装包不完整：缺少 balance-pet.exe，请重新下载。");
+                using (FileStream target = File.Create(tempPath))
+                {
+                    source.CopyTo(target);
+                }
+            }
+            if (File.Exists(exePath))
+            {
+                if (File.Exists(backupPath)) File.Delete(backupPath);
+                try
+                {
+                    File.Replace(tempPath, exePath, backupPath, true);
+                }
+                catch (Exception ex)
+                {
+                    if (!(ex is IOException) && !(ex is PlatformNotSupportedException))
+                        throw;
+                    File.Copy(exePath, backupPath, true);
+                    try
+                    {
+                        File.Copy(tempPath, exePath, true);
+                    }
+                    catch
+                    {
+                        File.Copy(backupPath, exePath, true);
+                        throw;
+                    }
+                }
+                try { if (File.Exists(backupPath)) File.Delete(backupPath); }
+                catch
+                {
+                }
+            }
+            else
+            {
+                File.Move(tempPath, exePath);
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+            catch
+            {
             }
         }
         if (desktopShortcut)
@@ -228,6 +294,43 @@ internal static class Setup
         return dir;
     }
 
+    private static void WaitForProcessExit(int pid, int timeoutMs)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                using (Process process = Process.GetProcessById(pid))
+                {
+                    if (process.HasExited) return;
+                }
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+            Thread.Sleep(200);
+        }
+        throw new TimeoutException("等待旧版程序退出超时");
+    }
+
+    private static void WriteUpdateLog(string message)
+    {
+        try
+        {
+            File.AppendAllText(Path.Combine(Path.GetTempPath(), "balance-pet-update.log"),
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message + Environment.NewLine);
+        }
+        catch
+        {
+        }
+    }
+
     private static string NormalizeInstallDir(string selected)
     {
         if (string.IsNullOrEmpty(selected)) throw new InvalidOperationException("安装路径不能为空。");
@@ -236,6 +339,16 @@ internal static class Setup
         if (string.Equals(leaf, "BalancePet", StringComparison.OrdinalIgnoreCase))
             return full;
         return Path.Combine(full, "BalancePet");
+    }
+
+    private static string NormalizeExactDir(string selected)
+    {
+        if (string.IsNullOrEmpty(selected)) throw new InvalidOperationException("安装路径不能为空。");
+        string full = Path.GetFullPath(selected).TrimEnd('\\', '/');
+        string root = Path.GetPathRoot(full);
+        if (string.IsNullOrEmpty(full) || string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("不能直接安装到磁盘根目录。");
+        return full;
     }
 
     private static void CreateShortcut(string folder, string exePath)

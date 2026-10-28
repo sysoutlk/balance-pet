@@ -908,6 +908,52 @@ namespace BalancePet
           </StackPanel>
           <TextBlock x:Name='CloneCount' Style='{StaticResource Lbl}' Text='1 只' VerticalAlignment='Center'/>
         </DockPanel>
+        <TextBlock Style='{StaticResource Sect}' Text='应用更新'/>
+        <Border CornerRadius='12' Padding='14' Background='__ROW__' BorderBrush='__BORDER__' BorderThickness='1'>
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height='Auto'/>
+              <RowDefinition Height='Auto'/>
+              <RowDefinition Height='Auto'/>
+              <RowDefinition Height='Auto'/>
+            </Grid.RowDefinitions>
+            <DockPanel>
+              <Button x:Name='CheckUpdateBtn' DockPanel.Dock='Right' Content='检查更新' Width='92' Height='30'
+                      VerticalAlignment='Top' Style='{StaticResource Btn}'
+                      ToolTip='检查并安装公开 Release 的最新版本'/>
+              <StackPanel>
+                <TextBlock Text='当前版本' FontSize='10' Foreground='__MUTED__'/>
+                <TextBlock x:Name='UpdateVersionText' Text='v…' FontSize='24' FontWeight='Bold'
+                           Foreground='__FG__' Margin='0,2,0,0' HorizontalAlignment='Left'/>
+              </StackPanel>
+            </DockPanel>
+            <TextBlock x:Name='UpdateStatusText' Grid.Row='1' Text='尚未检查' FontSize='11'
+                       Foreground='__MUTED__' Margin='0,8,0,0' TextWrapping='Wrap'/>
+            <ProgressBar x:Name='UpdateProgressBar' Grid.Row='2' Height='4' Minimum='0' Maximum='100'
+                         Background='__TRACK__' Foreground='#4B6BFB' BorderThickness='0'
+                         Margin='0,10,0,2' Visibility='Collapsed'>
+              <ProgressBar.Template>
+                <ControlTemplate TargetType='ProgressBar'>
+                  <Grid>
+                    <Border Background='{TemplateBinding Background}' CornerRadius='2'/>
+                    <Border x:Name='PART_Indicator' HorizontalAlignment='Left' CornerRadius='2'
+                            Background='{TemplateBinding Foreground}'/>
+                  </Grid>
+                </ControlTemplate>
+              </ProgressBar.Template>
+            </ProgressBar>
+            <TextBlock x:Name='UpdateNotesText' Grid.Row='3' Text='检查更新后可在这里查看版本说明。'
+                       FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='0,10,0,0'/>
+          </Grid>
+        </Border>
+        <Border CornerRadius='10' Padding='12,10' Margin='0,8,0,0'
+                Background='__NAV__' BorderBrush='__BORDER__' BorderThickness='1'>
+          <StackPanel>
+            <TextBlock Text='升级说明' FontSize='10.5' FontWeight='SemiBold' Foreground='__FG2__'/>
+            <TextBlock Text='安装器来自公开 Release，下载后会校验 SHA-256；升级时等待旧进程退出并保留现有配置。'
+                       FontSize='10' Foreground='__MUTED__' TextWrapping='Wrap' Margin='0,4,0,0'/>
+          </StackPanel>
+        </Border>
         </StackPanel>
       </Grid>
     </Border>
@@ -1149,7 +1195,7 @@ namespace BalancePet
             }
             foreach (string name in new string[]
             {
-                "Header","TitleText","SubText","SaveSettingsBtn","SaveStateText","ActionGrid","ActionListHint","ActionListCard","ActionPoolCard","ActionPinCard","ActionPinChk","ActionPinHint","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","RoleLibrarySummary","RoleDirBtn","RigScopeHint","RigImageCard","RigRoleName","MeshRigChk","RigIntensitySlider","RigIntensityVal","RigFaceYSlider","RigFaceYVal","ScaleSlider","ScaleVal","ScaleAllBtn",
+                "Header","TitleText","SubText","SaveSettingsBtn","SaveStateText","CheckUpdateBtn","UpdateVersionText","UpdateStatusText","UpdateProgressBar","UpdateNotesText","ActionGrid","ActionListHint","ActionListCard","ActionPoolCard","ActionPinCard","ActionPinChk","ActionPinHint","AutoActionsChk","ActionPreviewHost","ActionPreviewLabel","RolePanel","RoleLibrarySummary","RoleDirBtn","RigScopeHint","RigImageCard","RigRoleName","MeshRigChk","RigIntensitySlider","RigIntensityVal","RigFaceYSlider","RigFaceYVal","ScaleSlider","ScaleVal","ScaleAllBtn",
                 "OpacitySlider","OpacityVal","WalkChk","SnapChk","SnapAutoChk","SnapDistanceSlider","SnapDistanceVal","SleepChk","QuipsChk","CollideChk","SpeedSlider","SpeedVal",
                 "QuipImportBtn","QuipExportBtn","QuipStatus","PackImportBtn","PackStatus","RoleImportStatus",
                 "FpsSlider","FpsVal","IdleFpsSlider","IdleFpsVal",
@@ -1175,6 +1221,11 @@ namespace BalancePet
             root.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) HidePanel(); };
             ((FrameworkElement)ui["Header"]).MouseLeftButtonDown += delegate { try { root.DragMove(); } catch { } };
             ((Button)ui["SaveSettingsBtn"]).Click += delegate { SaveDraftConfig(); };
+            ((Button)ui["CheckUpdateBtn"]).Click += delegate { CheckForUpdates(); };
+            ((TextBlock)ui["UpdateVersionText"]).Text = "v" + Program.Version;
+            SetUpdateStatus("尚未检查");
+            SetUpdateNotes("检查更新后可在这里查看版本说明。");
+            SetUpdateProgress(-1);
 
 
             RefreshActionControls();
@@ -1495,6 +1546,165 @@ namespace BalancePet
             {
                 if (ConfirmDialog("退出桌宠", "退出后桌宠与余额提醒都会停止运行。", "退出")) engine.Quit();
             };
+        }
+
+        private void SetUpdateStatus(string text)
+        {
+            TextBlock status = ui.ContainsKey("UpdateStatusText")
+                ? ui["UpdateStatusText"] as TextBlock : null;
+            if (status == null) return;
+            status.Text = text;
+            status.ToolTip = text;
+        }
+
+        private void SetUpdateNotes(string text)
+        {
+            TextBlock notes = ui.ContainsKey("UpdateNotesText")
+                ? ui["UpdateNotesText"] as TextBlock : null;
+            if (notes == null) return;
+            notes.Text = string.IsNullOrEmpty(text) ? "此版本没有提供额外说明。" : text;
+        }
+
+        private void SetUpdateProgress(int percent)
+        {
+            ProgressBar progress = ui.ContainsKey("UpdateProgressBar")
+                ? ui["UpdateProgressBar"] as ProgressBar : null;
+            if (progress == null) return;
+            if (percent < 0)
+            {
+                progress.Visibility = Visibility.Collapsed;
+                progress.Value = 0;
+                return;
+            }
+            progress.Visibility = Visibility.Visible;
+            progress.Value = Math.Max(0, Math.Min(100, percent));
+        }
+
+        private void CheckForUpdates()
+        {
+            Button button = ui["CheckUpdateBtn"] as Button;
+            if (button == null || !button.IsEnabled) return;
+            button.IsEnabled = false;
+            SetUpdateStatus("检查中…");
+            SetUpdateNotes("正在读取公开 Release 信息。");
+            SetUpdateProgress(-1);
+            Task.Factory.StartNew(delegate
+            {
+                AvailableUpdate update = null;
+                string error = null;
+                try
+                {
+                    update = AppUpdater.Check(cfg);
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                }
+                root.Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    button.IsEnabled = true;
+                    if (!string.IsNullOrEmpty(error))
+                    {
+                        SetUpdateStatus("检查失败");
+                        SetUpdateNotes(error);
+                        MessageBox.Show(root, "检查更新失败：" + error, "检查更新",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                    if (update == null)
+                    {
+                        SetUpdateStatus("已是最新版本");
+                        SetUpdateNotes("当前版本 v" + Program.Version + " 已是公开 Release 的最新版本。");
+                        MessageBox.Show(root, "当前已是最新版本 v" + Program.Version + "。",
+                            "检查更新", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+                    SetUpdateStatus("发现 v" + update.VersionText);
+                    SetUpdateNotes(ShortenUpdateNotes(update.Notes, 1600));
+                    button.IsEnabled = true;
+                    PromptInstallUpdate(update);
+                }));
+            });
+        }
+
+        private void PromptInstallUpdate(AvailableUpdate update)
+        {
+            string notes = ShortenUpdateNotes(update.Notes, 1200);
+            string message = "发现新版本 v" + update.VersionText
+                + "，当前版本 v" + Program.Version + "。";
+            if (!string.IsNullOrEmpty(notes)) message += "\n\n" + notes;
+            message += "\n\n下载安装器并升级？程序会自动退出并在安装完成后重新启动。";
+            MessageBoxResult result = MessageBox.Show(root, message, "发现新版本",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes) DownloadAndInstallUpdate(update);
+        }
+
+        private void DownloadAndInstallUpdate(AvailableUpdate update)
+        {
+            Button button = ui["CheckUpdateBtn"] as Button;
+            if (button != null) button.IsEnabled = false;
+            SetUpdateStatus("准备下载");
+            SetUpdateNotes("正在下载安装器，完成后会校验文件大小与 SHA-256。");
+            SetUpdateProgress(0);
+            Task.Factory.StartNew(delegate
+            {
+                string setupPath = null;
+                string error = null;
+                try
+                {
+                    setupPath = AppUpdater.Download(cfg, update, delegate(int percent)
+                    {
+                        if (root.Dispatcher.HasShutdownStarted) return;
+                        root.Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            SetUpdateStatus(percent >= 100 ? "校验完成" : "下载 " + percent + "%");
+                            SetUpdateProgress(percent);
+                        }));
+                    });
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                }
+                root.Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    if (!string.IsNullOrEmpty(error))
+                    {
+                        if (button != null) button.IsEnabled = true;
+                        SetUpdateStatus("下载失败");
+                        SetUpdateNotes(error);
+                        SetUpdateProgress(-1);
+                        MessageBox.Show(root, "下载更新失败：" + error, "升级失败",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    try
+                    {
+                        SetUpdateStatus("正在安装…");
+                        SetUpdateNotes("程序即将退出，安装完成后会自动启动新版本。");
+                        SetUpdateProgress(100);
+                        AppUpdater.LaunchInstaller(setupPath, AppPaths.Root);
+                        engine.Quit();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (button != null) button.IsEnabled = true;
+                        SetUpdateStatus("启动安装器失败");
+                        SetUpdateNotes(ex.Message);
+                        SetUpdateProgress(-1);
+                        MessageBox.Show(root, "启动升级安装器失败：" + ex.Message, "升级失败",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }));
+            });
+        }
+
+        private static string ShortenUpdateNotes(string notes, int limit)
+        {
+            if (string.IsNullOrEmpty(notes)) return "";
+            string text = notes.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+            if (text.Length <= limit) return text;
+            return text.Substring(0, limit).TrimEnd() + "…";
         }
 
         /// <summary>选一个 JSON 文件导入台词：合并去重，不动已有台词。</summary>
@@ -6336,6 +6546,8 @@ namespace BalancePet
                 "套餐额度", new string[] { "套餐额度" }));
             groups.Add(new KeyValuePair<string, string[]>(
                 "API 密钥", new string[0]));
+            groups.Add(new KeyValuePair<string, string[]>(
+                "应用更新", new string[] { "应用更新" }));
 
             Dictionary<string, StackPanel> navPages = new Dictionary<string, StackPanel>();
             foreach (KeyValuePair<string, string[]> group in groups)
@@ -6610,6 +6822,7 @@ namespace BalancePet
                 case "余额": return "\uE9D2";
                 case "套餐额度": return "\uE7B8";
                 case "API 密钥": return "\uE8D7";
+                case "应用更新": return "\uE895";
                 default: return "\uE713";
             }
         }
@@ -6688,6 +6901,7 @@ namespace BalancePet
                 case "余额": return "余额接口状态、刷新与余额提醒";
                 case "套餐额度": return "套餐窗口用量与额度提醒";
                 case "API 密钥": return "接口密钥、平台 Token 与网络接入";
+                case "应用更新": return "当前版本、公开 Release 与一键升级";
                 default: return "";
             }
         }
@@ -6856,6 +7070,16 @@ namespace BalancePet
             ContentControl summaryHost = ui["PreviewSummaryHost"] as ContentControl;
             TextBlock caption = ui["PreviewDockTitle"] as TextBlock;
             if (dock == null || visualHost == null || summaryHost == null) return;
+            if (string.Equals(pageTitle, "应用更新", StringComparison.Ordinal))
+            {
+                RestoreDockedPreview();
+                visualHost.Content = null;
+                visualHost.Visibility = Visibility.Collapsed;
+                summaryHost.Content = null;
+                summaryHost.Visibility = Visibility.Collapsed;
+                dock.Visibility = Visibility.Collapsed;
+                return;
+            }
             if (source != null)
             {
                 if (!ReferenceEquals(dockedPreview, source))

@@ -22,7 +22,7 @@ namespace BalancePet
 {
     internal static class Program
     {
-        public const string Version = "1.2.6";
+        public const string Version = "1.2.7";
         public static readonly Random Rng = new Random();
         public static Config CurrentConfig;
         public static int DemoPageIndex;
@@ -38,6 +38,7 @@ namespace BalancePet
             "  balance-pet.exe --make-icon <路径>  导出内置小鲸鱼图标 (.ico)\n" +
             "  balance-pet.exe --make-anim <图片>  把一张静态图生成逐帧动画角色（--name 角色名 --width 像素）\n" +
             "  balance-pet.exe --hardware-render   清除软件渲染回退标记，重新尝试硬件渲染\n" +
+            "  balance-pet.exe --check-update      检查公开 Release 的最新版本\n" +
             "  balance-pet.exe --import-pack <目录> [--activate]\n" +
             "                                        导入宠物包并输出角色 id；加 --activate 立即切换\n" +
             "  balance-pet.exe --version           显示版本\n";
@@ -79,6 +80,28 @@ namespace BalancePet
             AppPaths.MigratePortableData();
             Config cfg = Config.Load(AppPaths.ConfigPath);
             CurrentConfig = cfg;
+            if (Has(flags, "--check-update"))
+            {
+                try
+                {
+                    AvailableUpdate update = AppUpdater.Check(cfg);
+                    if (update == null)
+                    {
+                        Console.WriteLine("已是最新版本：" + Version);
+                    }
+                    else
+                    {
+                        Console.WriteLine("发现新版本：" + update.VersionText);
+                        Console.WriteLine("当前版本：" + Version);
+                    }
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("检查更新失败：" + ex.Message);
+                    return 1;
+                }
+            }
             string importPack = ValueOf(flags, "--import-pack");
             if (!string.IsNullOrEmpty(importPack))
             {

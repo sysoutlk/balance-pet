@@ -32,6 +32,8 @@ directly, and any other relay can be wired in through the "custom endpoint" prov
   converted, validated and installed in one pass.
 - **Render-failure recovery**: if the WPF composition thread fails, transparent windows are
   closed cleanly, software-render mode is recorded, and the app restarts automatically.
+- **In-app updates**: check the latest public Release, verify the installer SHA-256, install
+  after the running process exits, and relaunch automatically.
 
 ## Fully standalone
 
